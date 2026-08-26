@@ -1,0 +1,121 @@
+import type { CurriculumVersion, GradeBand, Subject } from "./types";
+
+export interface CurriculumConcept {
+  id: string;
+  title: string;
+  subject: Subject;
+  gradeBands: GradeBand[];
+  version: CurriculumVersion;
+  difficulty: number;
+  atomic: boolean;
+  aliases: string[];
+  prerequisites: string[];
+}
+
+const compulsory = "cn-compulsory-2022" as const;
+const highSchool = "cn-highschool-2017-2020" as const;
+
+const mathConcepts: CurriculumConcept[] = [
+  { id: "math.number.counting", title: "数的大小与顺序", subject: "math", gradeBands: ["primary"], version: compulsory, difficulty: 1, atomic: true, aliases: ["数感", "比较大小"], prerequisites: [] },
+  { id: "math.number.place-value", title: "十进制数位", subject: "math", gradeBands: ["primary"], version: compulsory, difficulty: 1, atomic: true, aliases: ["数位", "位值"], prerequisites: [] },
+  { id: "math.arithmetic.addition", title: "加法的意义", subject: "math", gradeBands: ["primary"], version: compulsory, difficulty: 1, atomic: true, aliases: ["求和", "合并"], prerequisites: [] },
+  { id: "math.arithmetic.subtraction", title: "减法的意义", subject: "math", gradeBands: ["primary"], version: compulsory, difficulty: 1, atomic: true, aliases: ["求差", "剩余"], prerequisites: [] },
+  { id: "math.fraction.meaning", title: "分数的意义", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["几分之几", "单位1"], prerequisites: [] },
+  { id: "math.geometry.angle", title: "角的基本认识", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["角度", "直角"], prerequisites: [] },
+  { id: "math.probability.event", title: "随机事件", subject: "math", gradeBands: ["primary", "junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["可能性", "必然事件"], prerequisites: [] },
+  { id: "math.arithmetic.multiplication", title: "乘法的意义", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["几个几", "倍数"], prerequisites: ["math.arithmetic.addition"] },
+  { id: "math.arithmetic.division", title: "除法的意义", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["平均分", "包含除"], prerequisites: ["math.number.counting"] },
+  { id: "math.decimal.meaning", title: "小数与数位", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["小数点", "小数位"], prerequisites: ["math.number.place-value"] },
+  { id: "math.ratio.meaning", title: "比的意义", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["两个量的比", "比值"], prerequisites: ["math.fraction.meaning"] },
+  { id: "math.measure.unit-conversion", title: "单位换算", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["长度单位", "面积单位", "进率"], prerequisites: ["math.number.place-value"] },
+  { id: "math.coordinate.axis", title: "平面直角坐标系", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: true, aliases: ["坐标", "横轴纵轴"], prerequisites: [] },
+  { id: "math.algebra.equality", title: "等式与等量关系", subject: "math", gradeBands: ["primary", "junior", "senior"], version: compulsory, difficulty: 2, atomic: true, aliases: ["等号", "两边相等"], prerequisites: [] },
+  { id: "math.power.meaning", title: "乘方的意义", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["平方", "指数"], prerequisites: ["math.arithmetic.multiplication"] },
+  { id: "math.arithmetic.order", title: "混合运算顺序", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["先乘除后加减", "括号"], prerequisites: ["math.arithmetic.addition", "math.arithmetic.multiplication"] },
+  { id: "math.fraction.operation", title: "分数运算", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["通分", "约分", "分数乘除"], prerequisites: ["math.fraction.meaning", "math.arithmetic.multiplication", "math.arithmetic.division"] },
+  { id: "math.decimal.operation", title: "小数运算", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["小数加减", "小数乘除"], prerequisites: ["math.decimal.meaning", "math.arithmetic.multiplication", "math.arithmetic.division"] },
+  { id: "math.rate.unit-rate", title: "单位量", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["每份量", "单位速度", "单价"], prerequisites: ["math.arithmetic.division"] },
+  { id: "math.percent.meaning", title: "百分数的意义", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["百分率", "百分比"], prerequisites: ["math.fraction.meaning", "math.ratio.meaning"] },
+  { id: "math.geometry.perimeter", title: "周长", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["图形一周长度"], prerequisites: ["math.arithmetic.addition", "math.measure.unit-conversion"] },
+  { id: "math.statistics.mean", title: "平均数", subject: "math", gradeBands: ["primary", "junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["算术平均数"], prerequisites: ["math.arithmetic.addition", "math.arithmetic.division"] },
+  { id: "math.algebra.variable", title: "用字母表示数", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: true, aliases: ["变量", "未知数"], prerequisites: [] },
+  { id: "math.algebra.equivalent-transform", title: "等式的基本性质", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["等式两边同加同减", "移项依据"], prerequisites: ["math.algebra.equality"] },
+  { id: "math.geometry.rectangle-area", title: "长方形面积", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["长乘宽", "面积公式"], prerequisites: ["math.arithmetic.multiplication", "math.measure.unit-conversion"] },
+  { id: "math.ratio.proportional", title: "正比例关系", subject: "math", gradeBands: ["primary", "junior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["照这样的速度", "对应量同倍变化"], prerequisites: ["math.rate.unit-rate", "math.arithmetic.multiplication"] },
+  { id: "math.algebra.expression", title: "代数式", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["列式", "整式"], prerequisites: ["math.algebra.variable", "math.arithmetic.order"] },
+  { id: "math.power.laws", title: "幂的运算", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["同底数幂", "指数法则"], prerequisites: ["math.power.meaning", "math.arithmetic.multiplication"] },
+  { id: "math.probability.classical", title: "等可能事件概率", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["古典概型", "有利结果数"], prerequisites: ["math.probability.event", "math.fraction.meaning"] },
+  { id: "math.geometry.triangle", title: "三角形的边角关系", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["内角和", "三边关系"], prerequisites: ["math.geometry.angle"] },
+  { id: "math.algebra.linear-equation", title: "一元一次方程", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["一次方程", "解方程"], prerequisites: ["math.algebra.variable", "math.algebra.equivalent-transform"] },
+  { id: "math.algebra.linear-inequality", title: "一元一次不等式", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["不等式", "解集"], prerequisites: ["math.algebra.variable", "math.algebra.equivalent-transform"] },
+  { id: "math.ratio.inverse-proportional", title: "反比例关系", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["乘积不变", "反比例"], prerequisites: ["math.rate.unit-rate", "math.ratio.meaning"] },
+  { id: "math.algebra.quadratic-expression", title: "二次式与配方", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["完全平方", "配方法"], prerequisites: ["math.algebra.expression", "math.power.meaning"] },
+  { id: "math.geometry.pythagorean", title: "勾股定理", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["直角三角形三边关系"], prerequisites: ["math.geometry.triangle", "math.power.meaning"] },
+  { id: "math.sequence.pattern", title: "数列规律", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["第n项", "通项规律"], prerequisites: ["math.algebra.variable", "math.algebra.expression"] },
+  { id: "math.function.linear", title: "一次函数", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 6, atomic: false, aliases: ["正比例函数", "直线图像"], prerequisites: ["math.coordinate.axis", "math.algebra.variable", "math.rate.unit-rate"] },
+  { id: "math.algebra.linear-system", title: "二元一次方程组", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 6, atomic: false, aliases: ["消元", "代入消元"], prerequisites: ["math.algebra.linear-equation"] },
+  { id: "math.algebra.quadratic-equation", title: "一元二次方程", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 6, atomic: false, aliases: ["二次方程", "求根公式"], prerequisites: ["math.algebra.quadratic-expression", "math.algebra.equivalent-transform"] },
+  { id: "math.geometry.trigonometry", title: "锐角三角函数", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 6, atomic: false, aliases: ["正弦", "余弦", "正切"], prerequisites: ["math.geometry.pythagorean", "math.ratio.meaning"] },
+  { id: "math.function.quadratic", title: "二次函数", subject: "math", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 7, atomic: false, aliases: ["抛物线", "顶点"], prerequisites: ["math.coordinate.axis", "math.algebra.quadratic-expression"] },
+  { id: "math.function.exponential", title: "指数函数", subject: "math", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["指数增长", "指数衰减"], prerequisites: ["math.power.laws", "math.function.linear"] },
+  { id: "math.function.logarithmic", title: "对数函数", subject: "math", gradeBands: ["senior"], version: highSchool, difficulty: 8, atomic: false, aliases: ["对数", "换底公式"], prerequisites: ["math.function.exponential"] },
+];
+
+const physicsConcepts: CurriculumConcept[] = [
+  { id: "physics.measure.unit", title: "物理量与单位", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["国际单位", "单位符号"], prerequisites: [] },
+  { id: "physics.motion.reference", title: "参照物与机械运动", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["运动和静止", "参照物"], prerequisites: [] },
+  { id: "physics.matter.mass", title: "质量与惯性", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["质量", "惯性"], prerequisites: [] },
+  { id: "physics.force.vector", title: "力的方向与大小", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["力的三要素", "受力"], prerequisites: [] },
+  { id: "physics.electric.charge", title: "电荷与电流", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["电流方向", "电荷定向移动"], prerequisites: [] },
+  { id: "physics.optics.light-ray", title: "光线与传播", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["光的直线传播", "光线"], prerequisites: [] },
+  { id: "physics.measure.conversion", title: "物理单位换算", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["单位统一", "换算"], prerequisites: ["physics.measure.unit"] },
+  { id: "physics.motion.distance-time", title: "路程与时间", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["s-t关系", "路程时间图像"], prerequisites: ["physics.motion.reference", "physics.measure.unit"] },
+  { id: "physics.electric.circuit", title: "电路基本组成", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["电源", "用电器", "开关"], prerequisites: ["physics.electric.charge"] },
+  { id: "physics.optics.reflection", title: "光的反射", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["反射定律", "镜面反射"], prerequisites: ["physics.optics.light-ray"] },
+  { id: "physics.motion.speed", title: "速度的定义", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["路程除以时间", "平均速度"], prerequisites: ["physics.motion.distance-time", "physics.measure.conversion"] },
+  { id: "physics.matter.density", title: "密度", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["质量除以体积", "ρ=m/V"], prerequisites: ["physics.matter.mass", "physics.measure.conversion"] },
+  { id: "physics.force.pressure", title: "压强", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["压力作用效果", "p=F/S"], prerequisites: ["physics.force.vector", "physics.measure.unit"] },
+  { id: "physics.electric.series-parallel", title: "串联与并联电路", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["串联", "并联", "节点"], prerequisites: ["physics.electric.circuit"] },
+  { id: "physics.optics.refraction", title: "光的折射", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["折射角", "入射角"], prerequisites: ["physics.optics.light-ray"] },
+  { id: "physics.motion.acceleration", title: "加速度", subject: "physics", gradeBands: ["senior"], version: highSchool, difficulty: 4, atomic: false, aliases: ["速度变化率", "a=Δv/Δt"], prerequisites: ["physics.motion.speed"] },
+  { id: "physics.force.work", title: "功", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["W=Fs", "做功"], prerequisites: ["physics.force.vector", "physics.motion.distance-time"] },
+  { id: "physics.electric.ohm-law", title: "欧姆定律", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["I=U/R", "电阻"], prerequisites: ["physics.electric.circuit", "physics.measure.unit"] },
+  { id: "physics.wave.frequency", title: "频率与周期", subject: "physics", gradeBands: ["senior"], version: highSchool, difficulty: 4, atomic: false, aliases: ["频率", "周期", "f=1/T"], prerequisites: ["physics.measure.unit"] },
+  { id: "physics.force.balance", title: "二力平衡", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["平衡力", "合力为零"], prerequisites: ["physics.force.vector"] },
+  { id: "physics.force.power", title: "功率", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["P=W/t", "做功快慢"], prerequisites: ["physics.force.work", "physics.measure.conversion"] },
+  { id: "physics.energy.mechanical", title: "动能与势能", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["机械能", "重力势能"], prerequisites: ["physics.matter.mass", "physics.motion.speed"] },
+  { id: "physics.electric.power", title: "电功率", subject: "physics", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["P=UI", "额定功率"], prerequisites: ["physics.electric.ohm-law"] },
+  { id: "physics.energy.conservation", title: "机械能守恒", subject: "physics", gradeBands: ["senior"], version: highSchool, difficulty: 6, atomic: false, aliases: ["能量转化", "机械能守恒"], prerequisites: ["physics.energy.mechanical", "physics.force.work"] },
+  { id: "physics.momentum", title: "动量与冲量", subject: "physics", gradeBands: ["senior"], version: highSchool, difficulty: 6, atomic: false, aliases: ["p=mv", "冲量"], prerequisites: ["physics.matter.mass", "physics.motion.speed", "physics.force.vector"] },
+  { id: "physics.newton.second-law", title: "牛顿第二定律", subject: "physics", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["F=ma", "合外力"], prerequisites: ["physics.force.vector", "physics.motion.acceleration", "physics.matter.mass"] },
+];
+
+const chemistryConcepts: CurriculumConcept[] = [
+  { id: "chemistry.lab.safety", title: "化学实验基本安全", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["实验操作", "安全规则"], prerequisites: [] },
+  { id: "chemistry.symbol.element", title: "元素与元素符号", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["元素符号", "化学符号"], prerequisites: [] },
+  { id: "chemistry.matter.classification", title: "物质分类", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["纯净物", "混合物", "单质", "化合物"], prerequisites: [] },
+  { id: "chemistry.change.type", title: "物理变化与化学变化", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["新物质", "化学变化"], prerequisites: [] },
+  { id: "chemistry.particle.atom", title: "原子结构", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["原子核", "电子"], prerequisites: [] },
+  { id: "chemistry.solution.basic", title: "溶液的组成", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 1, atomic: true, aliases: ["溶质", "溶剂"], prerequisites: [] },
+  { id: "chemistry.particle.molecule-ion", title: "分子与离子", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["分子", "离子", "带电粒子"], prerequisites: ["chemistry.particle.atom"] },
+  { id: "chemistry.formula.meaning", title: "化学式的意义", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: false, aliases: ["化学式", "角码"], prerequisites: ["chemistry.symbol.element"] },
+  { id: "chemistry.equation.conservation", title: "质量守恒", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: true, aliases: ["原子守恒", "质量守恒定律"], prerequisites: [] },
+  { id: "chemistry.acid-base.basic", title: "酸和碱的基本性质", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 2, atomic: true, aliases: ["酸性", "碱性", "指示剂"], prerequisites: [] },
+  { id: "chemistry.formula.valence", title: "化合价", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["化合价规则", "正负价"], prerequisites: ["chemistry.symbol.element", "chemistry.particle.atom"] },
+  { id: "chemistry.solution.concentration", title: "溶质质量分数", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["溶液浓度", "质量分数"], prerequisites: ["chemistry.solution.basic"] },
+  { id: "chemistry.solution.solubility", title: "溶解度", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["饱和溶液", "溶解度曲线"], prerequisites: ["chemistry.solution.basic"] },
+  { id: "chemistry.acid-base.ph", title: "pH 与酸碱性", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 3, atomic: false, aliases: ["pH", "酸碱度"], prerequisites: ["chemistry.acid-base.basic"] },
+  { id: "chemistry.formula.write", title: "根据化合价书写化学式", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["化学式书写", "交叉法"], prerequisites: ["chemistry.formula.valence", "chemistry.formula.meaning"] },
+  { id: "chemistry.equation.meaning", title: "化学方程式的意义", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 4, atomic: false, aliases: ["反应物产物", "反应条件"], prerequisites: ["chemistry.formula.meaning", "chemistry.equation.conservation"] },
+  { id: "chemistry.equation.balance", title: "化学方程式配平", subject: "chemistry", gradeBands: ["junior", "senior"], version: compulsory, difficulty: 5, atomic: false, aliases: ["配平", "最简整数比"], prerequisites: ["chemistry.formula.write", "chemistry.equation.conservation"] },
+  { id: "chemistry.redox.valence", title: "氧化还原与化合价变化", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 5, atomic: false, aliases: ["氧化还原", "升失氧降得还"], prerequisites: ["chemistry.formula.valence"] },
+  { id: "chemistry.mole.amount", title: "物质的量", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 6, atomic: false, aliases: ["摩尔", "阿伏加德罗常数"], prerequisites: ["chemistry.particle.molecule-ion", "chemistry.symbol.element"] },
+  { id: "chemistry.mole.molar-mass", title: "摩尔质量", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["M=m/n", "相对分子质量"], prerequisites: ["chemistry.mole.amount", "chemistry.formula.meaning"] },
+  { id: "chemistry.reaction.rate", title: "化学反应速率", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 6, atomic: false, aliases: ["反应快慢", "浓度变化率"], prerequisites: ["chemistry.equation.meaning", "chemistry.solution.concentration"] },
+  { id: "chemistry.mole.stoichiometry", title: "化学计量关系", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 8, atomic: false, aliases: ["方程式计算", "物质的量之比"], prerequisites: ["chemistry.equation.balance", "chemistry.mole.amount", "chemistry.mole.molar-mass"] },
+  { id: "chemistry.gas.molar-volume", title: "气体摩尔体积", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["Vm", "标准状况"], prerequisites: ["chemistry.mole.amount"] },
+  { id: "chemistry.equilibrium", title: "化学平衡", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["平衡移动", "可逆反应"], prerequisites: ["chemistry.reaction.rate", "chemistry.equation.meaning"] },
+  { id: "chemistry.electrochemistry", title: "原电池与电解", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["原电池", "电极反应"], prerequisites: ["chemistry.redox.valence", "chemistry.particle.molecule-ion"] },
+];
+
+export const curriculumCatalog: CurriculumConcept[] = [...mathConcepts, ...physicsConcepts, ...chemistryConcepts];
