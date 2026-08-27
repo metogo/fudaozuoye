@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { assertGraphInvariants, isReadyForOriginal, nextReadyNode } from "./graph";
 import { ServiceError } from "./errors";
 import type { ApiEnvelope, LearningSession, ProviderId } from "./types";
@@ -29,7 +28,7 @@ export function requestId(): string {
 
 export function ok<T>(provider: ProviderId, modelId: string, data: T, id = requestId()) {
   const payload: ApiEnvelope<T> = { schemaVersion: "1.0", requestId: id, provider, modelId, data, error: null };
-  return NextResponse.json(payload);
+  return Response.json(payload);
 }
 
 export function fail(error: unknown, provider: ProviderId = "doubao", modelId = "unavailable", status = 400) {
@@ -39,7 +38,7 @@ export function fail(error: unknown, provider: ProviderId = "doubao", modelId = 
     schemaVersion: "1.0", requestId: requestId(), provider, modelId, data: null,
     error: { code: error instanceof ServiceError ? error.code : actualStatus >= 500 ? "PROVIDER_ERROR" : "INVALID_REQUEST", message, retryable: error instanceof ServiceError ? error.retryable : actualStatus >= 500 },
   };
-  return NextResponse.json(payload, { status: actualStatus });
+  return Response.json(payload, { status: actualStatus });
 }
 
 export function advanceAfterMastery(session: LearningSession, preferredDependentId?: string): LearningSession {

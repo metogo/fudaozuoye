@@ -1,0 +1,2 @@
+#!/bin/sh
+exec node dist/functions/learning-api/src/index.js

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { POST as solutionRoute } from "@/app/api/learning/solution/route";
+import { postSolution as solutionRoute } from "@/lib/learning/http/solution";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { sealSession } from "@/lib/learning/server-state";
 

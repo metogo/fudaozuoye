@@ -1,0 +1,8 @@
+{
+  "name": "learning-api",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node dist/functions/learning-api/src/index.js"
+  }
+}

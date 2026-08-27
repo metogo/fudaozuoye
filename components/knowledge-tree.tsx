@@ -22,9 +22,9 @@ export function KnowledgeTree({ session, activeNodeId, highlightNodeId, onSelect
     const verified = node.state === "mastered" || node.state === "known";
     return <li className={`knowledge-branch depth-${depth}`}>
       <button id={`knowledge-node-${node.id}`} aria-current={active ? "step" : undefined} onClick={() => onSelect(node.id)} className={`knowledge-node-card group relative w-full min-h-[76px] rounded-2xl border p-4 text-left transition ${active ? "border-stone-900 bg-stone-900 text-white shadow-xl" : "border-stone-200 bg-white hover:border-stone-400"} ${highlighted ? "knowledge-node-card-highlight" : ""}`}>
-        <span className="mb-2 flex items-center justify-between gap-3"><span className={`text-[10px] font-semibold uppercase tracking-[.12em] ${active ? "text-stone-400" : "text-stone-400"}`}>{node.kind === "problem" ? "目标题目" : node.atomic ? "课标原子点" : `知识层级 ${node.difficulty}`}</span><span className={`node-status status-${node.state} inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold`}>{verified && <CheckIcon className="h-3 w-3"/>}{statusText[node.state]}</span></span>
+        <span className="mb-2 flex items-center justify-between gap-3"><span className={`text-[10px] font-semibold uppercase tracking-[.12em] ${active ? "text-stone-400" : "text-stone-400"}`}>{depthLabel(node, depth)}</span><span className={`node-status status-${node.state} inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold`}>{verified && <CheckIcon className="h-3 w-3"/>}{statusText[node.state]}</span></span>
         <span className="flex items-center justify-between gap-2"><strong className="text-[15px]">{node.title}</strong><ChevronIcon className={`h-4 w-4 shrink-0 transition ${active ? "text-white" : "text-stone-400"}`}/></span>
-        {node.kind === "concept" && node.diagnosticEvidence && <span className={`mt-2 block line-clamp-1 text-[11px] ${active ? "text-stone-300" : "text-stone-500"}`}>证据：{evidenceSourceText(node.diagnosticEvidenceSource)}“{node.diagnosticEvidence}”</span>}
+        {node.atomic ? <span className={`mt-2 block text-[11px] leading-4 ${active ? "text-amber-200" : "text-amber-700"}`}>已到本学段学习起点，不再机械拆分</span> : node.kind === "concept" && node.diagnosticEvidence ? <span className={`mt-2 block line-clamp-1 text-[11px] ${active ? "text-stone-300" : "text-stone-500"}`}>证据：{evidenceSourceText(node.diagnosticEvidenceSource)}“{node.diagnosticEvidence}”</span> : null}
       </button>
       {prerequisites.length > 0 && <ul className="knowledge-children relative ml-5 space-y-3 border-l border-stone-300 pl-5 pt-3">{prerequisites.map((child) => <Branch key={child.id} node={child} depth={depth + 1}/>)}</ul>}
     </li>;
@@ -36,4 +36,10 @@ export { statusText };
 
 function evidenceSourceText(source: KnowledgeNode["diagnosticEvidenceSource"]) {
   return source === "child_work" ? "孩子作答原文" : source === "parent" ? "上层节点依据" : "题干原文";
+}
+
+function depthLabel(node: KnowledgeNode, depth: number) {
+  if (node.kind === "problem") return "目标题目";
+  if (node.atomic) return `学习起点 · 第 ${depth} 层前置`;
+  return `第 ${depth} 层前置 · 更基础`;
 }

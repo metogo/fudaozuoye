@@ -42,4 +42,23 @@ describe("知识 DAG 约束", () => {
     const expansion = expandMock(session, multiplication.id);
     expect(() => mergeExpansion(session, multiplication.id, expansion.nodes, expansion.edges)).not.toThrow();
   });
+
+  it("拆解深度不固定为两层，会沿真实前置关系持续到原子点", () => {
+    let session = analyzeMock(recognizeMock("physics", "senior"), "doubao");
+    const newton = session.nodes.find((node) => node.conceptId === "physics.newton.second-law")!;
+    const first = expandMock(session, newton.id);
+    session = mergeExpansion(session, newton.id, first.nodes, first.edges);
+
+    const acceleration = session.nodes.find((node) => node.conceptId === "physics.motion.acceleration")!;
+    const second = expandMock(session, acceleration.id);
+    session = mergeExpansion(session, acceleration.id, second.nodes, second.edges);
+
+    const speed = session.nodes.find((node) => node.conceptId === "physics.motion.speed")!;
+    const third = expandMock(session, speed.id);
+    session = mergeExpansion(session, speed.id, third.nodes, third.edges);
+
+    expect(session.nodes.some((node) => node.conceptId === "physics.motion.distance-time")).toBe(true);
+    expect(session.nodes.some((node) => node.atomic)).toBe(true);
+    expect(() => assertGraphInvariants(session)).not.toThrow();
+  });
 });

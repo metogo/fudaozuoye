@@ -1,11 +1,13 @@
 {
   "name": "knowledge-backtracking-h5",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:function": "tsc -p tsconfig.function.json",
+    "build:cloudbase": "NEXT_PUBLIC_API_BASE_URL=https://mini-0324-100046523669-03b06729f-1406836756.ap-shanghai.app.tcloudbase.com/api next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

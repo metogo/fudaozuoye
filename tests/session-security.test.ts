@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { POST as verifyRoute } from "@/app/api/learning/verify/route";
+import { postVerify as verifyRoute } from "@/lib/learning/http/verify";
 import { analyzeMock, recognizeMock, transferCheckMock } from "@/lib/learning/mock-engine";
 import { CONSENT_COOKIE, consentRateIdentity, createConsentValue, hasValidConsent, openSession, sealSession, toClientState } from "@/lib/learning/server-state";
 

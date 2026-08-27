@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "version": "2.1",
+  "envId": "mini-0324-100046523669-03b06729f",
+  "functionRoot": "functions",
+  "functions": [
+    {
+      "name": "learning-api",
+      "dir": "./functions/learning-api",
+      "type": "HTTP",
+      "runtime": "Nodejs20.19",
+      "handler": "dist/functions/learning-api/src/index.main",
+      "timeout": 60,
+      "memorySize": 512,
+      "installDependency": false,
+      "public": true,
+      "gatewayPath": "/api",
+      "envVariables": {
+        "AI_MOCK_MODE": "false",
+        "PUBLIC_APP_ORIGIN": "https://fudaozuoye-mini-0324-100046523669-03b06729f.webapps.tcloudbase.com",
+        "DOUBAO_API_KEY": "{{env.DOUBAO_API_KEY}}",
+        "DOUBAO_MODEL_ID": "{{env.DOUBAO_MODEL_ID}}",
+        "DOUBAO_BASE_URL": "{{env.DOUBAO_BASE_URL}}",
+        "SESSION_STATE_SECRET": "{{env.SESSION_STATE_SECRET}}"
+      }
+    }
+  ],
+  "app": {
+    "serviceName": "fudaozuoye",
+    "framework": "next",
+    "buildCommand": "npm run build:cloudbase",
+    "outputDir": "out",
+    "deployPath": "/fudaozuoye",
+    "envVariables": {
+      "NEXT_PUBLIC_API_BASE_URL": "https://mini-0324-100046523669-03b06729f-1406836756.ap-shanghai.app.tcloudbase.com/api"
+    }
+  }
+}

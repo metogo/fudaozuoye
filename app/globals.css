@@ -39,6 +39,49 @@ button:disabled { cursor: not-allowed; }
   mask-image: linear-gradient(to bottom, black, transparent 70%);
 }
 
+.capture-topology > i {
+  position: absolute;
+  border: 1px solid rgba(120, 113, 108, .12);
+  border-radius: 999px;
+}
+.capture-topology > i:nth-child(1) { inset: 0; }
+.capture-topology > i:nth-child(2) { inset: 34px; }
+.capture-topology > i:nth-child(3) { width: 9px; height: 9px; left: 34px; bottom: 50px; background: #171717; border: 0; }
+.capture-topology > i:nth-child(4) { width: 7px; height: 7px; left: 97px; bottom: 18px; background: #a8a29e; border: 0; }
+
+.capture-brand-mark { animation: capture-mark-enter .65s cubic-bezier(.2,.8,.2,1) both; }
+.capture-flow { animation: capture-section-enter .55s .12s cubic-bezier(.2,.8,.2,1) both; }
+.model-selector { animation: capture-section-enter .55s .18s cubic-bezier(.2,.8,.2,1) both; }
+.capture-panel { animation: capture-section-enter .55s .24s cubic-bezier(.2,.8,.2,1) both; }
+
+.model-option-active::after {
+  content: "";
+  position: absolute;
+  right: -28px;
+  top: -28px;
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  box-shadow: 0 0 0 13px rgba(255,255,255,.035);
+}
+
+.capture-panel::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 9%;
+  right: 9%;
+  top: -2px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+  box-shadow: 0 0 16px rgba(255,255,255,.18);
+  animation: capture-scan 4.8s ease-in-out infinite;
+}
+.capture-camera-mark { animation: capture-camera-breathe 2.8s ease-in-out infinite; }
+.capture-primary-action { transition: transform .2s ease, box-shadow .2s ease; }
+.capture-primary-action:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(0,0,0,.22); }
+
 .knowledge-children::before {
   content: "";
   position: absolute;
@@ -82,11 +125,63 @@ button:disabled { cursor: not-allowed; }
   animation: orbit 2.1s linear infinite;
 }
 
+.analysis-loader::before,
+.analysis-loader::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 2px solid rgba(23, 23, 23, .28);
+  border-radius: 20px;
+  animation: analysis-loader-pulse 1.8s ease-out infinite;
+}
+.analysis-loader::after { animation-delay: .9s; }
+
+.analysis-signal { display: inline-flex; align-items: center; gap: 3px; height: 14px; }
+.analysis-signal > i {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #78716c;
+  animation: analysis-signal-wave 1.25s ease-in-out infinite;
+}
+.analysis-signal > i:nth-child(2) { animation-delay: .1s; }
+.analysis-signal > i:nth-child(3) { animation-delay: .2s; }
+.analysis-signal > i:nth-child(4) { animation-delay: .3s; }
+.analysis-signal > i:nth-child(5) { animation-delay: .4s; }
+
+.analysis-live-panel { animation: analysis-panel-breathe 2.4s ease-in-out infinite; }
+
+.loading-border-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.loading-border-card::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -160%;
+  background: conic-gradient(from 0deg, transparent 0 76%, #171717 88%, #a8a29e 94%, transparent 100%);
+  animation: loading-border-spin 1.7s linear infinite;
+}
+.loading-border-card::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 2px;
+  border-radius: calc(1rem - 2px);
+  background: #fafaf9;
+}
+.loading-border-card > * { position: relative; z-index: 2; }
+
 .knowledge-node-card-highlight {
   animation: knowledge-node-arrival 1.8s cubic-bezier(.2,.8,.2,1);
   outline: 3px solid rgba(245, 158, 11, .7);
   outline-offset: 3px;
 }
+
+.back-to-top { animation: back-to-top-enter .22s cubic-bezier(.2,.8,.2,1); }
 
 @media (min-width: 1024px) {
   .workspace-screen { padding-bottom: 3rem; }
@@ -98,7 +193,25 @@ button:disabled { cursor: not-allowed; }
 }
 
 @keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes capture-mark-enter { from { opacity: 0; transform: translateY(-6px) rotate(-9deg) scale(.9); } to { opacity: 1; transform: translateY(0) rotate(0) scale(1); } }
+@keyframes capture-section-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes capture-scan { 0%, 100% { opacity: 0; transform: translateY(18px); } 18%, 72% { opacity: .75; } 82% { opacity: 0; transform: translateY(310px); } }
+@keyframes capture-camera-breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,.04); } 50% { box-shadow: 0 0 0 10px rgba(255,255,255,.035); } }
 @keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes analysis-loader-pulse {
+  0% { opacity: .75; transform: scale(.92); }
+  75%, 100% { opacity: 0; transform: scale(1.28); }
+}
+@keyframes analysis-signal-wave {
+  0%, 65%, 100% { opacity: .28; transform: scale(.75); }
+  30% { opacity: 1; transform: scale(1.5); }
+}
+@keyframes analysis-panel-breathe {
+  0%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  50% { box-shadow: 0 8px 24px rgba(0,0,0,.11); }
+}
+@keyframes loading-border-spin { to { transform: rotate(360deg); } }
+@keyframes back-to-top-enter { from { opacity: 0; transform: translateY(8px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes knowledge-node-arrival {
   0% { opacity: .5; transform: translateY(14px) scale(.975); }
   45% { opacity: 1; transform: translateY(-2px) scale(1.015); }
