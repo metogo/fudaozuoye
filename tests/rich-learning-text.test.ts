@@ -1,0 +1,442 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { LearningChat } from "@/components/learning-chat";
+import { LearningBoard } from "@/components/learning-board";
+import { RichLearningText } from "@/components/rich-learning-text";
+import { STREAMING_FINISH_MS, StreamingIndicator } from "@/components/streaming-indicator";
+import { understandingChoiceFromText } from "@/components/education-chat-app";
+import { answerGate, understandingGate } from "@/lib/learning/flow";
+import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
+import { learningTextToPlainText, parseLearningPrompt, prepareLearningMarkdown, stripLearningChoiceLabel } from "@/lib/learning/presentation";
+import { solutionSystemPrompt } from "@/lib/learning/providers/model-support";
+import { tutorSystemPrompt } from "@/lib/learning/providers/tutor";
+
+describe("AI 教学内容排版", () => {
+  it("SSE 状态标记覆盖输出与 Bingo 完成状态，并提供无障碍说明", () => {
+    const starting = renderToStaticMarkup(createElement(StreamingIndicator, { status: "streaming" }));
+    const finishing = renderToStaticMarkup(createElement(StreamingIndicator, { status: "finishing" }));
+
+    expect(starting).toContain('class="streaming-indicator');
+    expect(starting).toContain('data-phase="streaming"');
+    expect(starting).toContain('aria-label="正在输出"');
+    expect(finishing).toContain('data-phase="finishing"');
+    expect(finishing).toContain('aria-label="输出完成"');
+    expect(starting).toContain("streaming-indicator__ink-dot");
+    expect(finishing).toContain("streaming-indicator__check");
+    expect(finishing).toContain("streaming-indicator__sparks");
+    expect(finishing).not.toContain("pencil");
+    expect(STREAMING_FINISH_MS).toBeGreaterThanOrEqual(1_100);
+  });
+
+  it("流式正文把状态标记接在最后一段，完成消息不再显示标记", () => {
+    const active = renderLearningChatWithMessage("streaming");
+    const complete = renderLearningChatWithMessage("complete");
+
+    expect(active).toContain("rich-learning-text--with-trailing");
+    expect(active).toContain("streaming-indicator");
+    expect(complete).not.toContain("streaming-indicator");
+  });
+
+  it("首页同时提供拍照、相册和白板写题入口", () => {
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain('aria-label="拍照发题"');
+    expect(html).toContain('aria-label="从相册选择题目"');
+    expect(html).toContain('aria-label="白板写题"');
+    expect(html).toContain('placeholder="输入一道题目…"');
+    expect(html).not.toContain("数理化");
+  });
+
+  it("当前回合已有正文后不重新插入等待卡片", () => {
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [
+        { id: "user-1", role: "user", kind: "user", text: "请继续", status: "complete", createdAt: new Date(0).toISOString() },
+        { id: "assistant-1", role: "assistant", kind: "assistant", text: "正文已经输出。", status: "complete", createdAt: new Date(1).toISOString() },
+      ],
+      session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: true,
+      loadingLabel: "正在继续讲解", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).not.toContain("loading-whisper");
+    expect(html).not.toContain("正在继续讲解");
+  });
+
+  it("图片消息正在识别时立即显示等待卡片，不把学生消息误判为 AI 输出", () => {
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [{
+        id: "user-image",
+        role: "user",
+        kind: "user",
+        text: "这道题我不会，想把它学懂。",
+        imageUrl: "blob:http://localhost/homework",
+        status: "streaming",
+        createdAt: new Date(0).toISOString(),
+      }],
+      session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: true,
+      loadingLabel: "正在识别题干与你的作答", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("loading-whisper");
+    expect(html).toContain("正在识别题干与你的作答");
+  });
+
+  it("渲染标题、列表、强调和数学公式", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "### 解题思路\n\n先看 **关键条件**：$x+2=5$。\n\n1. 移项\n2. 得到\n\n$$x=3$$",
+    }));
+
+    expect(html).toContain("rich-heading");
+    expect(html).toContain("<ol>");
+    expect(html).toContain("<strong>");
+    expect(html).toContain("katex");
+    expect(html).toContain("math");
+  });
+
+  it("不渲染模型返回的任意 HTML", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "正常内容<script>alert(1)</script><img src=x onerror=alert(2)>",
+    }));
+
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("onerror");
+  });
+
+  it("不加载模型返回的 Markdown 远程图片", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "不要加载 ![远程图](https://example.com/student.png)",
+    }));
+
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("https://example.com");
+    expect(html).toContain("图片：远程图");
+  });
+
+  it("把 OCR 原题中的高置信公式规范化为 KaTeX", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "在△ABC中，∠ACB = 90°，已知sinB + sinC = 2sinA cosC，且b = 3，面积为3√3/2。",
+    }));
+
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html).toContain("sqrt");
+    expect(html).toContain("triangle");
+    expect(html).not.toContain("sinB");
+  });
+
+  it("覆盖常见化学式、科学计数法和字母根式", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "水是H2O，二氧化碳是CO2，氯化钠是NaCl；常数约为6.02×10^23，并比较√x与√(2)。",
+    }));
+
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(html).toContain("mathrm");
+    expect(html).toContain("sqrt");
+  });
+
+  it("紧凑选项中的分式根号保留完整根式结构", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "4√3/3",
+      compact: true,
+    }));
+
+    expect(prepareLearningMarkdown("4√3/3")).toBe("$\\frac{4\\sqrt{3}}{3}$");
+    expect(html).toContain("mfrac");
+    expect(html).toContain("mord sqrt");
+    expect(html).toContain("<svg");
+    expect(html).toMatch(/style="min-width:0\.853em;height:1\.08em" class="hide-tail mtight"/);
+    expect(html).toMatch(/style="height:[^"]+" class="vlist"/);
+  });
+
+  it("覆盖常见代数关系、变量列表和裸 LaTeX", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "角A,B,C对应边a,b,c，满足a²+b²=c²；另有2(x+3)=14，并比较\\frac{1}{2}与\\sqrt{x}。",
+    }));
+
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(html).toContain("frac");
+    expect(html).toContain("sqrt");
+  });
+
+  it("不会重复改写已经带公式定界符的内容", () => {
+    const prepared = prepareLearningMarkdown("已有 $x+2=5$，裸公式 b = 3。");
+
+    expect(prepared).toContain("$x+2=5$");
+    expect(prepared).not.toContain("$$x+2=5$$");
+    expect(prepared).toContain("$b = 3$");
+  });
+
+  it("把原题前缀、题干和内联选项拆成稳定结构", () => {
+    const parsed = parseLearningPrompt("现在请你独立重做原题：在△ABC中求a？A. 3√3 B. 2√3 C. 3 D. √3");
+
+    expect(parsed.body).toBe("在△ABC中求a？");
+    expect(parsed.choices).toEqual(["A. 3√3", "B. 2√3", "C. 3", "D. √3"]);
+  });
+
+  it("支持括号选项，但不会把英文小写小问误判成答案按钮", () => {
+    expect(parseLearningPrompt("求解：（A）3 （B）4 （C）5").choices).toEqual(["A. 3", "B. 4", "C. 5"]);
+    expect(parseLearningPrompt("完成两问： a. 求 x 的值 b. 证明结论成立").choices).toEqual([]);
+    expect(stripLearningChoiceLabel("A. 3√3", 0)).toBe("3√3");
+  });
+
+  it("把 OCR 中连续的小问整理为有序列表", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "完成下列问题： 1. 求速度。 2. 判断方向。 3. 写出单位。",
+    }));
+
+    expect(html).toContain("<ol>");
+    expect(html.match(/<li>/g)).toHaveLength(3);
+  });
+
+  it("紧凑模式使用行内容器，避免嵌入标记时产生无效 DOM", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, { text: "$x=3$", compact: true }));
+
+    expect(html.startsWith("<span")).toBe(true);
+    expect(html).toContain("katex");
+  });
+
+  it("流式输出的未闭合公式不被自动规范化破坏", () => {
+    expect(prepareLearningMarkdown("正在推导 $x=3")).toBe("正在推导 $x=3");
+    expect(prepareLearningMarkdown("正在推导 $$x=3")).toBe("正在推导 $$x=3");
+    expect(prepareLearningMarkdown("正在推导 $$\nx=3", true)).toBe("正在推导 $$\nx=3");
+  });
+
+  it("保护波浪线代码围栏，并保留无障碍文本中的大于号", () => {
+    expect(prepareLearningMarkdown("~~~txt\nx = 3\n~~~")).toBe("~~~txt\nx = 3\n~~~");
+    expect(learningTextToPlainText("条件 $x>3$")).toContain("x>3");
+  });
+
+  it("原题互动卡同时显示结构化题干、可点击选项和完整讲解入口", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const root = base.nodes.find((node) => node.id === base.rootNodeId)!;
+    const prompt = "现在请你独立重做原题：在△ABC中，已知sinB + sinC = 2sinA cosC，求a。 A. 3√3 B. 2√3 C. 3 D. √3";
+    const gate = answerGate("original_answer", "现在不看讲解，自己完成原题", prompt, root.id);
+    const session = { ...base, flow: { ...base.flow, stage: "original_attempt" as const, activeGate: gate } };
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("原题");
+    expect(html).toContain("选择一个答案");
+    expect(html).toContain("先看完整讲解");
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/<svg/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(html).toMatch(/style="min-width:[^"]+;height:[^"]+" class="hide-tail/);
+    expect(html).not.toContain("A. 3√3 B. 2√3");
+  });
+
+  it("简答任务把白板和拍照收进键盘输入框", () => {
+    const base = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const root = base.nodes.find((node) => node.id === base.rootNodeId)!;
+    const shortRoot = { ...root, check: { ...root.check, type: "short_text" as const, choices: undefined } };
+    const gate = answerGate("original_answer", "现在独立完成原题", shortRoot.check.prompt, root.id);
+    const session = { ...base, nodes: base.nodes.map((node) => node.id === root.id ? shortRoot : node), flow: { ...base.flow, stage: "original_attempt" as const, activeGate: gate } };
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain("当前环节");
+    expect(html).toContain("独立完成原题，验证是否真正掌握");
+    expect(html).not.toContain("作答方式");
+    expect(html).not.toContain("提问方式");
+    expect(html).not.toContain(">键盘<");
+    expect(html).toContain('aria-label="输入你的答案"');
+    expect(html).toContain('aria-label="打开白板作答"');
+    expect(html).toContain('aria-label="拍照作答"');
+    expect(html).toContain("改为提问");
+    expect(html).toContain("chat-composer__input-row");
+    expect(html).not.toContain('class="contents"');
+  });
+
+  it("理解确认环节展示真实教学意图，并允许在输入框直接反馈懂或没懂", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const gate = understandingGate("核心思路听懂了吗？");
+    const session = { ...base, flow: { ...base.flow, stage: "core_explanation" as const, activeGate: gate } };
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("当前环节");
+    expect(html).toContain("确认你是否理解核心思路");
+    expect(html).toContain("懂了、没懂，或直接问…");
+    expect(html).not.toContain("当前任务：核心思路听懂了吗？");
+    expect(html).not.toContain("提问方式");
+    expect(understandingChoiceFromText("我懂了。 ")).toBe("continue");
+    expect(understandingChoiceFromText("这一步没懂！")).toBe("not_understood");
+    expect(understandingChoiceFromText("为什么这里要作辅助线？")).toBeNull();
+  });
+
+  it("完整讲解进入回忆检查后自动收起，不让答案继续暴露在作答区", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const gate = answerGate("solution_recall_answer", "先说清楚一个关键步骤", "为什么第一步要这样做？", base.rootNodeId);
+    const session = { ...base, flow: { ...base.flow, stage: "solution_recall" as const, viewedSolution: true, activeGate: gate } };
+    const messages = [{ id: "solution", role: "assistant" as const, kind: "assistant" as const, text: "这是不应继续暴露的完整答案正文", scopeLabel: "原题完整讲解", status: "complete" as const, createdAt: new Date().toISOString() }];
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages, session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("完整讲解已收起");
+    expect(html).toContain("关键步骤检查");
+    expect(html).not.toContain("这是不应继续暴露的完整答案正文");
+  });
+
+  it("点击完整讲解后先完整展示，学生确认看完才进入收起动作", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const session = { ...base, flow: { ...base.flow, stage: "solution_recall" as const, viewedSolution: true, activeGate: { id: "review-solution", kind: "solution_review" as const, title: "完整讲解已经准备好", options: [{ id: "start_recall" as const, label: "我看完了，收起讲解", emphasis: "primary" as const }] } } };
+    const messages = [{ id: "solution", role: "assistant" as const, kind: "assistant" as const, text: "这是学生刚刚请求查看的完整讲解正文", scopeLabel: "原题完整讲解", status: "complete" as const, createdAt: new Date().toISOString() }];
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages, session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain("这是学生刚刚请求查看的完整讲解正文");
+    expect(html).toContain("我看完了，收起讲解");
+    expect(html).not.toContain("完整讲解已收起");
+  });
+
+  it("看懂但暂不验证时明确显示尚未掌握，并保留三种后续路径", () => {
+    const base = analyzeMock(recognizeMock("physics", "junior"), "doubao");
+    const session = { ...base, flow: { ...base.flow, stage: "reviewed_complete" as const, viewedSolution: true, solutionRecallPassed: true, activeGate: null } };
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("已学习 · 尚未验证掌握");
+    expect(html).toContain("遮住讲解，重做原题");
+    expect(html).toContain("换一道同知识点题");
+    expect(html).toContain("再次查看刚才的板书");
+    expect(html).toContain("不改变当前任务");
+    expect(html).toContain("开始新题");
+  });
+
+  it("离开完整讲解后不再提供展开答案入口", () => {
+    const base = analyzeMock(recognizeMock("physics", "junior"), "doubao");
+    const session = { ...base, flow: { ...base.flow, stage: "reviewed_complete" as const, viewedSolution: true, solutionRecallPassed: true, activeGate: null } };
+    const messages = [{ id: "solution", role: "assistant" as const, kind: "assistant" as const, text: "完整答案正文", scopeLabel: "原题完整讲解", status: "complete" as const, createdAt: new Date().toISOString() }];
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages, session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain("完整讲解已收起");
+    expect(html).not.toContain("点击展开复习");
+    expect(html).not.toContain("完整答案正文");
+  });
+
+  it("完整讲解传输中断时隐藏残缺答案", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const messages = [{ id: "partial", role: "assistant" as const, kind: "assistant" as const, text: "残缺的答案开头", scopeLabel: "原题完整讲解", status: "error" as const, createdAt: new Date().toISOString() }];
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages, session: base, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain("完整讲解传输中断");
+    expect(html).not.toContain("残缺的答案开头");
+  });
+
+  it("猜你想问附着在来源讲解下，点击后的学生消息保留引用关系", () => {
+    const base = analyzeMock(recognizeMock("physics", "junior"), "doubao");
+    const suggestion = { id: "suggest-abcd1234", text: "为什么这条条件会决定第一步？", scopeLabel: "原题核心思路", sourceSummary: "先抓住焦距与物距之间的关系" };
+    const session = { ...base, flow: { ...base.flow, suggestedQuestions: [suggestion] } };
+    const messages = [
+      { id: "assistant-one", role: "assistant" as const, kind: "assistant" as const, text: "先比较题目给出的关键条件。", status: "complete" as const, suggestions: [suggestion], createdAt: new Date().toISOString() },
+      { id: "user-one", role: "user" as const, kind: "user" as const, text: suggestion.text, status: "complete" as const, reference: { scopeLabel: suggestion.scopeLabel, sourceSummary: suggestion.sourceSummary }, createdAt: new Date().toISOString() },
+    ];
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages, session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain('aria-label="猜你想问"');
+    expect(html).toContain("suggested-question-trail__branches");
+    expect(html).toContain(suggestion.text);
+    expect(html).toContain("引用 · 原题核心思路");
+    expect(html).toContain(suggestion.sourceSummary);
+  });
+
+  it("板书正文、重点标记和说明共用同一套公式渲染", () => {
+    const html = renderToStaticMarkup(createElement(LearningBoard, {
+      lesson: {
+        title: "速度关系 $v=s/t$",
+        subtitle: "把 $s$、$t$ 与 $v$ 的关系放在一起看。",
+        layout: "formula",
+        blocks: [{ id: "board-1", label: "核心关系", content: "先圈出 $v=s/t$，再核对单位。", tone: "key" }],
+        annotations: [{ blockId: "board-1", target: "$v=s/t$", kind: "circle", reason: "这是连接路程与时间的核心公式 $v=s/t$。" }],
+        visual: null,
+        returnLabel: "回到原题",
+      },
+      messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
+      onAsk: () => {}, onClose: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("board-mark--circle");
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("板书重点只命中公式内部时仍保留完整 KaTeX 公式", () => {
+    const html = renderToStaticMarkup(createElement(LearningBoard, {
+      lesson: {
+        title: "速度关系",
+        subtitle: "看清变量之间的关系。",
+        layout: "formula",
+        blocks: [{ id: "board-1", label: "核心关系", content: "先由 $x+2=5$ 求出未知数。", tone: "key" }],
+        annotations: [{ blockId: "board-1", target: "x+2=5", kind: "circle", reason: "这是当前推理使用的核心等式。" }],
+        visual: null,
+        returnLabel: "回到原题",
+      },
+      messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
+      onAsk: () => {}, onClose: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("board-mark--circle");
+    expect(html).toContain("class=\"katex\"");
+    expect(html).not.toContain("$</span>");
+  });
+
+  it("要求自由追问和完整讲解输出结构化 Markdown 与 KaTeX", () => {
+    expect(tutorSystemPrompt()).toContain("Markdown");
+    expect(tutorSystemPrompt()).toContain("简洁不等于省略");
+    expect(tutorSystemPrompt()).toContain("不要输出一整块无层次纯文本");
+    expect(tutorSystemPrompt()).toContain("$...$");
+    expect(solutionSystemPrompt()).toContain("有序列表");
+    expect(solutionSystemPrompt()).toContain("KaTeX");
+  });
+});
+
+function renderLearningChatWithMessage(status: "streaming" | "complete"): string {
+  return renderToStaticMarkup(createElement(LearningChat, {
+    messages: [{ id: "assistant-1", role: "assistant", kind: "assistant", text: "正在推导第一步。", status, createdAt: new Date(0).toISOString() }],
+    session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: status === "streaming",
+    loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+    onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+    onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+  }));
+}

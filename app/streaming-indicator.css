@@ -1,0 +1,103 @@
+.rich-learning-text--with-trailing > p:nth-last-child(2) { display: inline; }
+
+.streaming-indicator {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  margin-left: 3px;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -7px;
+  color: #16a34a;
+  pointer-events: none;
+}
+.streaming-indicator--compact {
+  width: 18px;
+  height: 18px;
+  margin-left: 0;
+  vertical-align: -5px;
+}
+.streaming-indicator svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.streaming-indicator__ink-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #78716c;
+  box-shadow: 0 0 0 0 rgba(120, 113, 108, .18);
+}
+.streaming-indicator[data-phase="starting"] .streaming-indicator__ink-dot {
+  animation: streaming-ink-wait 1.15s ease-in-out infinite;
+}
+.streaming-indicator[data-phase="streaming"] .streaming-indicator__ink-dot {
+  animation: streaming-ink-type .68s ease-in-out infinite;
+}
+.streaming-indicator[data-phase="finishing"] {
+  animation: streaming-bingo-finish 1.16s ease-out both;
+}
+.streaming-indicator__ring,
+.streaming-indicator__check,
+.streaming-indicator__sparks path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.streaming-indicator__ring {
+  stroke-width: 1.8;
+  stroke-dasharray: 57;
+  stroke-dashoffset: 57;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: streaming-bingo-ring 1.16s cubic-bezier(.2,.9,.25,1) both;
+}
+.streaming-indicator__check {
+  stroke-width: 2.25;
+  stroke-dasharray: 13;
+  stroke-dashoffset: 13;
+  animation: streaming-bingo-check 1.16s cubic-bezier(.2,.9,.25,1) both;
+}
+.streaming-indicator__sparks {
+  stroke-width: 1.5;
+  animation: streaming-bingo-sparks 1.16s ease-out both;
+}
+
+@keyframes streaming-ink-wait {
+  0%, 100% { opacity: .35; transform: scale(.78); }
+  50% { opacity: .8; transform: scale(1); box-shadow: 0 0 0 4px rgba(120,113,108,.08); }
+}
+@keyframes streaming-ink-type {
+  0%, 100% { opacity: .48; transform: translateY(0) scale(.86); }
+  48% { opacity: 1; transform: translateY(-1px) scale(1.08); }
+}
+@keyframes streaming-bingo-ring {
+  0% { opacity: 0; stroke-dashoffset: 57; transform: scale(.5) rotate(-12deg); }
+  27% { opacity: 1; stroke-dashoffset: 0; transform: scale(1.12) rotate(1deg); }
+  42%, 82% { opacity: 1; stroke-dashoffset: 0; transform: scale(1); }
+  100% { opacity: 0; stroke-dashoffset: 0; transform: scale(.96); }
+}
+@keyframes streaming-bingo-check {
+  0%, 19% { opacity: 0; stroke-dashoffset: 13; }
+  38%, 82% { opacity: 1; stroke-dashoffset: 0; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes streaming-bingo-sparks {
+  0%, 22% { opacity: 0; transform: scale(.55) rotate(-8deg); transform-origin: center; }
+  37% { opacity: .9; transform: scale(1.08) rotate(1deg); }
+  55%, 100% { opacity: 0; transform: scale(1.35) rotate(4deg); }
+}
+@keyframes streaming-bingo-finish {
+  0%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-indicator__ink-dot,
+  .streaming-indicator[data-phase="finishing"],
+  .streaming-indicator__ring,
+  .streaming-indicator__check,
+  .streaming-indicator__sparks { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

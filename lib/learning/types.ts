@@ -1,4 +1,5 @@
 export type ProviderId = "doubao" | "openai" | "xai";
+export type ReasoningLevel = "light" | "medium" | "high";
 export type Subject = "math" | "physics" | "chemistry";
 export type GradeBand = "primary" | "junior" | "senior";
 export type CurriculumVersion = "cn-compulsory-2022" | "cn-highschool-2017-2020";
@@ -18,8 +19,173 @@ export type SessionStage =
   | "learning"
   | "original_check"
   | "transfer_check"
+  | "reviewed"
   | "complete"
   | "needs_help";
+
+export type LearningFlowStage =
+  | "intake"
+  | "core_explanation"
+  | "guided_reasoning"
+  | "remediation"
+  | "solution_recall"
+  | "original_attempt"
+  | "reviewed_complete"
+  | "complete";
+
+export type LearningGateKind =
+  | "understanding"
+  | "node_answer"
+  | "solution_review"
+  | "solution_recall_answer"
+  | "post_solution"
+  | "original_answer"
+  | "transfer_answer"
+  | "needs_help";
+
+export type LearningChoice =
+  | "continue"
+  | "try"
+  | "not_understood"
+  | "full_solution"
+  | "view_board"
+  | "start_recall"
+  | "retry_original"
+  | "practice_similar"
+  | "finish_review";
+
+export type BoardLayout = "relation" | "steps" | "comparison" | "formula";
+
+export interface BoardSuggestion {
+  recommended: boolean;
+  reason: string;
+  layout: BoardLayout;
+}
+
+export interface BoardBlock {
+  id: string;
+  label: string;
+  content: string;
+  tone: "plain" | "key" | "example";
+}
+
+export interface BoardAnnotation {
+  blockId: string;
+  target: string;
+  kind: "circle" | "underline" | "box";
+  reason: string;
+}
+
+export type BoardVisualKind = "geometry" | "optics" | "process" | "relation";
+
+export type BoardVisualElementType = "point" | "line" | "arrow" | "circle" | "rect" | "arc";
+
+export interface BoardVisualElement {
+  type: BoardVisualElementType;
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  label?: string;
+}
+
+export interface BoardVisual {
+  kind: BoardVisualKind;
+  title: string;
+  evidence: string;
+  caption: string;
+  elements: BoardVisualElement[];
+}
+
+export interface BoardLesson {
+  title: string;
+  subtitle: string;
+  layout: BoardLayout;
+  blocks: BoardBlock[];
+  annotations: BoardAnnotation[];
+  visual?: BoardVisual | null;
+  returnLabel: string;
+}
+
+export interface LearningGateOption {
+  id: LearningChoice;
+  label: string;
+  emphasis: "primary" | "secondary" | "quiet";
+}
+
+export interface LearningGate {
+  id: string;
+  kind: LearningGateKind;
+  title: string;
+  prompt?: string;
+  nodeId?: string;
+  options?: LearningGateOption[];
+  answerChoices?: string[];
+}
+
+export interface SuggestedQuestion {
+  id: string;
+  text: string;
+  scopeLabel: string;
+  sourceSummary: string;
+}
+
+export interface ChatMessageReference {
+  scopeLabel: string;
+  sourceSummary: string;
+}
+
+export interface LearningFlowState {
+  stage: LearningFlowStage;
+  focus: TutorScope;
+  activeGate: LearningGate | null;
+  remediationCount: number;
+  explainedNodeIds: string[];
+  pathNodeIds: string[];
+  viewedSolution: boolean;
+  solutionRecallPassed: boolean;
+  boardSuggestion: BoardSuggestion | null;
+  suggestedQuestions: SuggestedQuestion[];
+}
+
+export type LearningMilestone =
+  | "problem_understood"
+  | "bottleneck_found"
+  | "foundation_added"
+  | "back_to_problem"
+  | "problem_solved";
+
+export type LearningTurnInput =
+  | { type: "start" }
+  | { type: "question"; text: string }
+  | { type: "image_question" }
+  | { type: "choose"; gateId: string; choice: LearningChoice }
+  | { type: "answer"; gateId: string; answer: string }
+  | { type: "image_answer"; gateId: string }
+  | { type: "choose_suggestion"; suggestionId: string }
+  | { type: "retry_original" }
+  | { type: "request_transfer" };
+
+export type ChatMessageKind = "user" | "assistant" | "milestone" | "path" | "result";
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  kind: ChatMessageKind;
+  text: string;
+  createdAt: string;
+  scopeLabel?: string;
+  status?: "streaming" | "finishing" | "complete" | "error";
+  imageUrl?: string;
+  surface?: "chat" | "board";
+  reference?: ChatMessageReference;
+  suggestions?: SuggestedQuestion[];
+}
 
 export interface ProblemSnapshot {
   text: string;
@@ -29,6 +195,19 @@ export interface ProblemSnapshot {
   confidence: number;
   userRevised: boolean;
 }
+
+export interface ProblemGuide {
+  goal: string;
+  keyClue: string;
+  approach: string;
+  firstQuestion: string;
+}
+
+export type ProblemGuideSection = "goal" | "keyClue" | "approach";
+
+export type TutorScope =
+  | { kind: "problem"; section?: ProblemGuideSection }
+  | { kind: "node"; nodeId: string };
 
 export interface CheckItem {
   id: string;
@@ -81,12 +260,15 @@ export interface AssessmentEvidence {
 }
 
 export interface LearningSession {
-  schemaVersion: "1.0";
+  schemaVersion: "1.1";
   requestId: string;
   provider: ProviderId;
+  reasoningLevel: ReasoningLevel;
   modelId: string;
   mode: "demo" | "live";
   problem: ProblemSnapshot;
+  problemGuide: ProblemGuide;
+  flow: LearningFlowState;
   nodes: KnowledgeNode[];
   edges: KnowledgeEdge[];
   rootNodeId: string;
@@ -111,6 +293,12 @@ export interface ProviderAvailability {
   description: string;
   available: boolean;
   mode: "demo" | "live" | "unavailable";
+}
+
+export interface ReasoningAvailability {
+  id: ReasoningLevel;
+  label: "轻度" | "中" | "高";
+  available: boolean;
 }
 
 export interface ApiMeta {

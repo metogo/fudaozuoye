@@ -1,0 +1,539 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { readSseResponse } from "@/lib/learning/client-sse";
+import type { BoardLesson, ChatMessage, ClientSessionState, LearningChoice, LearningGate, LearningSession, LearningTurnInput, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
+import { ImageCropper } from "./image-cropper";
+import { LearningBoard } from "./learning-board";
+import { LearningChat } from "./learning-chat";
+import { STREAMING_FINISH_MS } from "./streaming-indicator";
+import { WhiteboardInput } from "./whiteboard-input";
+
+const SESSION_KEY = "education-chat-session-v3";
+const fallbackReasoningLevels: ReasoningAvailability[] = [
+  { id: "light", label: "轻度", available: false },
+  { id: "medium", label: "中", available: false },
+  { id: "high", label: "高", available: false },
+];
+
+interface StoredChatState extends ClientSessionState {
+  reasoningLevel?: ReasoningLevel;
+  messages: ChatMessage[];
+  boardLesson?: BoardLesson;
+}
+
+export function EducationChatApp() {
+  const [hydrated, setHydrated] = useState(false);
+  const [reasoningLevels, setReasoningLevels] = useState(fallbackReasoningLevels);
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("light");
+  const [ready, setReady] = useState(false);
+  const [session, setSession] = useState<LearningSession | null>(null);
+  const [stateToken, setStateToken] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [responseCrop, setResponseCrop] = useState<{ file: File; intent: "answer" | "question" } | null>(null);
+  const [whiteboardIntent, setWhiteboardIntent] = useState<"answer" | "question" | null>(null);
+  const [reviewProblem, setReviewProblem] = useState<ProblemSnapshot | null>(null);
+  const [boardLesson, setBoardLesson] = useState<BoardLesson | null>(null);
+  const [cachedBoardLesson, setCachedBoardLesson] = useState<BoardLesson | null>(null);
+  const [pendingImage, setPendingImage] = useState<Blob | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("");
+  const [notice, setNotice] = useState("");
+  const [retryLabel, setRetryLabel] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+  const retryRef = useRef<null | (() => Promise<void>)>(null);
+  const previewUrlsRef = useRef<string[]>([]);
+  const pendingImageMessageIdRef = useRef<string | null>(null);
+  const messageFinishTimersRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+    const messageFinishTimers = messageFinishTimersRef.current;
+    const hydrationTimer = window.setTimeout(() => {
+      if (!active) return;
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        if (raw) {
+          const restored = JSON.parse(raw) as unknown;
+          if (isStoredChatState(restored)) {
+            setSession(restored.session);
+            setStateToken(restored.stateToken);
+            setReasoningLevel(restored.reasoningLevel ?? restored.session.reasoningLevel ?? "light");
+            setMessages(restored.messages.map((message) => ({ ...message, status: message.status === "streaming" ? "error" : message.status === "finishing" ? "complete" : message.status })));
+            setCachedBoardLesson(restored.boardLesson ?? null);
+          } else sessionStorage.removeItem(SESSION_KEY);
+        }
+      } catch { sessionStorage.removeItem(SESSION_KEY); }
+      setHydrated(true);
+    }, 0);
+    fetch(apiUrl("/consent"), { method: "POST", credentials: "include" }).then(async (response) => {
+      if (!response.ok) throw new Error("服务暂时无法准备");
+      const data = await response.json() as { reasoningLevels?: ReasoningAvailability[] };
+      if (!data.reasoningLevels?.length) throw new Error("推理强度状态暂时无法读取");
+      if (!active) return;
+      setReasoningLevels(data.reasoningLevels);
+      const available = data.reasoningLevels.filter((item) => item.available);
+      setReady(available.length > 0);
+      setReasoningLevel((current) => available.some((item) => item.id === current) ? current : available[0]?.id ?? current);
+      if (available.length === 0) setNotice("AI 服务暂不可用，请稍后刷新重试。");
+    }).catch((error) => { if (active) setNotice(messageOf(error)); });
+    return () => { active = false; window.clearTimeout(hydrationTimer); abortRef.current?.abort(); for (const timer of messageFinishTimers.values()) window.clearTimeout(timer); messageFinishTimers.clear(); for (const url of previewUrlsRef.current) URL.revokeObjectURL(url); previewUrlsRef.current = []; };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!session || !stateToken) return;
+    const persistable = messages.map((message) => ({ ...message, imageUrl: undefined }));
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ session, stateToken, reasoningLevel, messages: persistable, ...(cachedBoardLesson ? { boardLesson: cachedBoardLesson } : {}) } satisfies StoredChatState)); }
+    catch { queueMicrotask(() => setNotice("当前浏览器无法保存进度；关闭页面后记录会丢失。")); }
+  }, [cachedBoardLesson, hydrated, messages, reasoningLevel, session, stateToken]);
+
+  const selectReasoningLevel = (next: ReasoningLevel) => {
+    if (session) return;
+    const option = reasoningLevels.find((item) => item.id === next);
+    if (!option?.available) return setNotice(`${reasoningLabel(next)}推理尚未配置`);
+    setReasoningLevel(next);
+    const message = `推理强度已切换为「${reasoningLabel(next)}」`;
+    setNotice(message);
+    window.setTimeout(() => setNotice((current) => current === message ? "" : current), 2200);
+  };
+
+  const beginRequest = () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
+  };
+
+  const finishRequest = (controller: AbortController) => {
+    if (abortRef.current === controller) abortRef.current = null;
+  };
+
+  const sendText = async (text: string) => {
+    if (!session) {
+      addMessage(userMessage(text));
+      await recognizeText(text);
+      return;
+    }
+    const gate = session.flow.activeGate;
+    addMessage(userMessage(text));
+    const understandingChoice = gate?.kind === "understanding" ? understandingChoiceFromText(text) : null;
+    if (gate && understandingChoice) {
+      await performTurn({ session, stateToken }, { type: "choose", gateId: gate.id, choice: understandingChoice });
+      return;
+    }
+    if (gate && ["node_answer", "solution_recall_answer", "original_answer", "transfer_answer"].includes(gate.kind)) {
+      await performTurn({ session, stateToken }, { type: "answer", gateId: gate.id, answer: text });
+      return;
+    }
+    await performTurn({ session, stateToken }, { type: "question", text });
+  };
+
+  const askCurrentQuestion = async (text: string) => {
+    if (!session) return;
+    addMessage(userMessage(text));
+    await performTurn({ session, stateToken }, { type: "question", text });
+  };
+
+  const sendImageResponse = async (blob: Blob, previewUrl: string, intent: "answer" | "question", source: "whiteboard" | "photo") => {
+    if (!session || busy) return;
+    previewUrlsRef.current.push(previewUrl);
+    const gate = session.flow.activeGate;
+    const answerIntent = intent === "answer" && gate && ["node_answer", "solution_recall_answer", "original_answer", "transfer_answer"].includes(gate.kind);
+    addMessage({ ...userMessage(source === "whiteboard" ? (answerIntent ? "我的白板作答" : "我在白板上标出了疑问") : (answerIntent ? "我的拍照作答" : "请看我拍下的这一步")), imageUrl: previewUrl });
+    const input: LearningTurnInput = answerIntent
+      ? { type: "image_answer", gateId: gate.id }
+      : { type: "image_question" };
+    await performTurn({ session, stateToken }, input, "chat", blob);
+  };
+
+  const choose = async (gate: LearningGate, choice: LearningChoice) => {
+    if (!session || busy) return;
+    const label = gate.options?.find((option) => option.id === choice)?.label ?? choiceLabel(choice);
+    addMessage(userMessage(label));
+    await performTurn({ session, stateToken }, { type: "choose", gateId: gate.id, choice });
+  };
+
+  const chooseSuggestion = async (suggestion: SuggestedQuestion) => {
+    if (!session || busy || !session.flow.suggestedQuestions?.some((item) => item.id === suggestion.id)) return;
+    addMessage({
+      ...userMessage(suggestion.text),
+      reference: { scopeLabel: suggestion.scopeLabel, sourceSummary: suggestion.sourceSummary },
+    });
+    await performTurn({ session, stateToken }, { type: "choose_suggestion", suggestionId: suggestion.id });
+  };
+
+  const receiveImage = async (blob: Blob, previewUrl: string) => {
+    previewUrlsRef.current.push(previewUrl);
+    setCropFile(null);
+    setPendingImage(blob);
+    const pendingId = pendingImageMessageIdRef.current;
+    if (pendingId) updateMessage(pendingId, (message) => ({ ...message, imageUrl: previewUrl, status: "streaming", text: "这道题我不会，想把它学懂。" }));
+    else {
+      const message = { ...userMessage("这道题我不会，想把它学懂。"), imageUrl: previewUrl, status: "streaming" as const };
+      pendingImageMessageIdRef.current = message.id;
+      addMessage(message);
+    }
+    await recognizeImage(blob);
+  };
+
+  const recognizeText = async (text: string) => {
+    clearRetry();
+    setBusy(true); setNotice(""); setLoadingLabel("正在读懂你发来的题目");
+    const controller = beginRequest();
+    try {
+      const form = new FormData();
+      form.set("stage", "recognize_text"); form.set("provider", "doubao"); form.set("reasoningLevel", reasoningLevel); form.set("text", text);
+      const result: { recognized?: ProblemSnapshot } = {};
+      await postFormSse(form, (event, data) => {
+        if (event === "phase") setLoadingLabel(labelOf(data, "正在读题"));
+        if (event === "recognized") result.recognized = data as ProblemSnapshot;
+      }, controller.signal);
+      const recognized = result.recognized;
+      if (!recognized) throw new Error("没有识别到完整题目");
+      await analyzeProblem(recognized, null);
+    } catch (error) { setNotice(messageOf(error)); setRetry("重新识别", () => recognizeText(text)); }
+    finally {
+      const ownsRequest = abortRef.current === controller;
+      finishRequest(controller);
+      if (ownsRequest) setBusy(false);
+    }
+  };
+
+  const recognizeImage = async (blob: Blob) => {
+    clearRetry();
+    const pendingMessageId = pendingImageMessageIdRef.current;
+    if (pendingMessageId) updateMessage(pendingMessageId, (message) => ({ ...message, status: "streaming" }));
+    setBusy(true); setNotice(""); setLoadingLabel("正在识别题干与你的作答");
+    const controller = beginRequest();
+    try {
+      const form = new FormData();
+      form.set("stage", "recognize"); form.set("provider", "doubao"); form.set("reasoningLevel", reasoningLevel);
+      form.set("image", new File([blob], "homework.jpg", { type: "image/jpeg" }));
+      const result: { recognized?: ProblemSnapshot } = {};
+      await postFormSse(form, (event, data) => {
+        if (event === "phase") setLoadingLabel(labelOf(data, "正在识别题目"));
+        if (event === "recognized") result.recognized = data as ProblemSnapshot;
+      }, controller.signal);
+      const recognized = result.recognized;
+      if (!recognized) throw new Error("没有识别到完整题目");
+      finishPendingImageMessage("complete");
+      if (recognized.confidence < 0.82) {
+        setReviewProblem(recognized);
+        setLoadingLabel("");
+        return;
+      }
+      await analyzeProblem(recognized, blob);
+    } catch (error) {
+      finishPendingImageMessage("error");
+      setNotice(`${messageOf(error)}。可以重试，或用下方相机/相册换一张。`);
+      setRetry("重新识别", () => recognizeImage(blob));
+    }
+    finally {
+      const ownsRequest = abortRef.current === controller;
+      finishRequest(controller);
+      if (ownsRequest) setBusy(false);
+    }
+  };
+
+  const confirmProblem = async (problem: ProblemSnapshot) => {
+    setReviewProblem(null);
+    addMessage({ ...userMessage("我已确认识别结果。"), text: problem.text });
+    await analyzeProblem(problem, pendingImage);
+  };
+
+  const analyzeProblem = async (problem: ProblemSnapshot, image: Blob | null) => {
+    clearRetry();
+    setBusy(true); setNotice(""); setLoadingLabel("正在找到最适合的讲解起点");
+    const controller = beginRequest();
+    try {
+      const form = new FormData();
+      form.set("stage", "full"); form.set("provider", "doubao"); form.set("reasoningLevel", reasoningLevel); form.set("problem", JSON.stringify(problem));
+      if (image) form.set("image", new File([image], "homework.jpg", { type: "image/jpeg" }));
+      const result: { next?: ClientSessionState } = {};
+      await postFormSse(form, (event, data) => {
+        if (event === "phase") setLoadingLabel(labelOf(data, "正在准备讲解"));
+        if (event === "graph") result.next = data as ClientSessionState;
+      }, controller.signal);
+      const next = result.next;
+      if (!next) throw new Error("AI 没有返回可用的学习路径");
+      setSession(next.session); setStateToken(next.stateToken); setPendingImage(null);
+      addMessage(milestoneMessage("题目已经读懂，先从核心思路开始"));
+      await performTurn(next, { type: "start" });
+    } catch (error) { setNotice(messageOf(error)); setRetry("重新分析", () => analyzeProblem(problem, image)); }
+    finally {
+      const ownsRequest = abortRef.current === controller;
+      finishRequest(controller);
+      if (ownsRequest) setBusy(false);
+    }
+  };
+
+  const performTurn = async (current: ClientSessionState, input: LearningTurnInput, surface: "chat" | "board" = "chat", image?: Blob) => {
+    clearRetry();
+    setBusy(true); setNotice(""); setLoadingLabel(turnLoadingLabel(input));
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = controller;
+    let streamId: string | null = null;
+    let receivedState = false;
+    const timeout = window.setTimeout(() => controller.abort(), 90_000);
+    try {
+      const multipart = Boolean(image);
+      const form = multipart ? new FormData() : null;
+      if (form && image) {
+        form.set("stateToken", current.stateToken);
+        form.set("input", JSON.stringify(input));
+        form.set("image", new File([image], "student-response.png", { type: image.type || "image/png" }));
+      }
+      const response = await fetch(apiUrl("/learning/turn"), {
+        method: "POST",
+        ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
+        body: form ?? JSON.stringify({ stateToken: current.stateToken, input }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+      await readSseResponse(response, async (event, data) => {
+        if (event === "message.delta") {
+          const text = String((data as { text?: string }).text ?? "");
+          if (!text) return;
+          if (!streamId) {
+            streamId = id("assistant");
+            const scopeLabel = input.type === "choose" && input.choice === "full_solution" ? "原题完整讲解" : undefined;
+            addMessage({ id: streamId, role: "assistant", kind: "assistant", text, status: "streaming", surface, scopeLabel, createdAt: new Date().toISOString() });
+          } else {
+            updateMessage(streamId, (message) => ({ ...message, text: message.text + text }));
+          }
+          return;
+        }
+        if (event === "message.reset") {
+          if (streamId) cancelMessageFinish(streamId);
+          if (streamId) updateMessage(streamId, (message) => ({ ...message, text: "", status: "streaming" }));
+          setLoadingLabel(String((data as { reason?: string }).reason ?? "正在重新整理完整讲解"));
+        }
+        if (event === "message.complete" && streamId) finishStreamMessage(streamId, String((data as { scopeLabel?: string }).scopeLabel ?? "") || undefined);
+        if (event === "flow.suggestions" && streamId) {
+          const suggestions = (data as { suggestions?: SuggestedQuestion[] }).suggestions;
+          if (Array.isArray(suggestions) && suggestions.length) updateMessage(streamId, (message) => ({ ...message, suggestions }));
+        }
+        if (event === "flow.milestone") addMessage(milestoneMessage(String((data as { label?: string }).label ?? "继续学习"), surface));
+        if (event === "flow.resume") addMessage(milestoneMessage(String((data as { label?: string }).label ?? "回到刚才的学习任务"), surface));
+        if (event === "flow.progress") setLoadingLabel(labelOf(data, "正在补基础"));
+        if (event === "flow.branch_error") {
+          const message = String((data as { message?: string }).message ?? "这一步暂时没有完成，当前学习位置已保留");
+          setNotice(message);
+          addMessage({ id: id("branch-error"), role: "system", kind: "result", text: `暂时没完成：${message}`, createdAt: new Date().toISOString() });
+        }
+        if (event === "presentation.unavailable") addMessage(milestoneMessage(String((data as { message?: string }).message ?? "板书暂时不可用，已回到当前学习任务"), surface));
+        if (event === "path.updated") upsertPath((data as { labels?: string[] }).labels ?? []);
+        if (event === "answer.result") {
+          const result = data as { passed?: boolean; text?: string };
+          addMessage({ id: id("result"), role: "system", kind: "result", text: `${result.passed ? "✓" : "再看一步："} ${String(result.text ?? "")}`.trim(), createdAt: new Date().toISOString() });
+        }
+        if (event === "input.transcribed") {
+          const result = data as { text?: string; needsConfirmation?: boolean };
+          const text = String(result.text ?? "").trim();
+          if (text) addMessage({ id: id("transcription"), role: "system", kind: "result", text: result.needsConfirmation ? `请核对 AI 读到的作答：${text}\n\n识别把握不足，请在下方修改后再发送。` : `AI 读到的作答：${text}`, createdAt: new Date().toISOString() });
+        }
+        if (event === "board.lesson") {
+          const lesson = data as BoardLesson;
+          setCachedBoardLesson(lesson);
+          setBoardLesson(lesson);
+        }
+        if (event === "flow.update") {
+          const next = data as ClientSessionState;
+          setSession(next.session); setStateToken(next.stateToken); receivedState = true;
+        }
+        if (event === "flow.ready") {
+          setBusy(false);
+          setLoadingLabel("");
+        }
+      });
+      if (!receivedState) throw new Error("学习状态没有完整返回，请重试当前操作");
+    } catch (error) {
+      const superseded = isAbortError(error) && abortRef.current !== controller;
+      if (superseded) return;
+      if (streamId) updateMessage(streamId, (message) => message.status === "complete" || message.status === "finishing" ? message : { ...message, status: "error" });
+      setNotice(isAbortError(error) ? "等待超时，当前学习任务已保留，可以直接重试。" : messageOf(error));
+      if (!receivedState) setRetry("重试这一步", () => performTurn(current, input, surface, image));
+    } finally {
+      window.clearTimeout(timeout);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setBusy(false); setLoadingLabel("");
+      }
+    }
+  };
+
+  const requestTransfer = async () => {
+    if (!session) return;
+    addMessage(userMessage("再练一道同知识点题"));
+    await performTurn({ session, stateToken }, { type: "request_transfer" });
+  };
+
+  const retryOriginal = async () => {
+    if (!session) return;
+    addMessage(userMessage("遮住讲解，重做原题"));
+    await performTurn({ session, stateToken }, { type: "retry_original" });
+  };
+
+  const reset = () => {
+    abortRef.current?.abort(); abortRef.current = null;
+    for (const timer of messageFinishTimersRef.current.values()) window.clearTimeout(timer);
+    messageFinishTimersRef.current.clear();
+    pendingImageMessageIdRef.current = null;
+    sessionStorage.removeItem(SESSION_KEY);
+    revokePreviews();
+    setSession(null); setStateToken(""); setMessages([]); setReviewProblem(null); setBoardLesson(null); setCachedBoardLesson(null); setPendingImage(null); setCropFile(null); setResponseCrop(null); setWhiteboardIntent(null); setBusy(false); setLoadingLabel(""); setNotice("");
+    clearRetry();
+  };
+
+  const retry = async () => {
+    if (busy || !retryRef.current) return;
+    const action = retryRef.current;
+    clearRetry();
+    await action();
+  };
+
+  const setRetry = (label: string, action: () => Promise<void>) => { retryRef.current = action; setRetryLabel(label); };
+  const clearRetry = () => { retryRef.current = null; setRetryLabel(""); };
+
+  const askOnBoard = async (text: string) => {
+    if (!session || busy) return;
+    addMessage({ ...userMessage(text), surface: "board" });
+    await performTurn({ session, stateToken }, { type: "question", text }, "board");
+  };
+
+  const closeBoard = () => {
+    if (busy) abortRef.current?.abort();
+    setBoardLesson(null);
+    const milestone = milestoneMessage("板书讲解收起，回到刚才的学习任务");
+    setMessages((current) => current.map((message) => message.surface === "board" ? { ...message, surface: "chat" as const } : message).concat(milestone));
+  };
+
+  const addMessage = (message: ChatMessage) => setMessages((current) => current.concat(message));
+  const updateMessage = (messageId: string, update: (message: ChatMessage) => ChatMessage) => setMessages((current) => {
+    const index = current.findIndex((message) => message.id === messageId);
+    if (index < 0) return current;
+    const message = current[index];
+    const nextMessage = update(message);
+    if (nextMessage === message) return current;
+    const next = current.slice();
+    next[index] = nextMessage;
+    return next;
+  });
+  const cancelMessageFinish = (messageId: string) => {
+    const timer = messageFinishTimersRef.current.get(messageId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    messageFinishTimersRef.current.delete(messageId);
+  };
+  const finishStreamMessage = (messageId: string, scopeLabel?: string) => {
+    cancelMessageFinish(messageId);
+    updateMessage(messageId, (message) => ({ ...message, status: "finishing", scopeLabel }));
+    const timer = window.setTimeout(() => {
+      updateMessage(messageId, (message) => ({ ...message, status: "complete" }));
+      messageFinishTimersRef.current.delete(messageId);
+    }, STREAMING_FINISH_MS);
+    messageFinishTimersRef.current.set(messageId, timer);
+  };
+  const finishPendingImageMessage = (status: "complete" | "error") => {
+    const messageId = pendingImageMessageIdRef.current;
+    if (!messageId) return;
+    updateMessage(messageId, (message) => ({ ...message, status }));
+    if (status === "complete") pendingImageMessageIdRef.current = null;
+  };
+  const upsertPath = (labels: string[]) => {
+    if (!labels.length) return;
+    const path: ChatMessage = { id: "active-learning-path", role: "system", kind: "path", text: ["原题步骤", ...labels].join(" → "), createdAt: new Date().toISOString() };
+    setMessages((current) => current.some((message) => message.id === path.id) ? current.map((message) => message.id === path.id ? path : message) : current.concat(path));
+  };
+  const revokePreviews = () => { for (const url of previewUrlsRef.current) URL.revokeObjectURL(url); previewUrlsRef.current = []; };
+
+  if (!hydrated) return <div className="flex h-dvh items-center justify-center bg-[#f7f6f2] text-xs text-stone-400">正在准备学习空间…</div>;
+  const initialWhiteboard = !session && whiteboardIntent === "question";
+  return <><LearningChat messages={messages} session={session} reasoningLevels={reasoningLevels} reasoningLevel={reasoningLevel} ready={ready} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} reviewProblem={reviewProblem} onReasoningLevel={selectReasoningLevel} onFile={(file) => { setNotice(""); clearRetry(); setCropFile(file); }} onResponsePhoto={(file, intent) => { setNotice(""); clearRetry(); setResponseCrop({ file, intent }); }} onWhiteboard={setWhiteboardIntent} onSend={sendText} onQuestion={askCurrentQuestion} onChoice={choose} onSuggestion={chooseSuggestion} onConfirmProblem={confirmProblem} onRetryOriginal={retryOriginal} onRequestTransfer={requestTransfer} onReopenBoard={cachedBoardLesson ? () => setBoardLesson(cachedBoardLesson) : undefined} onNewProblem={reset} onRetry={retry}/>{cropFile && <ImageCropper file={cropFile} onConfirm={receiveImage} onCancel={() => setCropFile(null)}/>} {responseCrop && <ImageCropper file={responseCrop.file} title={responseCrop.intent === "answer" ? "只保留你的作答" : "只保留想问的位置"} hint="拖动框移动，拖四角精确调整" confirmLabel={responseCrop.intent === "answer" ? "使用这份作答" : "发送这张图片"} onConfirm={(blob, previewUrl) => { const intent = responseCrop.intent; setResponseCrop(null); void sendImageResponse(blob, previewUrl, intent, "photo"); }} onCancel={() => setResponseCrop(null)}/>} {whiteboardIntent && <WhiteboardInput title={initialWhiteboard ? "白板写题" : "白板作答"} taskLabel={initialWhiteboard ? "写下题目、公式或画出图形" : session?.flow.activeGate?.title ?? "围绕当前题目写下步骤或画出疑问"} submitLabel={initialWhiteboard ? "识别这道题" : whiteboardIntent === "answer" ? "提交作答" : "发送提问"} hint={initialWhiteboard ? "写题目、公式或画图都可以，AI 会先识别再开始讲解" : undefined} onConfirm={(blob, previewUrl) => { const intent = whiteboardIntent; setWhiteboardIntent(null); if (!session) void receiveImage(blob, previewUrl); else void sendImageResponse(blob, previewUrl, intent, "whiteboard"); }} onCancel={() => setWhiteboardIntent(null)}/>} {boardLesson && <LearningBoard lesson={boardLesson} messages={messages.filter((message) => message.surface === "board")} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} onAsk={askOnBoard} onClose={closeBoard} onRetry={retry}/>}</>;
+}
+
+export function understandingChoiceFromText(text: string): "continue" | "try" | "not_understood" | null {
+  const normalized = text.trim().replace(/[，。！？!?、\s]/g, "");
+  if (["懂了", "我懂了", "听懂了", "明白了", "理解了", "会了", "继续"].includes(normalized)) return "continue";
+  if (["我来试试", "让我试试", "试试"].includes(normalized)) return "try";
+  if (["没懂", "我没懂", "没听懂", "不懂", "不明白", "不理解", "不知道", "不会", "还是不懂", "这一步没懂"].includes(normalized)) return "not_understood";
+  return null;
+}
+
+async function postFormSse(form: FormData, onEvent: (event: string, data: unknown) => void, externalSignal?: AbortSignal) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  externalSignal?.addEventListener("abort", abort, { once: true });
+  const timeout = window.setTimeout(() => controller.abort(), 90_000);
+  try { await readSseResponse(await fetch(apiUrl("/learning/analyze"), { method: "POST", body: form, credentials: "include", signal: controller.signal }), onEvent); }
+  finally { window.clearTimeout(timeout); externalSignal?.removeEventListener("abort", abort); }
+}
+
+function isStoredChatState(value: unknown): value is StoredChatState {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<StoredChatState>;
+  const session = item.session;
+  if (typeof item.stateToken !== "string" || item.stateToken.length <= 40 || (item.reasoningLevel !== undefined && !isReasoningLevel(item.reasoningLevel)) || !Array.isArray(item.messages)) return false;
+  if (item.boardLesson !== undefined && !isStoredBoardLesson(item.boardLesson)) return false;
+  if (!session || session.schemaVersion !== "1.1" || !session.flow || !Array.isArray(session.nodes) || !Array.isArray(session.edges) || typeof session.problem?.text !== "string") return false;
+  if (!session.nodes.some((node) => node?.id === session.rootNodeId && node.kind === "problem")) return false;
+  return item.messages.every((message) => Boolean(message && typeof message.id === "string" && typeof message.text === "string" && ["user", "assistant", "system"].includes(message.role)));
+}
+
+function isStoredBoardLesson(value: unknown): value is BoardLesson {
+  if (!value || typeof value !== "object") return false;
+  const lesson = value as Partial<BoardLesson>;
+  const layouts = new Set(["relation", "steps", "comparison", "formula"]);
+  return typeof lesson.title === "string"
+    && typeof lesson.subtitle === "string"
+    && typeof lesson.returnLabel === "string"
+    && layouts.has(String(lesson.layout))
+    && Array.isArray(lesson.blocks)
+    && lesson.blocks.length > 0
+    && lesson.blocks.every((block) => Boolean(block && typeof block.id === "string" && typeof block.label === "string" && typeof block.content === "string" && ["plain", "key", "example"].includes(block.tone)))
+    && Array.isArray(lesson.annotations)
+    && lesson.annotations.every((annotation) => Boolean(annotation && typeof annotation.blockId === "string" && typeof annotation.target === "string" && typeof annotation.reason === "string" && ["circle", "underline", "box"].includes(annotation.kind)));
+}
+
+function userMessage(text: string): ChatMessage { return { id: id("user"), role: "user", kind: "user", text, status: "complete", createdAt: new Date().toISOString() }; }
+function milestoneMessage(text: string, surface: "chat" | "board" = "chat"): ChatMessage { return { id: id("milestone"), role: "system", kind: "milestone", text, status: "complete", surface, createdAt: new Date().toISOString() }; }
+function id(prefix: string) { return `${prefix}-${crypto.randomUUID().slice(0, 8)}`; }
+function apiUrl(path: string) { const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, ""); return `${base ?? "/api"}${path}`; }
+function labelOf(value: unknown, fallback: string) { return String((value as { label?: string })?.label ?? fallback); }
+function messageOf(error: unknown) {
+  const message = error instanceof Error ? error.message : "操作失败，请重试";
+  return /JSON|unexpected token|expected property|minus sign|parse/i.test(message)
+    ? "AI 返回内容格式异常，当前学习位置已保留，请重试这一步。"
+    : message;
+}
+function isAbortError(error: unknown) { return error instanceof DOMException && error.name === "AbortError"; }
+function isReasoningLevel(value: unknown): value is ReasoningLevel { return value === "light" || value === "medium" || value === "high"; }
+function reasoningLabel(level: ReasoningLevel) { return level === "light" ? "轻度" : level === "medium" ? "中" : "高"; }
+function choiceLabel(choice: LearningChoice) {
+  if (choice === "full_solution") return "看完整讲解";
+  if (choice === "continue") return "懂了，继续";
+  if (choice === "try") return "我来试试";
+  if (choice === "view_board") return "用板书讲清楚";
+  if (choice === "start_recall") return "我看完了，收起讲解";
+  if (choice === "retry_original") return "遮住讲解，重做原题";
+  if (choice === "practice_similar") return "换一道同知识点题";
+  if (choice === "finish_review") return "先结束，稍后再练";
+  return "这一步没懂";
+}
+function turnLoadingLabel(input: LearningTurnInput) {
+  if (input.type === "choose_suggestion") return "正在回答你选中的问题";
+  if (input.type === "question") return "正在回答你刚才的问题";
+  if (input.type === "image_question") return "正在看你标出的疑问";
+  if (input.type === "answer") return "正在判断你的思路";
+  if (input.type === "image_answer") return "正在阅读你的作答";
+  if (input.type === "retry_original") return "正在重新打开原题作答";
+  if (input.type === "request_transfer") return "正在生成同知识点新题";
+  if (input.type === "choose" && input.choice === "view_board") return "正在整理一份完整板书";
+  if (input.type === "choose" && input.choice === "not_understood") return "正在换一种更容易理解的讲法";
+  if (input.type === "choose" && input.choice === "full_solution") return "正在组织完整讲解";
+  if (input.type === "choose" && input.choice === "start_recall") return "正在收起讲解并准备关键步骤检查";
+  if (input.type === "choose" && input.choice === "practice_similar") return "正在生成同知识点新题";
+  return "正在继续讲解";
+}

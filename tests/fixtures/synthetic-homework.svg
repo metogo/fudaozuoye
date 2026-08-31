@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <rect width="1200" height="900" fill="#fffdf8"/>
+  <rect x="55" y="55" width="1090" height="790" rx="26" fill="#ffffff" stroke="#d6d3d1" stroke-width="4"/>
+  <text x="105" y="145" font-family="Arial, PingFang SC, sans-serif" font-size="45" font-weight="700" fill="#1c1917">数学作业</text>
+  <text x="105" y="240" font-family="Arial, PingFang SC, sans-serif" font-size="38" fill="#292524">一辆车 3 小时行驶 180 千米，</text>
+  <text x="105" y="305" font-family="Arial, PingFang SC, sans-serif" font-size="38" fill="#292524">照这样的速度，5 小时行驶多少千米？</text>
+  <line x1="105" y1="365" x2="1095" y2="365" stroke="#e7e5e4" stroke-width="3"/>
+  <text x="105" y="455" font-family="Arial, PingFang SC, sans-serif" font-size="32" fill="#78716c">我的作答：</text>
+  <text x="105" y="535" font-family="Arial, PingFang SC, sans-serif" font-size="48" font-style="italic" fill="#2563eb">180 ÷ 5 × 3 = 108（千米）</text>
+  <text x="105" y="690" font-family="Arial, PingFang SC, sans-serif" font-size="30" fill="#a8a29e">请检查我的思路哪里不对。</text>
+</svg>

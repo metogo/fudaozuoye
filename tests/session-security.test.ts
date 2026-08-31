@@ -1,9 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { postConsent } from "@/lib/learning/http/consent";
+import { postSimilarCheck } from "@/lib/learning/http/similar";
 import { postVerify as verifyRoute } from "@/lib/learning/http/verify";
 import { analyzeMock, recognizeMock, transferCheckMock } from "@/lib/learning/mock-engine";
 import { CONSENT_COOKIE, consentRateIdentity, createConsentValue, hasValidConsent, openSession, sealSession, toClientState } from "@/lib/learning/server-state";
+import { assertSameOrigin } from "@/lib/learning/request-guards";
 
 describe("无状态学习会话边界", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("只允许配置的生产 H5 跨域调用云函数", () => {
+    vi.stubEnv("PUBLIC_APP_ORIGIN", "https://study.example.com");
+    expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://study.example.com" } }))).not.toThrow();
+    expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://attacker.example.com" } }))).toThrow("请求来源不合法");
+  });
+
+  it("监护人同意与模型状态在同一次启动请求返回", async () => {
+    const response = await postConsent(new Request("http://localhost/api/consent", { method: "POST" }));
+    const data = await response.json() as { accepted?: boolean; providers?: Array<{ id: string; available: boolean }>; reasoningLevels?: Array<{ id: string; label: string; available: boolean }> };
+    expect(response.status).toBe(200);
+    expect(data.accepted).toBe(true);
+    expect(data.providers?.some((provider) => provider.id === "doubao" && provider.available)).toBe(true);
+    expect(data.reasoningLevels?.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: "light", label: "轻度" },
+      { id: "medium", label: "中" },
+      { id: "high", label: "高" },
+    ]);
+  });
+
   it("不向浏览器下发标准答案，且令牌被修改后无法使用", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const state = toClientState(session);
@@ -12,6 +36,65 @@ describe("无状态学习会话边界", () => {
     const parts = state.stateToken.split(".");
     parts[3] = `${parts[3][0] === "A" ? "B" : "A"}${parts[3].slice(1)}`;
     expect(() => openSession(parts.join("."))).toThrow(/损坏|修改/);
+  });
+
+  it("拒绝会话中的互动选项与真实题目不一致", () => {
+    const session = analyzeMock(recognizeMock("physics", "junior"), "doubao");
+    const current = session.nodes.find((node) => node.kind === "concept" && node.check.type === "choice")!;
+    const forged = {
+      ...session,
+      flow: {
+        ...session.flow,
+        activeGate: {
+          id: "forged-choice-gate",
+          kind: "node_answer" as const,
+          title: "请选择",
+          prompt: current.check.prompt,
+          nodeId: current.id,
+          answerChoices: ["非法甲", "非法乙"],
+        },
+      },
+    };
+
+    expect(() => openSession(sealSession(forged))).toThrow(/损坏|修改/);
+  });
+
+  it("恢复已看过完整讲解的旧会话时移除重复入口", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const root = session.nodes.find((node) => node.id === session.rootNodeId)!;
+    const legacy = {
+      ...session,
+      flow: {
+        ...session.flow,
+        stage: "original_attempt" as const,
+        viewedSolution: true,
+        activeGate: {
+          id: "legacy-original-answer",
+          kind: "original_answer" as const,
+          title: "现在独立完成原题",
+          prompt: root.check.prompt,
+          nodeId: root.id,
+          options: [{ id: "full_solution" as const, label: "看完整讲解", emphasis: "quiet" as const }],
+        },
+      },
+    };
+    delete (legacy.flow as { solutionRecallPassed?: boolean }).solutionRecallPassed;
+
+    const restored = openSession(sealSession(legacy as typeof session));
+    expect(restored.flow.solutionRecallPassed).toBe(false);
+    expect(restored.flow.activeGate?.options).toBeUndefined();
+  });
+
+  it("拒绝伪造关键步骤已通过但从未看过完整讲解的状态", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const forged = { ...session, flow: { ...session.flow, solutionRecallPassed: true, viewedSolution: false } };
+    expect(() => openSession(sealSession(forged))).toThrow(/损坏|修改/);
+  });
+
+  it("拒绝关键步骤完成态仍携带其他互动任务", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const forged = { ...session, flow: { ...session.flow, stage: "reviewed_complete" as const, viewedSolution: true, solutionRecallPassed: true, activeGate: { id: "forged-gate", kind: "understanding" as const, title: "不应存在的任务" } } };
+    expect(() => openSession(sealSession(forged))).toThrow(/损坏|修改/);
   });
 
   it("拒绝绕过当前节点直接验收原题", async () => {
@@ -28,6 +111,21 @@ describe("无状态学习会话边界", () => {
     const response = await verifyRoute(jsonRequest({ stateToken: sealSession(session), nodeId: "__transfer__", answer: "" }));
     expect(response.status).toBe(400);
     expect(await response.text()).toContain("迁移验收状态不合法");
+  });
+
+  it("换相似题后使用新题的受保护答案继续验收", async () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const current = session.nodes.find((node) => node.id === session.currentNodeId)!;
+    const response = await postSimilarCheck(jsonRequest({ stateToken: sealSession(session), nodeId: current.id }));
+    const body = await response.text();
+    const state = sseEvent<{ session: typeof session; stateToken: string }>(body, "graph");
+    const clientCheck = state.session.nodes.find((node) => node.id === current.id)!.check;
+    const protectedCheck = openSession(state.stateToken).nodes.find((node) => node.id === current.id)!.check;
+    expect(clientCheck.id).toMatch(/^similar-/);
+    expect(clientCheck.conceptId).toBe(current.conceptId);
+    expect(clientCheck.prompt).not.toBe(current.check.prompt);
+    expect(clientCheck.answer).toBe("");
+    expect(protectedCheck.answer).not.toBe("");
   });
 
   it("原子点第一次表示不会只切换讲法，第二次客观检查失败才需真人介入", async () => {
@@ -69,6 +167,14 @@ describe("无状态学习会话边界", () => {
 
 function jsonRequest(body: unknown): Request {
   return new Request("http://localhost/api/learning/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+function sseEvent<T>(body: string, eventName: string): T {
+  const block = body.split("\n\n").find((item) => item.includes(`event: ${eventName}`));
+  if (!block) throw new Error(`缺少 SSE 事件：${eventName}`);
+  const raw = block.match(/^data: (.+)$/m)?.[1];
+  if (!raw) throw new Error(`SSE 事件缺少数据：${eventName}`);
+  return JSON.parse(raw) as T;
 }
 
 function consentRequest(value: string): Request {

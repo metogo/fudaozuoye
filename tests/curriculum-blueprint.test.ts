@@ -101,4 +101,32 @@ describe("题目相关节点蓝图", () => {
     expect(shortText.check.type).toBe("short_text");
     expect(shortText.check.choices).toBeUndefined();
   });
+
+  it("把格式等价的选择题答案收敛为页面实际提供的选项", () => {
+    const [blueprint] = parseKnowledgeBlueprints({ nodes: [{
+      ...validNode,
+      check: { ...validNode.check, choices: ["20Ω", "2Ω", "200Ω"], answer: "20 Ω" },
+    }] }, {
+      allowedConceptIds: ["math.rate.unit-rate"],
+      evidenceSources: [{ type: "problem", text: "一辆车3小时行驶180千米" }],
+      min: 1,
+      max: 1,
+    });
+    expect(blueprint.check.answer).toBe("20Ω");
+  });
+
+  it("选择题去重保留正负号，不能把标准答案静默翻转", () => {
+    const [blueprint] = parseKnowledgeBlueprints({ nodes: [{
+      ...validNode,
+      check: { ...validNode.check, choices: ["$-1$", "$1$", "$2$"], answer: "$1$" },
+    }] }, {
+      allowedConceptIds: ["math.rate.unit-rate"],
+      evidenceSources: [{ type: "problem", text: "一辆车3小时行驶180千米" }],
+      min: 1,
+      max: 1,
+    });
+
+    expect(blueprint.check.choices).toEqual(["$-1$", "$1$", "$2$"]);
+    expect(blueprint.check.answer).toBe("$1$");
+  });
 });

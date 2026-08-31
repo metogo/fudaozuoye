@@ -1,6 +1,6 @@
 import { fail } from "../api";
 import { mergeExpansion } from "../graph";
-import { getProviderAdapter } from "../providers";
+import { getSessionProviderAdapter } from "../providers";
 import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
 import { openSession, toClientState } from "../server-state";
 import { sse } from "./sse";
@@ -13,7 +13,7 @@ export async function postExpand(request: Request): Promise<Response> {
     const body = await request.json();
     const session = openSession(body.stateToken);
     if (typeof body.targetNodeId !== "string" || body.targetNodeId !== session.currentNodeId) throw new Error("只能拆解当前学习节点");
-    const adapter = getProviderAdapter(session.provider);
+    const adapter = getSessionProviderAdapter(session);
     return sse(async (send) => {
       send("phase", { key: "locating", label: "正在检查这个知识点还缺哪些更简单的前置" });
       const expansion = await adapter.expandNode(session, body.targetNodeId, (key, label) => send("phase", { key, label }));

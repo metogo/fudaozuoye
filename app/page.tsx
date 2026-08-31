@@ -1,5 +1,5 @@
-import { LearningApp } from "@/components/learning-app";
+import { EducationChatApp } from "@/components/education-chat-app";
 
 export default function Home() {
-  return <LearningApp />;
+  return <EducationChatApp />;
 }

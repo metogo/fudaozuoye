@@ -1,4 +1,4 @@
-import type { ProviderAvailability, ProviderId } from "../types";
+import type { ProviderAvailability, ProviderId, ReasoningAvailability, ReasoningLevel } from "../types";
 
 export interface ProviderConfig {
   id: ProviderId;
@@ -24,12 +24,12 @@ export function isMockMode(): boolean {
   return process.env.NODE_ENV !== "production";
 }
 
-export function getProviderConfig(id: ProviderId): ProviderConfig {
+export function getProviderConfig(id: ProviderId, reasoningLevel: ReasoningLevel = "light"): ProviderConfig {
   const mock = isMockMode();
   const configs: Record<ProviderId, Omit<ProviderConfig, "id" | "label" | "mock">> = {
     doubao: {
       apiKey: process.env.DOUBAO_API_KEY ?? "",
-      modelId: process.env.DOUBAO_MODEL_ID ?? "",
+      modelId: doubaoModelId(reasoningLevel),
       baseUrl: process.env.DOUBAO_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
       protocol: "chat-completions",
     },
@@ -47,6 +47,22 @@ export function getProviderConfig(id: ProviderId): ProviderConfig {
     },
   };
   return { id, label: labels[id].label, mock, ...configs[id] };
+}
+
+export function listReasoningAvailability(): ReasoningAvailability[] {
+  const mock = isMockMode();
+  const apiKey = process.env.DOUBAO_API_KEY ?? "";
+  return (["light", "medium", "high"] as ReasoningLevel[]).map((id) => ({
+    id,
+    label: id === "light" ? "轻度" : id === "medium" ? "中" : "高",
+    available: mock || Boolean(apiKey && doubaoModelId(id)),
+  }));
+}
+
+function doubaoModelId(level: ReasoningLevel): string {
+  if (level === "medium") return process.env.DOUBAO_MODEL_ID_MEDIUM ?? "";
+  if (level === "high") return process.env.DOUBAO_MODEL_ID_HIGH ?? "";
+  return process.env.DOUBAO_MODEL_ID ?? "";
 }
 
 export function listProviderAvailability(): ProviderAvailability[] {

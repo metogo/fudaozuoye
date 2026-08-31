@@ -1,68 +1,80 @@
-import { getConcept, isSupportedSubjectBand, listConcepts } from "../curriculum";
+import { getConcept, listConcepts } from "../curriculum";
 import { providerError } from "../errors";
-import { assertGraphInvariants } from "../graph";
-import { analyzeMock, expandMock, recognizeMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
-import type { CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId } from "../types";
+import { isConcreteRecallAnswer, matchesTrustedRecallReference } from "../solution-recall";
+import type { BoardLesson, BoardSuggestion, CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
-  createProblemRoot,
   knowledgeNodeFromBlueprint,
   parseKnowledgeBlueprints,
   parseKnowledgeSelections,
+  repairSelectionReasonGrounding,
   type KnowledgeBlueprint,
   type KnowledgeSelection,
   type EvidenceSource,
 } from "./blueprint";
 import type { ProviderConfig } from "./config";
+import { addSafeBoardAnnotations, boardAnnotationsPrompt, boardAuditPrompt, boardAuditSystemPrompt, boardLessonPrompt, boardLessonSystemPrompt, boardLessonTool, createSafeBoardLesson, parseBoardAnnotations, parseBoardAudit, parseBoardContent, parseBoardLesson } from "./board";
+import {
+  boardSuggestionTool,
+  chatBody,
+  chatToolBody,
+  diagnosticSystemPrompt,
+  emitProviderDelta,
+  extractText,
+  extractToolArguments,
+  parseJsonObject,
+  parseSimilarCheck,
+  problemSolutionTool,
+  responsesBody,
+  selectionOutputExample,
+  selectionSystemPrompt,
+  similarCheckTool,
+  teachingOutputExample,
+  transferCheckTool,
+  type JsonObject,
+} from "./model-support";
+import { parseQuestionSuggestions, questionSuggestionsPrompt, tutorPrompt, tutorSystemPrompt } from "./tutor";
+import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
+import { transcribeStudentResponse } from "./student-response";
+import { fetchWithTransientRetry } from "./transient-fetch";
+import { assertBlueprintBatchUnique, buildSession, edgeReason, evidenceCandidates, expansionEvidenceSources, expansionSelectionOptions, isRecoverableReasonGroundingError, NonRepairableValidationError, normalizeBlueprintDetail, parseBoardSuggestion, parseInitialAnalysisSelection, parseProblem, parseProblemSolution, parseTextProblem, pendingChatSession, problemEvidenceSources } from "./provider-validation";
+import { generateValidatedSolution, streamValidatedSolution } from "./solution";
 
-type AnalysisPhaseReporter = (key: string, label: string) => void;
+export type AnalysisPhaseReporter = (key: string, label: string) => void;
 
 export interface ProviderAdapter {
   readonly id: ProviderId;
+  readonly reasoningLevel: ReasoningLevel;
   readonly modelId: string;
   readonly mode: "demo" | "live";
   recognizeProblem(imageDataUrl: string, subject?: ProblemSnapshot["subject"], gradeBand?: ProblemSnapshot["gradeBand"]): Promise<ProblemSnapshot>;
+  recognizeTextProblem(text: string): Promise<ProblemSnapshot>;
+  prepareChatSession(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
+  completeChatSession(session: LearningSession): Promise<LearningSession>;
+  diagnoseProblem(session: LearningSession, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;
   analyzeProblem(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
   expandNode(session: LearningSession, targetNodeId: string, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;
   verifyAnswer(check: CheckItem, answer: string): Promise<{ passed: boolean; explanation: string }>;
+  generateSimilarCheck(session: LearningSession, nodeId: string): Promise<CheckItem>;
   generateTransferCheck(session: LearningSession): Promise<CheckItem>;
   solveProblem(problem: ProblemSnapshot): Promise<string>;
-  streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void): Promise<void>;
+  streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void, onReset: () => void, signal?: AbortSignal): Promise<void>;
+  streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string): Promise<void>;
+  suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]>;
+  transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }>;
+  decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion>;
+  generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson>;
 }
 
-export class MockProviderAdapter implements ProviderAdapter {
-  readonly modelId: string;
-  readonly mode = "demo" as const;
-
-  constructor(readonly id: ProviderId) {
-    this.modelId = `${id}-demo`;
-  }
-
-  async recognizeProblem(_imageDataUrl: string, subject: ProblemSnapshot["subject"] = "math", gradeBand: ProblemSnapshot["gradeBand"] = "primary") {
-    return recognizeMock(subject, gradeBand);
-  }
-
-  async analyzeProblem(problem: ProblemSnapshot) { return analyzeMock(problem, this.id); }
-  async expandNode(session: LearningSession, targetNodeId: string, onPhase?: AnalysisPhaseReporter) { void onPhase; return expandMock(session, targetNodeId); }
-  async verifyAnswer(check: CheckItem, answer: string) { return verifyMock(check, answer); }
-  async generateTransferCheck(session: LearningSession) { return transferCheckMock(session.problem.subject, session.problem.gradeBand); }
-  async solveProblem(problem: ProblemSnapshot) { return solutionMock(problem); }
-  async streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void) {
-    const solution = solutionMock(problem);
-    for (const part of solution.match(/.{1,12}/gs) ?? [solution]) onDelta(part);
-  }
-}
-
-type JsonObject = Record<string, unknown>;
-class NonRepairableValidationError extends Error {}
+export { MockProviderAdapter } from "./mock-adapter";
 
 export class LiveProviderAdapter implements ProviderAdapter {
   readonly mode = "live" as const;
   readonly id: ProviderId;
   readonly modelId: string;
 
-  constructor(private readonly config: ProviderConfig, private readonly fetcher: typeof fetch = fetch) {
+  constructor(private readonly config: ProviderConfig, private readonly fetcher: typeof fetch = fetch, readonly reasoningLevel: ReasoningLevel = "light", private readonly requestSignal?: AbortSignal) {
     this.id = config.id;
     this.modelId = config.modelId;
   }
@@ -71,10 +83,22 @@ export class LiveProviderAdapter implements ProviderAdapter {
     void subject;
     void gradeBand;
     return this.validatedJsonRequest(
-      "你是严格的作业照片门禁与识别器。先判断图片里是否真实、清晰、完整地出现至少一道数学、物理或化学题。只看到天花板、墙面、人物、空白纸、无关物体、严重模糊、题干被裁断或多题无法分离时，绝对禁止猜测、补全或套用示例，必须返回 recognized=false。只有能逐字依据图片提取完整题干时才返回 recognized=true。只识别一道题及孩子已有作答，不求解。输出严格 JSON。",
+      "你是严格的作业照片门禁与识别器。先判断图片里是否真实、清晰、完整地出现至少一道数学、物理或化学题。只看到天花板、墙面、人物、空白纸、无关物体、严重模糊、题干被裁断或多题无法分离时，绝对禁止猜测、补全或套用示例，必须返回 recognized=false。只有能逐字依据图片提取完整题干时才返回 recognized=true。只识别一道题及学生已有作答，不求解。输出严格 JSON。",
       "请根据题干中的术语、公式与难度自行判断学科和学段；没有足够依据时，选择更保守的学段并降低 confidence。学科为 physics 或 chemistry 时 gradeBand 不得为 primary。输出字段：recognized(boolean), failureReason(string；成功时为空), text(string；失败时为空), childWork(string；失败时为空), subject(math|physics|chemistry), gradeBand(primary|junior|senior), confidence(0到1；失败时为0)。",
       parseProblem,
       imageDataUrl,
+    );
+  }
+
+  async recognizeTextProblem(text: string): Promise<ProblemSnapshot> {
+    return this.validatedJsonRequest(
+      "你是严格的 K12 数理化题目门禁与分类器。判断用户文字是否包含一道可以学习的数学、物理或化学题。不得求解、不得改写或复述原题。只输出严格 JSON。",
+      JSON.stringify({
+        task: "只判断原文是否为一道完整的数理化题，并判断学科和学段；不是数理化题、信息不足或混入多道题时返回 recognized=false",
+        text,
+        output: { recognized: true, failureReason: "", subject: "math", gradeBand: "junior", confidence: 0.9 },
+      }),
+      (value) => parseTextProblem(value, text),
     );
   }
 
@@ -89,25 +113,20 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const result = await this.validatedJsonRequest(
       selectionSystemPrompt(1, 4),
       JSON.stringify({
-        task: "找出孩子独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
+        task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
         problem,
         evidenceQuotes: evidenceCandidates(problemEvidenceSources(problem)),
         output: selectionOutputExample(true),
         allowedConcepts: allowed,
       }),
-      (value) => {
-        const selections = parseKnowledgeSelections(value, {
-          allowedConceptIds: allowed.map((item) => item.id),
-          evidenceSources: problemEvidenceSources(problem),
-          min: 1,
-          max: 4,
-          rejectAncestorPairs: true,
-        });
-        if (typeof value.originalAnswer !== "string" || !value.originalAnswer.trim() || typeof value.originalExplanation !== "string" || !value.originalExplanation.trim()) throw new Error("缺少原题标准答案或解题依据");
-        return { selections, originalAnswer: value.originalAnswer, originalExplanation: value.originalExplanation };
+      (value) => parseInitialAnalysisSelection(value, problem, allowed),
+      undefined,
+      (value, error) => {
+        if (!isRecoverableReasonGroundingError(error)) throw error;
+        return parseInitialAnalysisSelection(repairSelectionReasonGrounding(value), problem, allowed);
       },
     );
-    onPhase?.("teaching", `已定位 ${result.selections.length} 个直接前置，正在生成针对这道题的讲法与检查题`);
+    onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
     const blueprints = await this.generateBlueprintBatch(result.selections, (
       selection,
       existingCheckPrompts,
@@ -122,7 +141,95 @@ export class LiveProviderAdapter implements ProviderAdapter {
       existingContentSignatures,
       avoidTeachingContent,
     ));
-    return buildSession(problem, this.id, this.modelId, blueprints, result.originalAnswer, result.originalExplanation);
+    return buildSession(problem, this.id, this.reasoningLevel, this.modelId, blueprints, result.originalAnswer, result.originalExplanation, result.problemGuide);
+  }
+
+  async prepareChatSession(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession> {
+    onPhase?.("ready", "题目已读懂，正在准备核心思路");
+    return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
+  }
+
+  async completeChatSession(session: LearningSession): Promise<LearningSession> {
+    const problem = session.problem;
+    const system = [
+      "你是中国 K12 数理化原题求解器。只处理当前原题，不生成知识卡、板书、首讲或迁移题。输出严格 JSON。",
+      "originalAnswer 与 originalExplanation 是服务端保存的核验依据，必须准确、完整、可复核。",
+      "如果题目要求说明理由、解释原因或写出依据，originalAnswer 必须同时包含结论和不可缺少的理由，不能只写结论。",
+      "解题依据出现数学或物理公式时，必须使用 KaTeX 兼容的 LaTeX：行内写成 $...$，独立公式写成 $$...$$。所有字段不得包含 HTML。",
+    ].join("\n");
+    const prompt = JSON.stringify({
+      task: "完整求解原题，只返回后续验题必需的标准答案和可复核解题依据",
+      problem,
+      output: {
+        originalAnswer: "标准答案",
+        originalExplanation: "足以复核答案的完整解题依据",
+      },
+    });
+    const result = this.config.protocol === "chat-completions"
+      ? await this.validatedStructuredRequest(system, prompt, problemSolutionTool(), parseProblemSolution)
+      : await this.validatedJsonRequest(system, prompt, parseProblemSolution);
+    const completed = buildSession(problem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
+    return { ...completed, requestId: session.requestId, createdAt: session.createdAt };
+  }
+
+  async diagnoseProblem(session: LearningSession, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }> {
+    if (session.nodes.some((node) => node.kind === "concept")) {
+      const nodes = session.nodes.filter((node) => node.kind === "concept");
+      return { nodes: [], edges: session.edges.filter((edge) => nodes.some((node) => node.id === edge.from) && edge.to === session.rootNodeId) };
+    }
+    const problem = session.problem;
+    const allowed = listConcepts(problem.subject, problem.gradeBand).map((item) => ({
+      id: item.id,
+      title: item.title,
+      aliases: item.aliases,
+      difficulty: item.difficulty,
+      atomic: item.atomic,
+    }));
+    const selections = await this.validatedJsonRequest(
+      selectionSystemPrompt(1, 4),
+      JSON.stringify({
+        task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
+        problem,
+        evidenceQuotes: evidenceCandidates(problemEvidenceSources(problem)),
+        output: selectionOutputExample(false),
+        allowedConcepts: allowed,
+      }),
+      (value) => parseKnowledgeSelections(value, {
+        allowedConceptIds: allowed.map((item) => item.id),
+        evidenceSources: problemEvidenceSources(problem),
+        min: 1,
+        max: 4,
+        rejectAncestorPairs: true,
+      }),
+      undefined,
+      (value, error) => {
+        if (!isRecoverableReasonGroundingError(error)) throw error;
+        return parseKnowledgeSelections(repairSelectionReasonGrounding(value), {
+          allowedConceptIds: allowed.map((item) => item.id),
+          evidenceSources: problemEvidenceSources(problem),
+          min: 1,
+          max: 4,
+          rejectAncestorPairs: true,
+        });
+      },
+    );
+    onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
+    const blueprints = await this.generateBlueprintBatch(selections, (
+      selection,
+      existingCheckPrompts,
+      existingContentSignatures,
+      avoidTeachingContent,
+    ) => this.generateBlueprint(
+      problem,
+      selection,
+      problemEvidenceSources(problem),
+      { parentTitle: "原题", parentExplanation: problem.text },
+      existingCheckPrompts,
+      existingContentSignatures,
+      avoidTeachingContent,
+    ));
+    const nodes = blueprints.map(knowledgeNodeFromBlueprint);
+    return { nodes, edges: nodes.map((node, index) => ({ from: node.id, to: session.rootNodeId, reason: edgeReason(node, blueprints[index], "原题") })) };
   }
 
   async expandNode(session: LearningSession, targetNodeId: string, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }> {
@@ -150,12 +257,12 @@ export class LiveProviderAdapter implements ProviderAdapter {
         allowedPrerequisites: allowed,
         existingConceptIds: session.nodes.filter((node) => node.kind === "concept").map((node) => node.conceptId),
       }),
-      (value) => parseKnowledgeSelections(value, {
-        allowedConceptIds: concept.prerequisites,
-        evidenceSources: expansionEvidenceSources(session.problem, target),
-        min: 1,
-        max: concept.prerequisites.length,
-      }),
+      (value) => parseKnowledgeSelections(value, expansionSelectionOptions(session.problem, target, concept.prerequisites)),
+      undefined,
+      (value, error) => {
+        if (!isRecoverableReasonGroundingError(error)) throw error;
+        return parseKnowledgeSelections(repairSelectionReasonGrounding(value), expansionSelectionOptions(session.problem, target, concept.prerequisites));
+      },
     );
     const existingContentSignatures = session.nodes.filter((node) => node.kind === "concept").map((node) => blueprintContentSignature({
           conceptId: node.conceptId,
@@ -206,7 +313,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
     return this.validatedJsonRequest(
       diagnosticSystemPrompt(),
       JSON.stringify({
-        task: "为已确认的课标概念生成当前题专属的家长讲法与微型检查；不得更换概念、证据或简化理由",
+        task: "为已确认的课标概念生成当前题专属的学生讲解与理解检查；不得更换概念、证据或简化理由",
         problem,
         selected: { ...selection, title: concept.title, aliases: concept.aliases },
         parent,
@@ -258,51 +365,217 @@ export class LiveProviderAdapter implements ProviderAdapter {
   }
 
   async verifyAnswer(check: CheckItem, answer: string): Promise<{ passed: boolean; explanation: string }> {
-    return this.validatedJsonRequest(
-      "你是严格的微型学习验收器。根据标准答案判断作答是否语义等价，不因表述差异误判。输出严格 JSON。",
-      JSON.stringify({ prompt: check.prompt, expected: check.answer, answer, output: { passed: true, explanation: "一句反馈" } }),
+    const deterministic = deterministicAnswerMatch(check.answer, answer);
+    if (deterministic === true) return { passed: true, explanation: "回答正确，关键关系与结果一致。" };
+    if (deterministic === false) return safeAssessmentFeedback(check, answer, { passed: false, explanation: "" });
+    const keyStepRecall = check.id.startsWith("solution-recall-");
+    if (keyStepRecall && !isConcreteRecallAnswer(answer)) {
+      return { passed: false, explanation: "请不要只写结论，说出一个具体操作、条件关系或推理依据。" };
+    }
+    if (keyStepRecall && matchesTrustedRecallReference(check.answer, answer)) {
+      return { passed: true, explanation: "已经说出了一个正确、可执行的关键步骤。" };
+    }
+    const result = await this.validatedJsonRequest(
+      keyStepRecall
+        ? "你是 K12 关键步骤回忆检查器。判断学生是否说出了一个能回应问题、在当前题中可执行且方向正确的关键步骤。学生不需要复述完整参考思路，具体正确的操作可以比参考答案更窄，只覆盖其中一个可行分支也应通过。只报最终答案、只说懂了、空泛套话、无关内容或方向错误必须判为不通过。passed=true 时 evidence 必须逐字复制学生回答中真正体现操作、关系或依据的一小段连续原文；不能找到这样的原文就必须判为 false。explanation 使用简洁 Markdown；公式使用 KaTeX 兼容 LaTeX。输出严格 JSON，不得输出 HTML。"
+        : "你是严格的微型学习验收器。根据标准答案判断作答是否语义等价，不因表述差异误判。explanation 使用简洁 Markdown；数学与物理公式必须使用 KaTeX 兼容 LaTeX，行内写在 $...$ 中。输出严格 JSON，不得输出 HTML。",
+      JSON.stringify({
+        assessmentMode: keyStepRecall ? "key_step_recall" : "answer_equivalence",
+        prompt: check.prompt,
+        expected: check.answer,
+        rubric: check.explanation,
+        answer,
+        output: { passed: true, evidence: "学生回答中的连续原文", explanation: "一句反馈" },
+      }),
       (value) => {
         if (typeof value.passed !== "boolean" || typeof value.explanation !== "string" || !value.explanation.trim()) throw new Error("验收结果缺少 passed 或 explanation");
+        if (keyStepRecall && value.passed && (typeof value.evidence !== "string" || value.evidence.trim().length < 2 || !answer.includes(value.evidence.trim()))) throw new Error("关键步骤验收缺少学生原文证据");
         return { passed: value.passed, explanation: value.explanation.trim() };
       },
     );
+    return safeAssessmentFeedback(check, answer, result);
+  }
+
+  async generateSimilarCheck(session: LearningSession, nodeId: string): Promise<CheckItem> {
+    const target = session.nodes.find((node) => node.id === nodeId);
+    if (!target || target.kind !== "concept") throw new Error("找不到要换题的知识点");
+    const system = [
+      "你是 K12 同知识点练习题生成器。",
+      "生成一道与当前检查题考查同一课标概念、难度相近，但题干、数字或情境明显不同的新题。",
+      "不得复述当前题，不得改变知识点，不得泄露答案到题干。",
+      "不得声称题目是高频题、真题、某年中考题、名校题，也不得编造任何来源标签。",
+      "prompt、choices 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX，行内写在 $...$ 中；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。",
+    ].join("\n");
+    const prompt = JSON.stringify({
+      problem: session.problem,
+      targetConcept: { id: target.conceptId, title: target.title },
+      teaching: { explanation: target.teaching.explanation, expectedSignal: target.teaching.expectedSignal, misconception: target.teaching.misconception },
+      currentCheck: { prompt: target.check.prompt, type: target.check.type, choices: target.check.choices },
+      requiredType: target.check.type,
+    });
+    const parse = (value: JsonObject) => parseSimilarCheck(value, target);
+    const check = this.config.protocol === "chat-completions"
+      ? await this.validatedStructuredRequest(system, prompt, similarCheckTool(target.check.type), parse)
+      : await this.validatedJsonRequest(`${system}\n输出严格 JSON，字段为 prompt、type、choices、answer、explanation。`, prompt, parse);
+    const alignment = await this.validatedJsonRequest(
+      "你是独立的 K12 练习题概念审校员。严格判断候选题是否只考查指定课标概念、难度是否相近、是否与原题明显不同。不要因为生成器声称相关就通过。输出严格 JSON。",
+      JSON.stringify({ targetConcept: { id: target.conceptId, title: target.title }, teaching: target.teaching.explanation, currentCheck: target.check.prompt, candidate: { prompt: check.prompt, type: check.type, choices: check.choices, answer: check.answer, explanation: check.explanation }, output: { matchesConcept: true, distinct: true, reason: "审校依据" } }),
+      (value) => {
+        if (typeof value.matchesConcept !== "boolean" || typeof value.distinct !== "boolean" || typeof value.reason !== "string" || !value.reason.trim()) throw new Error("相似题审校结果不完整");
+        return { matchesConcept: value.matchesConcept, distinct: value.distinct, reason: value.reason.trim() };
+      },
+    );
+    if (!alignment.matchesConcept || !alignment.distinct) throw new Error(`新练习题未通过同知识点审校：${alignment.reason}`);
+    return check;
   }
 
   async generateTransferCheck(session: LearningSession): Promise<CheckItem> {
     const directIds = new Set(session.edges.filter((edge) => edge.to === session.rootNodeId).map((edge) => edge.from));
-    const target = session.nodes.filter((node) => directIds.has(node.id) && node.kind === "concept").sort((a, b) => b.difficulty - a.difficulty)[0];
-    if (!target) throw new Error("找不到迁移题对应的核心知识点");
-    const system = "你是迁移题生成器。生成一道同知识点、不同数字或表述、难度相近的短题。";
-    const prompt = JSON.stringify({ problem: session.problem, targetConcept: { id: target.conceptId, title: target.title } });
+    const concepts = session.nodes.filter((node) => directIds.has(node.id) && node.kind === "concept").sort((a, b) => b.difficulty - a.difficulty);
+    const root = session.nodes.find((node) => node.id === session.rootNodeId);
+    const target = concepts[0];
+    if (!target || !root) throw new Error("找不到迁移题对应的核心知识点");
+    const original = { problem: session.problem.text, check: root.check.prompt, solutionBasis: root.check.explanation };
+    const targets = concepts.map((node) => ({ id: node.conceptId, title: node.title, reason: node.simplification }));
+    const system = "你是 K12 迁移题生成器。生成一道与原题考查相同核心知识和解题方法、难度相近，但情境、数据和表述明显不同的短题。不能只挑一个局部前置知识另出一道过于简单的题；候选题必须能检验学生是否会迁移原题的核心方法。不得复述或换皮原题，不得泄露答案，不得声称是真题、高频题或编造来源。prompt 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。";
+    const prompt = JSON.stringify({ original, targetConcepts: targets });
     const parse = (value: JsonObject) => {
       if (typeof value.prompt !== "string" || !value.prompt.trim() || typeof value.answer !== "string" || !value.answer.trim() || typeof value.explanation !== "string" || !value.explanation.trim()) throw new Error("迁移题缺少 prompt、answer 或 explanation");
       return { id: `transfer-${crypto.randomUUID().slice(0, 8)}`, conceptId: target.conceptId, type: "short_text" as const, prompt: value.prompt.trim(), answer: value.answer.trim(), explanation: value.explanation.trim() };
     };
-    if (this.config.protocol === "chat-completions") {
-      return this.validatedToolRequest(system, prompt, transferCheckTool(), parse);
-    }
-    return this.validatedJsonRequest(`${system} 输出严格 JSON。`, prompt, parse);
+    const check = this.config.protocol === "chat-completions"
+      ? await this.validatedStructuredRequest(system, prompt, transferCheckTool(), parse)
+      : await this.validatedJsonRequest(`${system} 输出严格 JSON。`, prompt, parse);
+    const audit = await this.validatedJsonRequest(
+      "你是独立的 K12 迁移题审校员。不要相信生成器的自述，必须对照原题、完整解法依据和候选题逐项判断：是否考查相同核心知识与方法、是否与原题明显不同、难度是否相近、题目与答案是否自洽。只要任一项不满足就不通过。输出严格 JSON。",
+      JSON.stringify({ original, targetConcepts: targets, candidate: check, output: { sameKnowledgeAndMethod: true, distinct: true, comparableDifficulty: true, grounded: true, reason: "审校依据" } }),
+      (value) => {
+        const keys = ["sameKnowledgeAndMethod", "distinct", "comparableDifficulty", "grounded"] as const;
+        if (keys.some((key) => typeof value[key] !== "boolean") || typeof value.reason !== "string" || !value.reason.trim()) throw new Error("迁移题审校结果不完整");
+        return { sameKnowledgeAndMethod: value.sameKnowledgeAndMethod as boolean, distinct: value.distinct as boolean, comparableDifficulty: value.comparableDifficulty as boolean, grounded: value.grounded as boolean, reason: value.reason.trim() };
+      },
+    );
+    if (!audit.sameKnowledgeAndMethod || !audit.distinct || !audit.comparableDifficulty || !audit.grounded) throw new Error(`同知识点题未通过独立审校：${audit.reason}`);
+    return check;
   }
 
   async solveProblem(problem: ProblemSnapshot): Promise<string> {
-    return this.textRequest(solutionSystemPrompt(), JSON.stringify(problem));
+    return this.generateSolution(problem);
   }
 
-  async streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void): Promise<void> {
-    await this.streamTextRequest(solutionSystemPrompt(), JSON.stringify(problem), onDelta);
+  async streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void, onReset: () => void, signal?: AbortSignal): Promise<void> {
+    await streamValidatedSolution(
+      problem,
+      (system, prompt, emit, maxTokens) => this.streamTextRequest(system, prompt, emit, signal, undefined, maxTokens),
+      onDelta,
+      onReset,
+    );
   }
 
-  private async validatedJsonRequest<T>(system: string, prompt: string, parse: (value: JsonObject) => T, imageDataUrl?: string): Promise<T> {
+  private generateSolution(problem: ProblemSnapshot, signal?: AbortSignal): Promise<string> {
+    return generateValidatedSolution(problem, (system, prompt, onDelta, maxTokens) => this.streamTextRequest(system, prompt, onDelta, signal, undefined, maxTokens));
+  }
+
+  async streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string): Promise<void> {
+    const imageInstruction = imageDataUrl ? "\n学生还附上了一张当前作答或草图。必须结合图片回应，但不要把它误认为一道新题。" : "";
+    await this.streamTextRequest(tutorSystemPrompt(), `${tutorPrompt(session, scope, question)}${imageInstruction}`, onDelta, signal, imageDataUrl);
+  }
+
+  async suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]> {
+    const system = [
+      "你是 K12 学习流程中的追问推荐决策器，不是答题器。",
+      "只判断刚完成的讲解之后，是否有 1 到 3 个能帮助学生理解当前题目、且适合此刻顺手追问的问题。",
+      "推荐是可忽略的辅助入口，不能代替或重复当前必做任务，不能索要答案、完整解法或代做。",
+      "无必要时必须返回 recommended=false 和空 questions。只输出严格 JSON。",
+    ].join("\n");
+    return this.validatedJsonRequest(system, questionSuggestionsPrompt(session, scope, sourceText), (value) => parseQuestionSuggestions(value, session, scope, sourceText));
+  }
+
+  async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {
+    return transcribeStudentResponse(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
+  }
+
+  async decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion> {
+    const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : null;
+    const system = "你是 K12 教学呈现决策器。只判断当前一步是否因为图形、空间、多个条件关系、公式推导或对比结构而需要切换为全屏结构化板书。简单的一句话解释或单步计算必须返回 recommended=false。不得求解，不得输出答案。";
+    const prompt = JSON.stringify({
+      problem: session.problem.text,
+      currentFocus: node ? { title: node.title, evidence: node.diagnosticEvidence, reason: node.simplification } : { keyClue: session.problemGuide.keyClue, approach: session.problemGuide.approach },
+    });
+    if (this.config.protocol === "chat-completions") return this.validatedStructuredRequest(system, prompt, boardSuggestionTool(), parseBoardSuggestion);
+    return this.validatedJsonRequest(`${system} 只输出严格 JSON。`, `${prompt}\n输出字段：recommended(boolean)、reason(string)、layout(relation|steps|comparison|formula)。`, parseBoardSuggestion);
+  }
+
+  async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson> {
+    if (!suggestion.recommended) throw new Error("当前步骤不需要切换板书讲解");
+    try {
+      const lesson = await this.generateBoardCandidate(session, scope, suggestion);
+      const audit = parseBoardAudit(parseJsonObject(await this.textRequest(boardAuditSystemPrompt(), boardAuditPrompt(session, scope, lesson), undefined, true)));
+      if (audit.passed) return lesson;
+      return createSafeBoardLesson(session, scope, suggestion);
+    } catch {
+      return createSafeBoardLesson(session, scope, suggestion);
+    }
+  }
+
+  private async generateBoardCandidate(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson> {
+    const system = boardLessonSystemPrompt();
+    const prompt = boardLessonPrompt(session, scope, suggestion);
+    if (this.config.protocol === "chat-completions") {
+      const value = parseJsonObject(await this.toolRequest(system, prompt, boardLessonTool()));
+      try {
+        return parseBoardLesson(value, session, suggestion);
+      } catch {
+        const content = parseBoardContent(value, session, suggestion);
+        try { return parseBoardAnnotations(value, content, session); }
+        catch { return addSafeBoardAnnotations(content, session); }
+      }
+    }
+    const parseContent = (value: JsonObject) => parseBoardContent(value, session, suggestion);
+    const contentSystem = `${system}\n先只输出板书正文与可选配图，不输出重点标记。`;
+    const contentPrompt = `${prompt}\nvisual 不需要时返回 kind=none，其余文字留空、elements 为空数组。`;
+    const content = await this.validatedJsonRequest(`${contentSystem}\n只输出严格 JSON。`, `${contentPrompt}\n输出字段：title、blocks、visual。`, parseContent);
+    const annotationSystem = "你是 K12 板书重点标记老师。只能从已完成板书的原文中选重点，不能改写正文、补充答案或添加推理。重点必须由教学作用决定，禁止机械选择每段开头。";
+    const annotationPrompt = boardAnnotationsPrompt(content);
+    const parseAnnotations = (value: JsonObject) => parseBoardAnnotations(value, content, session);
+    try { return await this.validatedJsonRequest(`${annotationSystem}\n只输出严格 JSON。`, annotationPrompt, parseAnnotations); }
+    catch {
+      return addSafeBoardAnnotations(content, session);
+    }
+  }
+
+  private async validatedJsonRequest<T>(system: string, prompt: string, parse: (value: JsonObject) => T, imageDataUrl?: string, recover?: (value: JsonObject, error: unknown) => T): Promise<T> {
     const first = await this.textRequest(system, prompt, imageDataUrl, true);
     try { return parse(parseJsonObject(first)); } catch (error) {
       if (error instanceof NonRepairableValidationError) throw error;
       const repaired = await this.textRequest(
-        `${system}\n这是唯一一次修复机会。必须针对校验错误修正完整结果；原文证据必须逐字复制，不能概括或改写。只输出严格 JSON。`,
+        `${system}\n这是唯一一次修复机会。必须针对下方校验错误修正完整结果，不能只机械重复上一次输出。所有原文证据必须逐字复制，不能概括或改写；conceptId 与 evidence 不得改变。若错误涉及 simplification，它必须完整包含对应 evidence；若错误涉及 problemGuide.keyClue，它必须逐字包含题干中一段连续原文或已选择的 problem evidence。只输出严格 JSON。`,
         `${repairContext(prompt)}\n\n上一次输出未通过校验：${error instanceof Error ? error.message : "结构不合法"}\n上一次输出：${first.slice(0, 8000)}\n请重新完成原任务并输出完整 JSON。`,
         imageDataUrl,
         true,
       );
-      return parse(parseJsonObject(repaired));
+      const repairedValue = parseJsonObject(repaired);
+      try { return parse(repairedValue); } catch (repairError) {
+        if (!recover) throw repairError;
+        return recover(repairedValue, repairError);
+      }
+    }
+  }
+
+  private async validatedStructuredRequest<T>(system: string, prompt: string, tool: JsonObject, parse: (value: JsonObject) => T): Promise<T> {
+    try {
+      return await this.validatedToolRequest(system, prompt, tool, parse);
+    } catch (error) {
+      if (error instanceof NonRepairableValidationError) throw error;
+      const reason = error instanceof Error ? error.message : "结构函数输出无效";
+      const functionSchema = tool.function && typeof tool.function === "object" && !Array.isArray(tool.function)
+        ? (tool.function as JsonObject).parameters
+        : {};
+      return this.validatedJsonRequest(
+        `${system}\n结构函数输出未通过校验，改为只输出与函数参数完全同构的严格 JSON。`,
+        `${prompt}\n必须严格遵守以下 JSON Schema：${JSON.stringify(functionSchema)}\n上一次结构函数失败原因：${reason}`,
+        parse,
+      );
     }
   }
 
@@ -320,9 +593,12 @@ export class LiveProviderAdapter implements ProviderAdapter {
 
   private async toolRequest(system: string, prompt: string, tool: JsonObject): Promise<string> {
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    this.requestSignal?.addEventListener("abort", abort, { once: true });
+    if (this.requestSignal?.aborted) controller.abort();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
-      const response = await this.fetcher(this.config.baseUrl, {
+      const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
         body: JSON.stringify(chatToolBody(this.modelId, system, prompt, tool, this.id === "doubao")),
@@ -333,14 +609,17 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { clearTimeout(timeout); }
+    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); }
   }
 
   private async textRequest(system: string, prompt: string, imageDataUrl?: string, jsonMode = false): Promise<string> {
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    this.requestSignal?.addEventListener("abort", abort, { once: true });
+    if (this.requestSignal?.aborted) controller.abort();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
-      const response = await this.fetcher(this.config.baseUrl, {
+      const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
         body: JSON.stringify(this.config.protocol === "responses"
@@ -354,318 +633,54 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { clearTimeout(timeout); }
+    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); }
   }
 
-  private async streamTextRequest(system: string, prompt: string, onDelta: (text: string) => void): Promise<void> {
+  private async streamTextRequest(system: string, prompt: string, onDelta: (text: string) => void, externalSignal?: AbortSignal, imageDataUrl?: string, maxTokens = 3_000): Promise<void> {
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    externalSignal?.addEventListener("abort", abort, { once: true });
+    this.requestSignal?.addEventListener("abort", abort, { once: true });
+    if (externalSignal?.aborted || this.requestSignal?.aborted) controller.abort();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
-      const response = await this.fetcher(this.config.baseUrl, {
+      const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
         body: JSON.stringify(this.config.protocol === "responses"
-          ? { ...responsesBody(this.modelId, system, prompt), stream: true }
-          : { ...chatBody(this.modelId, system, prompt, undefined, false, this.id === "doubao"), stream: true }),
+          ? { ...responsesBody(this.modelId, system, prompt, imageDataUrl, maxTokens), stream: true }
+          : { ...chatBody(this.modelId, system, prompt, imageDataUrl, false, this.id === "doubao", maxTokens), stream: true }),
         signal: controller.signal,
       });
       if (!response.ok || !response.body) throw providerError(`模型流式请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let outputLength = 0;
+      let sawTerminalEvent = false;
+      const emitDelta = (delta: string) => {
+        if (!delta) return;
+        outputLength += delta.length;
+        onDelta(delta);
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? "";
-        for (const line of lines) emitProviderDelta(line, this.config.protocol, onDelta);
+        for (const line of lines) sawTerminalEvent = emitProviderDelta(line, this.config.protocol, emitDelta) || sawTerminalEvent;
       }
-      if (buffer.trim()) emitProviderDelta(buffer, this.config.protocol, onDelta);
+      if (buffer.trim()) sawTerminalEvent = emitProviderDelta(buffer, this.config.protocol, emitDelta) || sawTerminalEvent;
+      if (outputLength === 0) throw providerError("模型没有返回讲解内容，请重试同一模型", 502);
+      if (!sawTerminalEvent) throw providerError("模型讲解传输未完整结束，请重试同一模型", 502);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { clearTimeout(timeout); }
+    } finally { externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); clearTimeout(timeout); }
   }
 }
 
 function repairContext(prompt: string): string {
   if (prompt.length <= 18_000) return prompt;
   return `${prompt.slice(0, 7_000)}\n…中间课程目录省略…\n${prompt.slice(-11_000)}`;
-}
-
-function responsesBody(model: string, system: string, prompt: string, image?: string) {
-  const content: JsonObject[] = image ? [{ type: "input_image", image_url: image, detail: "high" }, { type: "input_text", text: prompt }] : [{ type: "input_text", text: prompt }];
-  return { model, instructions: system, input: [{ role: "user", content }], store: false };
-}
-
-function chatBody(model: string, system: string, prompt: string, image?: string, jsonMode = false, disableThinking = false) {
-  const content: JsonObject[] = image ? [{ type: "image_url", image_url: { url: image } }, { type: "text", text: prompt }] : [{ type: "text", text: prompt }];
-  return {
-    model,
-    messages: [{ role: "system", content: system }, { role: "user", content }],
-    stream: false,
-    max_tokens: 3000,
-    ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
-    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-  };
-}
-
-function chatToolBody(model: string, system: string, prompt: string, tool: JsonObject, disableThinking = false) {
-  const name = ((tool.function as JsonObject).name as string);
-  return {
-    model,
-    messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
-    tools: [tool],
-    tool_choice: { type: "function", function: { name } },
-    stream: false,
-    max_tokens: 3000,
-    ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
-  };
-}
-
-function transferCheckTool(): JsonObject {
-  return {
-    type: "function",
-    function: {
-      name: "submit_transfer_check",
-      description: "提交完整的迁移题、标准答案和解题依据",
-      parameters: {
-        type: "object",
-        properties: {
-          prompt: { type: "string", description: "迁移题题干" },
-          answer: { type: "string", description: "可核验的标准答案" },
-          explanation: { type: "string", description: "简洁解题依据" },
-        },
-        required: ["prompt", "answer", "explanation"],
-        additionalProperties: false,
-      },
-    },
-  };
-}
-
-function extractToolArguments(payload: JsonObject): string {
-  const choices = payload.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
-  const argumentsText = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-  if (argumentsText) return argumentsText;
-  throw new Error("模型没有调用指定的迁移题结构函数");
-}
-
-function extractText(payload: JsonObject, protocol: ProviderConfig["protocol"]): string {
-  if (protocol === "chat-completions") {
-    const choices = payload.choices as Array<{ message?: { content?: string } }> | undefined;
-    const text = choices?.[0]?.message?.content;
-    if (text) return text;
-  }
-  if (typeof payload.output_text === "string") return payload.output_text;
-  const output = payload.output as Array<{ content?: Array<{ text?: string }> }> | undefined;
-  const text = output?.flatMap((item) => item.content ?? []).map((item) => item.text ?? "").join("");
-  if (text) return text;
-  throw new Error("模型返回中没有可读取的文本");
-}
-
-function emitProviderDelta(line: string, protocol: ProviderConfig["protocol"], onDelta: (text: string) => void) {
-  if (!line.startsWith("data:")) return;
-  const raw = line.slice(5).trim();
-  if (!raw || raw === "[DONE]") return;
-  const event = JSON.parse(raw) as JsonObject;
-  if (protocol === "chat-completions") {
-    const choices = event.choices as Array<{ delta?: { content?: string } }> | undefined;
-    const delta = choices?.[0]?.delta?.content;
-    if (delta) onDelta(delta);
-    return;
-  }
-  if (event.type === "response.output_text.delta" && typeof event.delta === "string") onDelta(event.delta);
-}
-
-function solutionSystemPrompt(): string {
-  return "你是面向家长的解题助手。给出简洁、可核验的完整步骤，不扩展无关知识。使用中性、非羞辱性语言，不评价孩子能力；输出纯文本，不使用 Markdown 标题或分隔线。";
-}
-
-function parseJsonObject(raw: string): JsonObject {
-  const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-  const parsed: unknown = JSON.parse(cleaned);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("模型没有返回 JSON 对象");
-  return parsed as JsonObject;
-}
-
-function parseProblem(result: JsonObject): ProblemSnapshot {
-  if (result.recognized !== true) {
-    const reason = typeof result.failureReason === "string" && result.failureReason.trim() ? `：${result.failureReason.trim()}` : "";
-    throw new NonRepairableValidationError(`照片中没有识别到清晰完整的一道题${reason}，请重新拍摄并只保留题目区域`);
-  }
-  if (typeof result.text !== "string" || result.text.trim().length < 3) throw new Error("没有识别到完整题干");
-  if (typeof result.childWork !== "string" || !["math", "physics", "chemistry"].includes(String(result.subject)) || !["primary", "junior", "senior"].includes(String(result.gradeBand)) || typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1) throw new Error("模型识别结果结构不合法");
-  if (result.confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
-  const subject = result.subject as ProblemSnapshot["subject"];
-  const gradeBand = result.gradeBand as ProblemSnapshot["gradeBand"];
-  if (!isSupportedSubjectBand(subject, gradeBand)) throw new Error("识别到不支持的学科学段组合");
-  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence: result.confidence, userRevised: false };
-}
-
-function buildSession(problem: ProblemSnapshot, provider: ProviderId, modelId: string, blueprints: KnowledgeBlueprint[], originalAnswer: string, originalExplanation: string): LearningSession {
-  const root = createProblemRoot(problem, originalAnswer, originalExplanation);
-  const nodes = blueprints.map(knowledgeNodeFromBlueprint);
-  const now = new Date().toISOString();
-  const session: LearningSession = {
-    schemaVersion: "1.0",
-    provider,
-    modelId,
-    mode: "live",
-    requestId: `req-${crypto.randomUUID().slice(0, 8)}`,
-    problem,
-    nodes: [root, ...nodes],
-    edges: nodes.map((node, index) => ({ from: node.id, to: root.id, reason: edgeReason(node, blueprints[index], "原题") })),
-    rootNodeId: root.id,
-    currentNodeId: nodes.slice().sort((a, b) => a.difficulty - b.difficulty)[0]?.id ?? null,
-    stage: "diagnosing",
-    evidence: [],
-    transferCheck: null,
-    originalPassed: false,
-    transferPassed: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  assertGraphInvariants(session);
-  return session;
-}
-
-function diagnosticSystemPrompt(): string {
-  return [
-    "你是中国 K12 数理化知识诊断与家长辅导设计器。输出严格 JSON。",
-    "课程概念只能从给定 ID 选择，标题、难度和前置关系不得自创。",
-    "只选直接前置：若 A 已是 B 的课标前置且 B 足以解释原题，不要再把 A 与 B 并列为原题的直接前置。",
-    "不要因为题里出现数字就机械选择加减乘除或变量；必须说明孩子完成当前题的哪一步离不开该概念。",
-    "evidence 必须逐字摘自题干、孩子作答或给定父节点，且 simplification 必须原样引用 evidence 并解释为何先学这个概念。",
-    "每个节点的讲解、例子、家长提问、误区和微型检查都要针对当前题重新生成；禁止通用模板和复用原题。",
-    "微型检查必须比父题简单，只检查一个概念；选择题 answer 必须与某个 choices 选项逐字一致。",
-    "手机页面需要简洁：explanation 不超过140字，example不超过110字，parentPrompt不超过70字，expectedSignal不超过90字，misconception不超过100字，alternateExplanation不超过140字，check.prompt不超过120字。",
-  ].join("\n");
-}
-
-function selectionSystemPrompt(min: number, max: number): string {
-  return [
-    "你是中国 K12 数理化知识诊断器。输出严格 JSON，回答保持简短。",
-    `只能从给定课程目录 ID 选择 ${min} 到 ${max} 个完成当前任务真正需要的直接前置；只需一个时绝不凑数。`,
-    "不能把具有课程前置关系的上下游概念并列，应该只保留最贴近当前任务的下游概念。",
-    "不要因为题里出现数字就机械选择加减乘除或变量；必须对应题目的关键关系或孩子作答暴露的具体错误。",
-    "evidence 必须逐字复制 evidenceQuotes 中某一项的 text，禁止自行摘写、概括、增删字或替换单位/数字；把它原样粘贴进 simplification，并明确说明这一步缺少什么能力。",
-    "若多个概念表达同一层关系，只保留更贴近当前卡点的一个；不要输出教学正文或检查题。",
-  ].join("\n");
-}
-
-function selectionOutputExample(includeOriginal: boolean): JsonObject {
-  return {
-    selections: [{
-      conceptId: "给定课程概念 ID",
-      evidence: "从原文复制且不超过50字的连续短语",
-      simplification: "引用上述 evidence，说明为何这是直接前置以及先学它降低了什么难度",
-    }],
-    ...(includeOriginal ? { originalAnswer: "原题标准答案", originalExplanation: "简洁可核验的解题依据" } : {}),
-  };
-}
-
-function teachingOutputExample(): JsonObject {
-  return {
-    conceptId: "必须与 selected.conceptId 完全一致",
-    evidenceSource: "必须与 selected.evidenceSource 完全一致：problem、child_work 或 parent",
-    teaching: {
-      explanation: "家长可直接说给孩子听的讲法；必须原样引用 selected.evidence 并明确点出所选课程概念名称",
-      example: "数字更小或情境更具体但关系相同的新例子",
-      parentPrompt: "建议家长向孩子提出的问题",
-      expectedSignal: "真正理解时孩子会说出或做出的表现",
-      misconception: "当前题最可能出现的具体误区",
-      alternateExplanation: "第一次仍不懂时可使用的另一种具体讲法",
-    },
-    check: {
-      prompt: "不同于原题、只检查该概念的一道微型题",
-      type: "choice 或 short_text",
-      choices: ["选择题时提供 2 到 5 个互不重复选项"],
-      answer: "可核验标准答案；选择题须逐字等于某个选项",
-      explanation: "必须明确写出所选课程概念标题或别名，并说明为什么答案能证明掌握该概念",
-    },
-  };
-}
-
-function edgeReason(node: KnowledgeNode, blueprint: KnowledgeBlueprint | undefined, targetTitle: string): string {
-  const evidence = blueprint?.evidence ?? node.diagnosticEvidence ?? node.title;
-  return `“${evidence}”表明${node.title}是理解${targetTitle}所需的直接前置`;
-}
-
-function assertBlueprintBatchUnique(blueprints: KnowledgeBlueprint[]): void {
-  const checks = new Set<string>();
-  const content = new Set<string>();
-  for (const blueprint of blueprints) {
-    const check = blueprintCheckSignature(blueprint);
-    const signature = blueprintContentSignature(blueprint);
-    if (checks.has(check)) throw new Error(`模型为多个知识点生成了重复检查题：${blueprint.check.prompt}`);
-    if (content.has(signature)) throw new Error(`模型为多个知识点生成了重复教学内容：${blueprint.conceptId}`);
-    checks.add(check);
-    content.add(signature);
-  }
-}
-
-function normalizeBlueprintDetail(value: JsonObject, expectedConceptId: string): JsonObject {
-  const matches = findBlueprintDetails(value, 0);
-  if (matches.length > 1) throw new Error("模型返回了多个教学节点，无法确认哪一个属于当前概念");
-  const nested = matches[0];
-  if (nested) {
-    if (nested.conceptId !== undefined && nested.conceptId !== expectedConceptId) throw new Error("教学内容对应了错误的课程概念");
-    return nested;
-  }
-  if (value.check && typeof value.check === "object" && !Array.isArray(value.check)) {
-    const explanation = typeof value.teaching === "string" ? value.teaching : typeof value.explanation === "string" ? value.explanation : undefined;
-    if (explanation) {
-      return {
-        teaching: {
-          explanation,
-          example: value.example,
-          parentPrompt: value.parentPrompt,
-          expectedSignal: value.expectedSignal,
-          misconception: value.misconception,
-          alternateExplanation: value.alternateExplanation,
-        },
-        check: value.check,
-      };
-    }
-  }
-  return value;
-}
-
-function findBlueprintDetails(value: unknown, depth: number): JsonObject[] {
-  if (!value || typeof value !== "object" || depth > 3) return [];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => findBlueprintDetails(item, depth + 1));
-  }
-  const object = value as JsonObject;
-  const teachingIsObject = Boolean(object.teaching && typeof object.teaching === "object" && !Array.isArray(object.teaching));
-  const checkIsObject = Boolean(object.check && typeof object.check === "object" && !Array.isArray(object.check));
-  if (teachingIsObject && checkIsObject) return [object];
-  return Object.values(object).flatMap((child) => findBlueprintDetails(child, depth + 1));
-}
-
-function problemEvidenceSources(problem: ProblemSnapshot): EvidenceSource[] {
-  return [
-    { type: "problem", text: problem.text },
-    ...(problem.childWork ? [{ type: "child_work" as const, text: problem.childWork }] : []),
-  ];
-}
-
-function expansionEvidenceSources(problem: ProblemSnapshot, target: KnowledgeNode): EvidenceSource[] {
-  return [
-    ...problemEvidenceSources(problem),
-    { type: "parent", text: target.title },
-    { type: "parent", text: target.simplification },
-    { type: "parent", text: target.teaching.explanation },
-  ];
-}
-
-function evidenceCandidates(sources: EvidenceSource[]): EvidenceSource[] {
-  const candidates = sources.flatMap((source) => {
-    const parts = source.text.split(/[，。；：？！,;:?!\n]+/).map((part) => part.trim()).filter((part) => part.length >= 2 && part.length <= 50);
-    return [
-      ...(source.text.trim().length <= 50 ? [{ ...source, text: source.text.trim() }] : []),
-      ...parts.map((text) => ({ ...source, text })),
-    ];
-  });
-  return candidates.filter((candidate, index) => candidates.findIndex((item) => item.type === candidate.type && item.text === candidate.text) === index).slice(0, 16);
 }

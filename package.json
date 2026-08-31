@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "npm run build:function && sh scripts/dev-local.sh",
     "build": "next build",
     "build:function": "tsc -p tsconfig.function.json",
     "build:cloudbase": "NEXT_PUBLIC_API_BASE_URL=https://mini-0324-100046523669-03b06729f-1406836756.ap-shanghai.app.tcloudbase.com/api next build",
@@ -13,13 +16,20 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:real-model": "node scripts/real-model-regression.mjs",
+    "test:e2e:real-users": "node --env-file=.env.local scripts/real-user-e2e.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.3",
+    "katex": "^0.18.4",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-markdown": "^10.1.0",
+    "react-sketch-canvas": "^8.0.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "roughjs": "^4.6.6",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {

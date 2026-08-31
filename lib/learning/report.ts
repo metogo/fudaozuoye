@@ -2,7 +2,7 @@ import type { LearningSession, NodeState } from "./types";
 
 const subjects = { math: "数学", physics: "物理", chemistry: "化学" } as const;
 const bands = { primary: "小学", junior: "初中", senior: "高中" } as const;
-const states: Record<NodeState, string> = { unchecked: "待确认", known: "已掌握", unknown: "未掌握", learning: "学习中", mastered: "验收通过", parent_confirmed: "家长确认", needs_help: "需真人介入" };
+const states: Record<NodeState, string> = { unchecked: "待确认", known: "已掌握", unknown: "未掌握", learning: "学习中", mastered: "验收通过", parent_confirmed: "人工确认", needs_help: "需真人介入" };
 
 export async function createReportFile(session: LearningSession): Promise<File> {
   const concepts = session.nodes.filter((node) => node.kind === "concept").sort((a, b) => a.difficulty - b.difficulty);
@@ -50,7 +50,7 @@ export async function createReportFile(session: LearningSession): Promise<File> 
   context.fillText(session.originalPassed && session.transferPassed ? "✓ 原题与迁移题均已通过" : "本次学习尚未完成客观验收", 74, y + 35);
   context.fillStyle = "#78716c";
   context.font = "400 22px system-ui, sans-serif";
-  wrapText(context, "报告已自动脱敏：不包含原始照片、孩子身份、完整题目或模型对话。家长确认与系统验收不会混为一谈。", 74, y + 82, 910, 34);
+  wrapText(context, "报告已自动脱敏：不包含原始照片、身份、完整题目或模型对话。人工确认与系统验收不会混为一谈。", 74, y + 82, 910, 34);
 
   const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("报告图片生成失败")), "image/png"));
   return new File([blob], `回溯学-学习报告-${new Date().toISOString().slice(0, 10)}.png`, { type: "image/png" });

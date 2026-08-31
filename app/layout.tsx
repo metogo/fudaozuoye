@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "回溯学｜把不会拆到会",
-  description: "面向家长的 K12 数理化知识倒推辅导工具",
+  title: "回溯学｜AI 带你一步步学会",
+  description: "面向学生的 K12 引导式自主学习工具",
 };
 
 export const viewport: Viewport = {

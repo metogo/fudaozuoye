@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isMockMode = isMockMode;
 exports.getProviderConfig = getProviderConfig;
+exports.listReasoningAvailability = listReasoningAvailability;
 exports.listProviderAvailability = listProviderAvailability;
 const labels = {
     doubao: { label: "豆包", description: "默认模型，适合中文题目与讲解" },
@@ -18,12 +19,12 @@ function isMockMode() {
         return false;
     return process.env.NODE_ENV !== "production";
 }
-function getProviderConfig(id) {
+function getProviderConfig(id, reasoningLevel = "light") {
     const mock = isMockMode();
     const configs = {
         doubao: {
             apiKey: process.env.DOUBAO_API_KEY ?? "",
-            modelId: process.env.DOUBAO_MODEL_ID ?? "",
+            modelId: doubaoModelId(reasoningLevel),
             baseUrl: process.env.DOUBAO_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
             protocol: "chat-completions",
         },
@@ -41,6 +42,22 @@ function getProviderConfig(id) {
         },
     };
     return { id, label: labels[id].label, mock, ...configs[id] };
+}
+function listReasoningAvailability() {
+    const mock = isMockMode();
+    const apiKey = process.env.DOUBAO_API_KEY ?? "";
+    return ["light", "medium", "high"].map((id) => ({
+        id,
+        label: id === "light" ? "轻度" : id === "medium" ? "中" : "高",
+        available: mock || Boolean(apiKey && doubaoModelId(id)),
+    }));
+}
+function doubaoModelId(level) {
+    if (level === "medium")
+        return process.env.DOUBAO_MODEL_ID_MEDIUM ?? "";
+    if (level === "high")
+        return process.env.DOUBAO_MODEL_ID_HIGH ?? "";
+    return process.env.DOUBAO_MODEL_ID ?? "";
 }
 function listProviderAvailability() {
     return ["doubao", "openai", "xai"].map((id) => {

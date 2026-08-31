@@ -11,7 +11,7 @@ function sse(run) {
                 await run(send);
             }
             catch (error) {
-                send("error", { code: "STREAM_FAILED", message: error instanceof Error ? error.message : "请求失败", retryable: true });
+                send("error", { code: "STREAM_FAILED", message: publicStreamErrorMessage(error), retryable: true });
             }
             finally {
                 clearInterval(keepalive);
@@ -19,5 +19,16 @@ function sse(run) {
             }
         },
     });
-    return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
+    return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
+}
+function publicStreamErrorMessage(error) {
+    const message = error instanceof Error ? error.message : "请求失败";
+    if (error instanceof SyntaxError || /JSON|unexpected token|expected property|minus sign|parse/i.test(message)) {
+        return "AI 返回内容格式异常，当前学习位置已保留，请重试这一步。";
+    }
+    const internalMarkers = ["节点 ", "知识选择", "课程目录", "原题引导", "字段 ", "evidence", "selected.", "JSON", "直接前置"];
+    if (internalMarkers.some((marker) => message.toLowerCase().includes(marker.toLowerCase()))) {
+        return "AI 返回的知识关系没有通过可靠性检查，请重试。";
+    }
+    return message;
 }

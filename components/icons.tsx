@@ -16,3 +16,8 @@ export const RefreshIcon = (props: IconProps) => <Base {...props}><path d="M20 7
 export const ShareIcon = (props: IconProps) => <Base {...props}><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></Base>;
 export const SparkIcon = (props: IconProps) => <Base {...props}><path d="m12 3 1.3 4.1L17 9l-3.7 1.9L12 15l-1.3-4.1L7 9l3.7-1.9L12 3Z"/><path d="m18.5 14 .7 2.2 1.8.8-1.8.8-.7 2.2-.7-2.2L16 17l1.8-.8.7-2.2Z"/></Base>;
 export const UploadIcon = (props: IconProps) => <Base {...props}><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M5 14v5h14v-5"/></Base>;
+export const PencilIcon = (props: IconProps) => <Base {...props}><path d="m4 20 4.2-1 10.6-10.6a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m14.5 6.7 2.8 2.8"/></Base>;
+export const EraserIcon = (props: IconProps) => <Base {...props}><path d="m7 19-3-3a2 2 0 0 1 0-2.8l8.2-8.2a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11.8 19H7Z"/><path d="m9 8 7 7M11.8 19H21"/></Base>;
+export const UndoIcon = (props: IconProps) => <Base {...props}><path d="M9 7 4 12l5 5"/><path d="M5 12h8a6 6 0 0 1 6 6"/></Base>;
+export const RedoIcon = (props: IconProps) => <Base {...props}><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></Base>;
+export const TrashIcon = (props: IconProps) => <Base {...props}><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></Base>;

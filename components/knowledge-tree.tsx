@@ -3,7 +3,7 @@
 import type { KnowledgeNode, LearningSession, NodeState } from "@/lib/learning/types";
 import { CheckIcon, ChevronIcon } from "./icons";
 
-const statusText: Record<NodeState, string> = { unchecked: "待确认", known: "已掌握", unknown: "这里不会", learning: "正在学习", mastered: "验收通过", parent_confirmed: "家长确认", needs_help: "需真人介入" };
+const statusText: Record<NodeState, string> = { unchecked: "待确认", known: "已掌握", unknown: "这里不会", learning: "正在学习", mastered: "验收通过", parent_confirmed: "人工确认", needs_help: "需真人介入" };
 
 export function KnowledgeTree({ session, activeNodeId, highlightNodeId, onSelect }: { session: LearningSession; activeNodeId: string | null; highlightNodeId: string | null; onSelect: (id: string) => void }) {
   const byId = new Map(session.nodes.map((node) => [node.id, node]));
@@ -35,7 +35,7 @@ export function KnowledgeTree({ session, activeNodeId, highlightNodeId, onSelect
 export { statusText };
 
 function evidenceSourceText(source: KnowledgeNode["diagnosticEvidenceSource"]) {
-  return source === "child_work" ? "孩子作答原文" : source === "parent" ? "上层节点依据" : "题干原文";
+  return source === "child_work" ? "我的作答原文" : source === "parent" ? "上层节点依据" : "题干原文";
 }
 
 function depthLabel(node: KnowledgeNode, depth: number) {

@@ -16,7 +16,7 @@ async function postExpand(request) {
         const session = (0, server_state_1.openSession)(body.stateToken);
         if (typeof body.targetNodeId !== "string" || body.targetNodeId !== session.currentNodeId)
             throw new Error("只能拆解当前学习节点");
-        const adapter = (0, providers_1.getProviderAdapter)(session.provider);
+        const adapter = (0, providers_1.getSessionProviderAdapter)(session);
         return (0, sse_1.sse)(async (send) => {
             send("phase", { key: "locating", label: "正在检查这个知识点还缺哪些更简单的前置" });
             const expansion = await adapter.expandNode(session, body.targetNodeId, (key, label) => send("phase", { key, label }));

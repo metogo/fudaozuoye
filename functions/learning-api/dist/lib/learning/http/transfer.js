@@ -13,8 +13,8 @@ async function postTransfer(request) {
         const body = await request.json();
         const session = (0, server_state_1.openSession)(body.stateToken);
         if (!session.originalPassed || session.stage !== "transfer_check")
-            throw new Error("必须先由孩子独立完成原题");
-        const adapter = (0, providers_1.getProviderAdapter)(session.provider);
+            throw new Error("必须先由学生独立完成原题");
+        const adapter = (0, providers_1.getSessionProviderAdapter)(session);
         const transferCheck = await adapter.generateTransferCheck(session);
         if (!transferCheck.prompt.trim() || !transferCheck.answer.trim() || !transferCheck.conceptId)
             throw new Error("迁移题未绑定有效知识点");

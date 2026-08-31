@@ -8,6 +8,7 @@ const server_state_1 = require("../server-state");
 const sse_1 = require("./sse");
 const subjects = new Set(["math", "physics", "chemistry"]);
 const bands = new Set(["primary", "junior", "senior"]);
+const reasoningLevels = new Set(["light", "medium", "high"]);
 async function postAnalyze(request) {
     try {
         (0, request_guards_1.assertSameOrigin)(request);
@@ -17,20 +18,26 @@ async function postAnalyze(request) {
         (0, request_guards_1.assertRateLimit)(request, 30, (0, server_state_1.consentRateIdentity)(request) ?? undefined);
         const form = await request.formData();
         const requestedProvider = form.get("provider");
+        const requestedReasoningLevel = form.get("reasoningLevel");
         const stage = form.get("stage");
-        if (!(0, providers_1.isProviderId)(requestedProvider) || (stage !== "recognize" && stage !== "full"))
-            return new Response("模型或分析阶段不合法", { status: 400 });
+        if (!(0, providers_1.isProviderId)(requestedProvider) || !reasoningLevels.has(requestedReasoningLevel) || (stage !== "recognize" && stage !== "recognize_text" && stage !== "full"))
+            return new Response("推理强度或分析阶段不合法", { status: 400 });
+        const reasoningLevel = requestedReasoningLevel;
         const provider = "doubao";
-        const adapter = (0, providers_1.getProviderAdapter)(provider);
+        const adapter = (0, providers_1.getProviderAdapter)(provider, reasoningLevel, request.signal);
         if (stage === "recognize")
             return recognize(form, provider, adapter);
+        if (stage === "recognize_text")
+            return recognizeText(form, provider, adapter);
         const raw = form.get("problem");
         if (typeof raw !== "string" || raw.length > 24_000)
             return new Response("缺少已确认的题目", { status: 400 });
         const problem = parseProblemSnapshot(JSON.parse(raw));
         return (0, sse_1.sse)(async (send) => {
-            send("phase", { key: "mapping", label: "正在生成直接前置知识路径" });
-            const session = await adapter.analyzeProblem(problem, (key, label) => send("phase", { key, label }));
+            const startedAt = Date.now();
+            send("phase", { key: "mapping", label: "正在理解题目要解决什么" });
+            const session = await adapter.prepareChatSession(problem, (key, label) => send("phase", { key, label }));
+            send("perf.phase", { key: "session_ready", elapsedMs: Date.now() - startedAt });
             send("graph", (0, server_state_1.toClientState)(session));
             send("complete", { provider, modelId: adapter.modelId, mode: adapter.mode });
         });
@@ -40,15 +47,29 @@ async function postAnalyze(request) {
         return new Response(message, { status: message.includes("过大") ? 413 : message.includes("频繁") ? 429 : 400 });
     }
 }
+function recognizeText(form, provider, adapter) {
+    const raw = form.get("text");
+    if (typeof raw !== "string" || raw.trim().length < 3 || raw.length > 8_000)
+        return new Response("请输入一道完整的题目", { status: 400 });
+    return (0, sse_1.sse)(async (send) => {
+        const startedAt = Date.now();
+        send("phase", { key: "recognizing", label: "正在读懂你发来的题目" });
+        send("recognized", await adapter.recognizeTextProblem(raw.trim()));
+        send("perf.phase", { key: "text_recognized", elapsedMs: Date.now() - startedAt });
+        send("complete", { provider, modelId: adapter.modelId, mode: adapter.mode });
+    });
+}
 async function recognize(form, provider, adapter) {
     const file = form.get("image");
     if (!(file instanceof File))
         return new Response("请先选择一道题的照片", { status: 400 });
     await (0, request_guards_1.assertImageFile)(file);
     return (0, sse_1.sse)(async (send) => {
-        send("phase", { key: "recognizing", label: "正在识别题干与孩子作答" });
+        const startedAt = Date.now();
+        send("phase", { key: "recognizing", label: "正在识别题干与你的作答" });
         const imageDataUrl = `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`;
         send("recognized", await adapter.recognizeProblem(imageDataUrl));
+        send("perf.phase", { key: "image_recognized", elapsedMs: Date.now() - startedAt });
         send("complete", { provider, modelId: adapter.modelId, mode: adapter.mode });
     });
 }

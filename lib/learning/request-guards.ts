@@ -6,7 +6,8 @@ export function assertSameOrigin(request: Request): void {
     if (process.env.NODE_ENV === "production") throw new Error("请求来源不合法");
     return;
   }
-  if (new URL(origin).host !== new URL(request.url).host) throw new Error("请求来源不合法");
+  const allowedOrigin = process.env.PUBLIC_APP_ORIGIN?.trim();
+  if (allowedOrigin ? origin !== allowedOrigin : new URL(origin).host !== new URL(request.url).host) throw new Error("请求来源不合法");
 }
 
 export function assertContentLength(request: Request, maxBytes: number): void {

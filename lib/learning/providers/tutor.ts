@@ -1,0 +1,132 @@
+import { flowScopeLabel } from "../flow";
+import type { LearningSession, ProblemGuideSection, SuggestedQuestion, TutorScope } from "../types";
+import type { JsonObject } from "./model-support";
+
+const guideSectionLabels: Record<ProblemGuideSection, string> = {
+  goal: "这道题要解决什么",
+  keyClue: "先抓住这条线索",
+  approach: "解题方向",
+};
+
+export function tutorSystemPrompt(): string {
+  return [
+    "你是正在带学生自主完成一道具体作业题的 K12 数理化老师。",
+    "只回答给定原题或当前知识节点内的问题，不扩展无关知识，不评价学生能力。",
+    "直接对学生说话。先准确回应卡点，再解释“为什么”和“怎样做”；涉及关系或方法时必须给一个与当前题结构相同、数字更简单的具体例子，最后只问一个能继续思考的问题。",
+    "简洁不等于省略：不能只返回结论、单句提示或空泛建议。通常用 2 到 4 个短段落；按内容需要使用“这一步在做什么”“为什么这样做”“看个小例子”等短标题，或用加粗、列表、引用建立层次。",
+    "默认不公布最终答案或完整解题过程。即使用户索要答案，也只给当前下一步提示，并告知完整答案有单独入口。",
+    "上下文含 focusSection 时，只解释该段与学生问题的关系；先明确正在回应哪一段，不得含糊地退回整道原题泛讲。",
+    "不得声称学生已经掌握，不得修改学习状态。",
+    "使用简洁 Markdown 组织内容：按内容需要使用短标题、加粗、列表或引用，不要输出一整块无层次纯文本，不要把每句话都做成标题，也不要使用表格、HTML 或分隔线。",
+    "所有数学与物理公式必须使用 KaTeX 兼容的 LaTeX：行内公式写在 $...$ 中，独立推导写在 $$...$$ 中；不要用代码块包裹公式。化学式使用 $\\mathrm{H_2O}$ 这类标准 LaTeX。",
+  ].join("\n");
+}
+
+export function tutorPrompt(session: LearningSession, scope: TutorScope, question: string): string {
+  const directIds = new Set(session.edges.filter((edge) => edge.to === session.rootNodeId).map((edge) => edge.from));
+  const directConcepts = session.nodes
+    .filter((node) => directIds.has(node.id))
+    .map((node) => ({ title: node.title, evidence: node.diagnosticEvidence, reason: node.simplification }));
+  const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId) : undefined;
+  if (scope.kind === "node" && (!node || node.kind !== "concept")) throw new Error("追问的知识节点不存在");
+  const focusSection = scope.kind === "problem" && scope.section ? {
+    key: scope.section,
+    label: guideSectionLabels[scope.section],
+    text: session.problemGuide[scope.section],
+  } : undefined;
+  const context = scope.kind === "problem"
+    ? { scope: focusSection ? "原题引导的指定段落" : "原题引导", problem: session.problem, guide: session.problemGuide, focusSection, directConcepts }
+    : {
+        scope: "当前知识节点",
+        problem: session.problem,
+        node: {
+          title: node?.title,
+          evidence: node?.diagnosticEvidence,
+          reason: node?.simplification,
+          teaching: node?.teaching,
+          checkPrompt: node?.check.prompt,
+        },
+      };
+  return JSON.stringify({
+    context,
+    parentQuestion: question,
+    outputRequirements: {
+      structure: "系统会在正文前显示当前讲解范围，不要重复总标题；正文使用 2 到 4 个短段落，并至少使用一个加粗的局部标签，不能输出一整块纯文本",
+      teachingDepth: "先直接回应当前问题，再解释为什么这样做；涉及关系或方法时必须给一个更简单的具体例子",
+      boundary: "只讲当前一步，不公布最终答案；结尾只问一个能让学生继续思考的问题",
+    },
+  });
+}
+
+export function tutorReplyMock(session: LearningSession, scope: TutorScope, question: string): string {
+  if (scope.kind === "problem") {
+    if (scope.section) return `**你问的是：** ${question}\n\n这里正在讲 **${guideSectionLabels[scope.section]}**：${session.problemGuide[scope.section]}\n\n> 先从这句话里圈出最关键的条件，再说说它和题目要求有什么关系。`;
+    return `**你问的是：** ${question}\n\n${session.problemGuide.keyClue}\n\n${session.problemGuide.approach}\n\n> 接着想一想：${session.problemGuide.firstQuestion}`;
+  }
+  const node = session.nodes.find((item) => item.id === scope.nodeId);
+  if (!node || node.kind !== "concept") throw new Error("追问的知识节点不存在");
+  return `**你问的是：** ${question}\n\n${node.teaching.alternateExplanation}\n\n**看一个更具体的例子**\n\n${node.teaching.example}\n\n> 然后想一想：${node.teaching.parentPrompt}`;
+}
+
+export function questionSuggestionsPrompt(session: LearningSession, scope: TutorScope, sourceText: string): string {
+  const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
+  return JSON.stringify({
+    task: "判断刚完成的讲解之后，是否存在值得学生顺手追问、但不会打断当前学习任务的问题。没有必要时返回 recommended=false。",
+    problem: session.problem.text,
+    currentFocus: scope.kind === "problem"
+      ? { label: flowScopeLabel(session, scope), guide: session.problemGuide }
+      : { label: flowScopeLabel(session, scope), title: node?.title, evidence: node?.diagnosticEvidence, teaching: node?.teaching.explanation },
+    completedExplanation: sourceText,
+    currentRequiredTask: session.flow.activeGate?.title ?? "继续当前学习",
+    rules: [
+      "问题必须能帮助理解当前题目或当前讲解中的关系",
+      "问题不能索要最终答案、完整解法或代做",
+      "问题不能重复当前必做任务，也不能把建议写成命令",
+      "只有确实值得问时才给 1 到 3 个简短问题，宁缺毋滥",
+    ],
+    output: { recommended: true, questions: ["为什么这个条件会决定第一步？", "如果少了这个条件，思路会怎样变化？"] },
+  });
+}
+
+export function parseQuestionSuggestions(value: JsonObject, session: LearningSession, scope: TutorScope, sourceText: string): SuggestedQuestion[] {
+  if (typeof value.recommended !== "boolean") throw new Error("猜你想问缺少教学判断");
+  if (!value.recommended) return [];
+  if (!Array.isArray(value.questions) || value.questions.length < 1 || value.questions.length > 3) throw new Error("猜你想问数量不合法");
+  const gateTitle = normalizeQuestion(session.flow.activeGate?.title ?? "");
+  const scopeLabel = flowScopeLabel(session, scope);
+  const sourceSummary = plainSummary(sourceText);
+  const seen = new Set<string>();
+  const questions = value.questions.flatMap((raw) => {
+    if (typeof raw !== "string") throw new Error("猜你想问内容不合法");
+    const text = raw.trim();
+    const normalized = normalizeQuestion(text);
+    if (text.length < 4 || text.length > 60 || !normalized || seen.has(normalized)) return [];
+    if (/(?:最终|标准)?答案|完整(?:解法|步骤|讲解)|直接告诉|帮我(?:做完|算完)|最后结果/.test(text)) return [];
+    if (gateTitle && (normalized === gateTitle || normalized.includes(gateTitle) || gateTitle.includes(normalized))) return [];
+    seen.add(normalized);
+    return [{ id: `suggest-${crypto.randomUUID().slice(0, 8)}`, text, scopeLabel, sourceSummary }];
+  });
+  return questions.slice(0, 3);
+}
+
+export function questionSuggestionsMock(session: LearningSession, scope: TutorScope, sourceText: string): SuggestedQuestion[] {
+  const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
+  const candidates = node
+    ? [`“${node.title}”和原题里的哪个条件直接相连？`, `判断这一步是否用对，可以检查什么？`]
+    : ["为什么这条条件会决定第一步？", "如果忽略这条线索，最容易错在哪里？"];
+  return parseQuestionSuggestions({ recommended: true, questions: candidates }, session, scope, sourceText);
+}
+
+function plainSummary(value: string): string {
+  const text = value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\$\$?|\*\*|__|[`>#*_~-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length < 4) throw new Error("猜你想问缺少可引用的讲解");
+  return text.slice(0, 76);
+}
+
+function normalizeQuestion(value: string): string {
+  return value.normalize("NFKC").replace(/[？?。！!，,：:\s“”‘’'\"（）()]/g, "").toLowerCase();
+}

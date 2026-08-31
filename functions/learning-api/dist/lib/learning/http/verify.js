@@ -13,7 +13,7 @@ async function postVerify(request) {
         (0, request_guards_1.assertContentLength)(request, 200_000);
         const body = await request.json();
         let session = (0, server_state_1.openSession)(body.stateToken);
-        const adapter = (0, providers_1.getProviderAdapter)(session.provider);
+        const adapter = (0, providers_1.getSessionProviderAdapter)(session);
         const now = new Date().toISOString();
         if (body.nodeId === "__transfer__")
             return await verifyTransfer(body, session, adapter, now);
@@ -27,7 +27,7 @@ async function postVerify(request) {
             if (session.stage !== "original_check" || !(0, graph_1.isReadyForOriginal)(session))
                 throw new Error("前置知识尚未完成，不能验收原题");
             if (body.source === "parent")
-                throw new Error("原题必须由孩子独立完成，不能由家长代为确认");
+                throw new Error("原题必须由学生独立完成，不能由他人代为确认");
         }
         else if (session.stage !== "learning" && session.stage !== "diagnosing")
             throw new Error("当前阶段不能验收知识点");
@@ -39,16 +39,16 @@ async function postVerify(request) {
         const explicitlyUnknown = body.action === "mark_unknown";
         if (body.source === "parent") {
             if (node.kind === "problem" || node.state === "needs_help")
-                throw new Error("当前节点不能由家长覆盖确认");
+                throw new Error("当前节点不能由人工确认覆盖");
             passed = true;
             source = "parent";
-            explanation = "已按家长判断记录；最终仍需通过原题和迁移题。";
+            explanation = "已按人工判断记录；最终仍需通过原题和迁移题。";
         }
         else if (explicitlyUnknown)
             explanation = node.atomic ? "先换一种讲法和更具体的例子，再检查一次。" : "已记录为不会，可以继续向下拆解。";
         else {
             if (typeof body.answer !== "string" || !body.answer.trim())
-                throw new Error("请先提交孩子的答案");
+                throw new Error("请先提交答案");
             ({ passed, explanation } = await adapter.verifyAnswer(node.check, body.answer));
         }
         const attempts = node.attempts + (source === "system" ? 1 : 0);

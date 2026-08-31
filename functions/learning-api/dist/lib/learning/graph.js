@@ -5,6 +5,7 @@ exports.getPrerequisites = getPrerequisites;
 exports.canVerifyNode = canVerifyNode;
 exports.assertGraphInvariants = assertGraphInvariants;
 exports.mergeExpansion = mergeExpansion;
+exports.mergeDirectKnowledge = mergeDirectKnowledge;
 exports.nextReadyNode = nextReadyNode;
 exports.isReadyForOriginal = isReadyForOriginal;
 exports.catalogAllowsEdge = catalogAllowsEdge;
@@ -100,6 +101,27 @@ function mergeExpansion(session, targetNodeId, nodes, edges) {
         nodes: session.nodes.map((node) => node.id === targetNodeId ? { ...node, state: "learning" } : node).concat(connectedNodes),
         edges: session.edges.concat(freshEdges),
         currentNodeId: connectedNodes.slice().sort((a, b) => a.difficulty - b.difficulty)[0]?.id ?? freshEdges[0]?.from ?? targetNodeId,
+        stage: "learning",
+        updatedAt: new Date().toISOString(),
+    };
+    assertGraphInvariants(next);
+    return next;
+}
+function mergeDirectKnowledge(session, nodes, edges) {
+    if (session.nodes.some((node) => node.kind === "concept"))
+        return session;
+    if (nodes.length === 0)
+        throw new Error("没有找到有效的直接前置知识");
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const connectedIds = new Set(edges.map((edge) => edge.from));
+    if (nodeIds.size !== nodes.length || nodes.some((node) => node.kind !== "concept") || edges.length !== nodes.length || connectedIds.size !== nodes.length || edges.some((edge) => edge.to !== session.rootNodeId || !nodeIds.has(edge.from))) {
+        throw new Error("直接前置知识关系不完整");
+    }
+    const next = {
+        ...session,
+        nodes: session.nodes.concat(nodes),
+        edges: session.edges.concat(edges),
+        currentNodeId: nodes.slice().sort((first, second) => first.difficulty - second.difficulty)[0]?.id ?? null,
         stage: "learning",
         updatedAt: new Date().toISOString(),
     };
