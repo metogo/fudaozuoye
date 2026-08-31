@@ -57,15 +57,18 @@ export function LearningChat(props: LearningChatProps) {
   const choiceAnswerMode = Boolean(answerChoices?.length);
   const questionMode = Boolean(answerMode && gate?.id && questionGateId === gate.id);
   const responseIntent = answerMode && !questionMode ? "answer" : "question";
-  const showResponseTools = Boolean(props.session && (!choiceAnswerMode || questionMode) && !props.reviewProblem);
-  const currentTask = gate ? currentTaskCopy(props.session, gate, questionMode) : null;
+  const hasPendingRetry = Boolean(props.retryLabel);
+  const showResponseTools = Boolean(props.session && !hasPendingRetry && (!choiceAnswerMode || questionMode) && !props.reviewProblem);
+  const currentTask = gate && !hasPendingRetry ? currentTaskCopy(props.session, gate, questionMode) : null;
   const canAttach = !props.session && !props.busy && !props.reviewProblem;
   const isHome = !props.session && props.messages.length === 0 && !props.reviewProblem;
   const solutionDisplay = props.session?.flow.viewedSolution && gate?.kind !== "solution_review" ? "locked" as const : "normal" as const;
   const hasActiveChatStream = props.messages.some((message) => message.surface !== "board" && message.role === "assistant" && (message.status === "streaming" || message.status === "finishing"));
+  const hasWritingChatStream = props.messages.some((message) => message.surface !== "board" && message.role === "assistant" && message.status === "streaming");
   const visibleChatMessages = props.messages.filter((message) => message.surface !== "board");
   const lastUserIndex = visibleChatMessages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
   const hasAssistantOutputForCurrentTurn = props.busy && visibleChatMessages.slice(lastUserIndex + 1).some((message) => message.role === "assistant" && message.status !== "error");
+  const isPreparingNextTurn = Boolean(props.session && props.busy && hasAssistantOutputForCurrentTurn && !hasWritingChatStream);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
@@ -158,14 +161,11 @@ export function LearningChat(props: LearningChatProps) {
   };
 
   return <main className={`learning-chat-shell mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden ${isHome ? "home-chat-shell" : "bg-[#f7f6f2]"}`}>
+    {isHome && <h1 className="sr-only">学习首页</h1>}
     <header className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <span className={`flex shrink-0 items-center justify-center bg-stone-950 text-white ${isHome ? "h-8 w-8 rounded-xl shadow-[0_8px_24px_rgba(28,25,23,.16)]" : "h-10 w-10 rounded-2xl shadow-lg shadow-stone-300"}`}><NetworkIcon className={isHome ? "h-3.5 w-3.5" : "h-4 w-4"}/></span>
-        <div className="min-w-0">
-          {isHome
-            ? <h1 className="truncate text-xs font-bold tracking-[-.02em]">先想明白，再做出来</h1>
-            : <time dateTime={currentTime.toISOString()} className="block truncate text-xs tabular-nums text-stone-500">{formatCurrentTime(currentTime)}</time>}
-        </div>
+        {!isHome && <time dateTime={currentTime.toISOString()} className="block min-w-0 truncate text-xs tabular-nums text-stone-500">{formatCurrentTime(currentTime)}</time>}
       </div>
       {props.session && <button type="button" onClick={props.onNewProblem} className="min-h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 transition hover:bg-white hover:text-stone-900">开始新题</button>}
     </header>
@@ -175,8 +175,9 @@ export function LearningChat(props: LearningChatProps) {
         {props.messages.filter((message) => message.surface !== "board").map((message) => <MessageBubble key={message.id} message={message} solutionDisplay={solutionDisplay} activeSuggestionIds={new Set(props.session?.flow.suggestedQuestions?.map((item) => item.id) ?? [])} onSuggestion={props.onSuggestion}/>) }
         {props.reviewProblem && <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>}
         {props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn && <LoadingWhisper label={props.loadingLabel}/>}
-        {!props.busy && gate && <GateCard gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} onChoice={props.onChoice} onAnswer={props.onSend}/>}
-        {!props.busy && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>再次查看刚才的板书</span><span className="text-[9px] font-normal text-stone-400">不改变当前任务</span></button>}
+        {isPreparingNextTurn && <NextTurnPlaceholder/>}
+        {!props.busy && !hasPendingRetry && gate && <GateCard gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} onChoice={props.onChoice} onAnswer={props.onSend}/>}
+        {!props.busy && !hasPendingRetry && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>再次查看刚才的板书</span><span className="text-[9px] font-normal text-stone-400">不改变当前任务</span></button>}
         {!props.busy && props.session?.flow.stage === "complete" && !gate && <CompletionActions session={props.session} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {!props.busy && props.session?.flow.stage === "reviewed_complete" && !gate && <ReviewCompletionActions onRetryOriginal={props.onRetryOriginal} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
       </div>}
@@ -200,8 +201,8 @@ export function LearningChat(props: LearningChatProps) {
             <button type="button" disabled={props.busy} onClick={() => props.onWhiteboard(responseIntent)} aria-label={`打开白板${responseIntent === "answer" ? "作答" : "提问"}`} title={responseIntent === "answer" ? "白板作答" : "白板提问"} className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 disabled:opacity-35"><PencilIcon className="h-4 w-4"/></button>
             <label aria-label={`拍照${responseIntent === "answer" ? "作答" : "提问"}`} title={responseIntent === "answer" ? "拍照作答" : "拍照提问"} className={`flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 ${props.busy ? "pointer-events-none opacity-35" : "cursor-pointer"}`}><CameraIcon className="h-4 w-4"/><input type="file" accept="image/*" capture="environment" className="sr-only" onChange={responsePhotoChange}/></label>
           </div>}
-          <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} rows={1} maxLength={questionMode ? 300 : answerMode ? 2_000 : props.session ? 300 : 8_000} disabled={props.busy || Boolean(props.reviewProblem) || (choiceAnswerMode && !questionMode)} placeholder={questionMode ? currentTask?.placeholder : choiceAnswerMode ? "请点击上方选项作答" : currentTask?.placeholder ?? composerPlaceholder(props.session, props.ready)} aria-label={questionMode ? "询问当前步骤" : answerMode ? "输入你的答案" : "输入题目或问题"} className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-stone-400 disabled:opacity-50"/>
-          <button type="submit" disabled={props.busy || !input.trim() || Boolean(props.reviewProblem) || (choiceAnswerMode && !questionMode) || (!props.session && !props.ready)} aria-label={questionMode ? "发送问题" : answerMode ? "提交答案" : "发送"} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-stone-950 text-white transition active:scale-95 disabled:bg-stone-200 disabled:text-stone-400"><ArrowIcon className="h-5 w-5"/></button>
+          <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} rows={1} maxLength={questionMode ? 300 : answerMode ? 2_000 : props.session ? 300 : 8_000} disabled={props.busy || hasPendingRetry || Boolean(props.reviewProblem) || (choiceAnswerMode && !questionMode)} placeholder={hasPendingRetry ? "请先重试刚才未完成的步骤" : questionMode ? currentTask?.placeholder : choiceAnswerMode ? "请点击上方选项作答" : currentTask?.placeholder ?? composerPlaceholder(props.session, props.ready)} aria-label={questionMode ? "询问当前步骤" : answerMode ? "输入你的答案" : "输入题目或问题"} className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-stone-400 disabled:opacity-50"/>
+          <button type="submit" disabled={props.busy || hasPendingRetry || !input.trim() || Boolean(props.reviewProblem) || (choiceAnswerMode && !questionMode) || (!props.session && !props.ready)} aria-label={questionMode ? "发送问题" : answerMode ? "提交答案" : "发送"} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-stone-950 text-white transition active:scale-95 disabled:bg-stone-200 disabled:text-stone-400"><ArrowIcon className="h-5 w-5"/></button>
         </div>
       </div>
       {fileError && <p className="mx-auto mt-2 max-w-2xl px-2 text-[10px] text-red-700">{fileError}</p>}
@@ -236,7 +237,7 @@ function MessageBubble({ message, solutionDisplay, activeSuggestionIds, onSugges
   if (message.kind === "path") return <div className="chat-path rounded-2xl border border-amber-200/70 bg-amber-50/70 p-4"><p className="text-[10px] font-semibold tracking-[.12em] text-amber-800">正在补回缺失的基础</p><div className="mt-2 text-sm font-semibold leading-6 text-stone-800"><RichLearningText text={message.text} compact/></div><p className="mt-1 text-[10px] text-stone-500">理解后会自动回到刚才的原题步骤</p></div>;
   if (message.kind === "result") return <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${message.text.startsWith("✓") ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}><RichLearningText text={message.text} compact/></div>;
   if (message.role === "assistant" && message.scopeLabel === "原题完整讲解") {
-    if (message.status === "error") return <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3"><p className="text-xs font-semibold text-red-800">完整讲解传输中断</p><p className="mt-1 text-[11px] leading-5 text-red-700/70">残缺内容已隐藏，请重试当前步骤。</p></div>;
+    if (message.status === "error") return <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3"><p className="text-xs font-semibold text-red-800">完整讲解未完成</p><p className="mt-1 text-[11px] leading-5 text-red-700/70">未完成内容已隐藏，请重试后再继续。</p></div>;
     if (solutionDisplay === "locked") return <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3"><p className="text-[10px] font-semibold tracking-[.1em] text-amber-700">完整讲解已收起</p><p className="mt-1 text-xs leading-5 text-stone-500">接下来只保留学习任务，避免答案继续影响独立思考。</p></div>;
   }
   const mine = message.role === "user";
@@ -312,6 +313,20 @@ function LoadingWhisper({ label }: { label: string }) {
   useEffect(() => { const timer = window.setInterval(() => setIndex((value) => (value + 1) % loadingLearningQuotes.length), 5_500); return () => window.clearInterval(timer); }, []);
   const quote = loadingLearningQuotes[index];
   return <div className="loading-whisper rounded-2xl border border-stone-200/80 bg-white/75 px-4 py-3"><div role="status" aria-live="polite" className="flex items-center gap-2"><StreamingIndicator status="starting" compact/><p className="text-xs font-semibold text-stone-700">{label || "AI 正在继续思考"}</p></div><p aria-hidden="true" key={index} className="quote-enter mt-2 text-[11px] leading-5 text-stone-400">“{quote.text}” <span>— {quote.source}</span></p></div>;
+}
+
+function NextTurnPlaceholder() {
+  return <section className="next-turn-placeholder chat-gate rounded-[24px] border border-stone-200 bg-white p-4 shadow-[0_14px_36px_rgba(41,37,36,.08)]" role="status" aria-live="polite" aria-label="下一步正在准备">
+    <div className="flex items-start gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white"><NetworkIcon className="h-3.5 w-3.5"/></span>
+      <div className="min-w-0 flex-1"><p className="text-[9px] font-semibold tracking-[.14em] text-stone-400">下一步正在准备</p><h2 className="mt-1 text-sm font-bold leading-6 text-stone-800">接下来会轮到你</h2><p className="mt-1 text-[10px] leading-5 text-stone-400">正在把刚才的内容整理成下一步互动</p></div>
+      <span className="next-turn-placeholder__status shrink-0 rounded-full bg-stone-100 px-2 py-1 text-[9px] font-semibold text-stone-500">即将出现</span>
+    </div>
+    <div className="next-turn-placeholder__preview mt-4 rounded-2xl border border-stone-100 bg-stone-50/70 p-3" aria-hidden="true">
+      <span className="next-turn-placeholder__skeleton block h-2 w-2/3 rounded-full"/>
+      <div className="mt-3 grid grid-cols-2 gap-2"><span className="next-turn-placeholder__skeleton block h-10 rounded-xl"/><span className="next-turn-placeholder__skeleton block h-10 rounded-xl"/></div>
+    </div>
+  </section>;
 }
 
 function CompletionActions({ session, onTransfer, onNew }: { session: LearningSession; onTransfer: () => void; onNew: () => void }) {

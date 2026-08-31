@@ -18,10 +18,17 @@ const optionPattern = /(?<![A-Za-z0-9])(?:[（(]\s*)?([A-H])\s*[.．、:：)）]
  */
 export function prepareLearningMarkdown(source: string, streaming = false): string {
   if (streaming && hasUnclosedMath(source)) return source;
-  return source
+  return promoteDisplayOnlyMath(source)
     .split(protectedMarkdownPattern)
     .map((part, index) => index % 2 === 1 ? part : preparePlainSegment(part))
     .join("");
+}
+
+function promoteDisplayOnlyMath(source: string): string {
+  return source.replace(
+    /(?<!\$)\$([^$\n]*\\tag\*?\{[^{}\n]+\}[^$\n]*)\$(?!\$)/g,
+    (_, latex: string) => `\n\n$$\n${latex}\n$$\n\n`,
+  );
 }
 
 export function assertBalancedLearningMarkup(source: string, label: string): void {

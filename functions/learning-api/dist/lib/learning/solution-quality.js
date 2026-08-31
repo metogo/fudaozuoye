@@ -70,8 +70,22 @@ function extractSubQuestionIndexes(problemText) {
     return [...new Set(indexes)];
 }
 function mentionsSubQuestion(solution, index) {
-    return new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:第\\s*${index}\\s*问|[（(]${index}[）)])`, "m").test(solution);
+    const chineseIndex = SUB_QUESTION_CHINESE_INDEX[index] ?? "";
+    const indexLabel = chineseIndex ? `(?:${index}|${chineseIndex})` : index;
+    const markdownPrefix = "(?:#{1,6}\\s*)?(?:(?:\\*\\*|__|\\*|_)\\s*)?";
+    return new RegExp(`(?:^|\\n)\\s*${markdownPrefix}(?:第\\s*${indexLabel}\\s*问|问题\\s*${index}|[（(]\\s*${index}\\s*[）)])`, "mu").test(solution);
 }
+const SUB_QUESTION_CHINESE_INDEX = {
+    "1": "一",
+    "2": "二",
+    "3": "三",
+    "4": "四",
+    "5": "五",
+    "6": "六",
+    "7": "七",
+    "8": "八",
+    "9": "九",
+};
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

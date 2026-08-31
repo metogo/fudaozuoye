@@ -53,13 +53,14 @@ describe("AI 教学内容排版", () => {
     expect(html).not.toContain("数理化");
   });
 
-  it("当前回合已有正文后不重新插入等待卡片", () => {
+  it("当前回合正文结束后显示下一步装填，不重复旧等待卡片", () => {
+    const session = analyzeMock(recognizeMock("math", "junior"), "doubao");
     const html = renderToStaticMarkup(createElement(LearningChat, {
       messages: [
         { id: "user-1", role: "user", kind: "user", text: "请继续", status: "complete", createdAt: new Date(0).toISOString() },
-        { id: "assistant-1", role: "assistant", kind: "assistant", text: "正文已经输出。", status: "complete", createdAt: new Date(1).toISOString() },
+        { id: "assistant-1", role: "assistant", kind: "assistant", text: "正文已经输出。", status: "finishing", createdAt: new Date(1).toISOString() },
       ],
-      session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: true,
+      session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: true,
       loadingLabel: "正在继续讲解", notice: "", retryLabel: "", reviewProblem: null,
       onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
       onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
@@ -67,6 +68,43 @@ describe("AI 教学内容排版", () => {
 
     expect(html).not.toContain("loading-whisper");
     expect(html).not.toContain("正在继续讲解");
+    expect(html).toContain("next-turn-placeholder");
+    expect(html).toContain("接下来会轮到你");
+    expect(html).toContain("正在把刚才的内容整理成下一步互动");
+  });
+
+  it("正文仍在流式书写时不提前显示下一步装填", () => {
+    const session = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [
+        { id: "user-1", role: "user", kind: "user", text: "请继续", status: "complete", createdAt: new Date(0).toISOString() },
+        { id: "assistant-1", role: "assistant", kind: "assistant", text: "正文仍在输出。", status: "streaming", createdAt: new Date(1).toISOString() },
+      ],
+      session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: true,
+      loadingLabel: "正在继续讲解", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).not.toContain("next-turn-placeholder");
+  });
+
+  it("完整讲解失败待重试时不同时展示旧的轮到你任务", () => {
+    const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const session = { ...base, flow: { ...base.flow, stage: "core_explanation" as const, activeGate: understandingGate("换一种讲法后，清楚一些了吗？") } };
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [{ id: "solution-error", role: "assistant", kind: "assistant", text: "残缺讲解", scopeLabel: "原题完整讲解", status: "error", createdAt: new Date(0).toISOString() }],
+      session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "完整讲解未通过内容验收", retryLabel: "重试这一步", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("完整讲解未完成");
+    expect(html).toContain("重试这一步");
+    expect(html).toContain("请先重试刚才未完成的步骤");
+    expect(html).not.toContain("轮到你了");
+    expect(html).not.toContain("再次查看刚才的板书");
   });
 
   it("图片消息正在识别时立即显示等待卡片，不把学生消息误判为 AI 输出", () => {
@@ -173,6 +211,17 @@ describe("AI 教学内容排版", () => {
     expect(prepared).toContain("$x+2=5$");
     expect(prepared).not.toContain("$$x+2=5$$");
     expect(prepared).toContain("$b = 3$");
+  });
+
+  it("把带编号标签的行内公式提升为 KaTeX 展示公式", () => {
+    const text = "递推公式：$S_{n+3}=3S_{n+1}-S_n \\tag{1}$";
+    const prepared = prepareLearningMarkdown(text);
+    const html = renderToStaticMarkup(createElement(RichLearningText, { text }));
+
+    expect(prepared).toContain("$$\nS_{n+3}=3S_{n+1}-S_n \\tag{1}\n$$");
+    expect(html).toContain("katex-display");
+    expect(html).not.toContain("katex-error");
+    expect(html).not.toContain("color:#cc0000");
   });
 
   it("把原题前缀、题干和内联选项拆成稳定结构", () => {
@@ -357,7 +406,7 @@ describe("AI 教学内容排版", () => {
       onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
       onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
     }));
-    expect(html).toContain("完整讲解传输中断");
+    expect(html).toContain("完整讲解未完成");
     expect(html).not.toContain("残缺的答案开头");
   });
 

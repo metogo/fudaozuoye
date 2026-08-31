@@ -406,7 +406,8 @@ button:disabled { cursor: not-allowed; }
 .chat-milestone,
 .chat-path,
 .chat-gate,
-.loading-whisper { animation: chat-item-enter .32s cubic-bezier(.2,.8,.2,1) both; }
+.loading-whisper,
+.next-turn-placeholder { animation: chat-item-enter .32s cubic-bezier(.2,.8,.2,1) both; }
 .chat-gate { position: relative; overflow: hidden; }
 .chat-gate::before {
   content: "";
@@ -543,6 +544,18 @@ button:disabled { cursor: not-allowed; }
   animation: loading-whisper-border 3.8s ease-in-out infinite;
 }
 .loading-whisper > * { position: relative; z-index: 1; }
+.next-turn-placeholder__status { animation: next-turn-status 1.8s ease-in-out infinite; }
+.next-turn-placeholder__preview { position: relative; overflow: hidden; }
+.next-turn-placeholder__preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.84) 48%, transparent 66%);
+  transform: translateX(-100%);
+  animation: next-turn-scan 1.9s ease-in-out infinite;
+}
+.next-turn-placeholder__skeleton { background: #e7e5e4; }
 .empty-chat { animation: page-enter .4s cubic-bezier(.2,.8,.2,1); }
 .home-chat-shell {
   position: relative;
@@ -752,6 +765,8 @@ button:disabled { cursor: not-allowed; }
   50% { opacity: .92; }
   90%, 100% { background-position: -125% 0; opacity: .42; }
 }
+@keyframes next-turn-status { 0%, 100% { opacity: .58; } 50% { opacity: 1; } }
+@keyframes next-turn-scan { 0%, 18% { transform: translateX(-100%); } 82%, 100% { transform: translateX(100%); } }
 @keyframes back-to-top-enter { from { opacity: 0; transform: translateY(8px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes tutor-sheet-enter { from { opacity: 0; transform: translateY(24px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes tutor-caret { 0%, 48% { opacity: 1; } 49%, 100% { opacity: 0; } }

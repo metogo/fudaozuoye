@@ -3,7 +3,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "回溯学｜AI 带你一步步学会",
+  title: "专注作业 持续理解",
   description: "面向学生的 K12 引导式自主学习工具",
 };
 

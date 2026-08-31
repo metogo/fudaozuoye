@@ -48,6 +48,15 @@ describe("原题答案 SSE", () => {
     expect(isDetailedSolution(missingSecond, problem)).toBe(false);
   });
 
+  it("多小问标题允许 Markdown 加粗和中文序号，不把完整讲解误判为漏题", () => {
+    const problem = "已知条件。1. 证明结论；2. 推导递推关系；3. 计算目标比值。";
+    const solution = "### 解题思路\n先梳理三个小问的承接关系：先完成证明，再建立递推式，最后代入计算。这里补充必要说明，确保方法选择和后续过程能够对应。\n### 分步推导\n**第1问：证明结论**\n1. 根据已知条件完成等价变形，并写明使用的依据。\n**第二问：推导递推关系**\n2. 把第一问结论代入定义，逐项相加得到所需递推式。\n#### **第3问：计算目标比值**\n3. 依次代入对应下标并化简，得到目标比值。\n### 结论\n三个小问均已逐项作答，结论与题目条件一致。\n### 易错提醒\n不要把推导步骤编号误认为小问编号，也不能跳过递推式的适用下标。";
+    const inspection = inspectDetailedSolution(solution, problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
   it("允许等价标题，但不降低完整内容要求", () => {
     const solution = "### 思路分析\n先判断已知量与待求量之间的关系，再选择对应公式。这里说明为什么这个公式适用，而不是只给最终数值。\n### 解题步骤\n1. 先写出题目条件对应的关系式，并把待求量单独留在等号一侧。\n2. 再代入题目给出的数值与单位，逐步完成计算，并反向检查结果是否符合题意。\n### 最终答案\n得到与题目条件一致、单位完整的最终结果。\n### 注意事项\n不要漏写单位，也不要跳过决定答案的中间关系；代入前还要检查各个量的单位是否统一。";
     expect(isDetailedSolution(solution, "求一个物理量。")).toBe(true);
