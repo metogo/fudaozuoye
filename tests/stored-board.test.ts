@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { isStoredBoardCache, isStoredBoardLesson, restoreBoardLesson } from "@/lib/learning/board-cache";
 import { enrichBoardLessonWithSafeAids, isBoardLessonSafeForRestore } from "@/lib/learning/board-aids";
+import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "@/lib/learning/board-native-fallback";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
+import { createSafeBoardLesson } from "@/lib/learning/providers/board";
 import type { BoardLesson } from "@/lib/learning/types";
 
 const contents = ["先看清题目给出的条件。", "再连接条件之间的关系。", "最后核对每一步的依据。"];
@@ -20,6 +22,19 @@ const lesson = {
 };
 
 describe("板书缓存恢复", () => {
+  it("不会恢复旧版本留下的降级板书", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const fallback = createSafeBoardLesson(session, session.flow.focus, {
+      recommended: true,
+      reason: "当前关系适合用板书展开",
+      layout: "relation",
+    });
+
+    expect(fallback.quality?.status).toBe("safe_fallback");
+    expect(isStoredBoardLesson(fallback)).toBe(false);
+    expect(restoreBoardLesson(session, fallback)).toBeNull();
+  });
+
   it("接受完整计划并拒绝会让渲染崩溃的残缺语义图", () => {
     expect(isStoredBoardLesson(lesson)).toBe(true);
     const broken = structuredClone(lesson) as unknown as { plan: { scenes: Array<Record<string, unknown>> } };
@@ -41,13 +56,50 @@ describe("板书缓存恢复", () => {
     expect(isStoredBoardLesson(unrelatedSource)).toBe(false);
   });
 
-  it("没有语义计划的旧缓存重开时也会升级为完整学习脉络", () => {
+  it("没有语义计划的旧缓存不会被强塞自引用学习脉络图", () => {
     const legacy = { ...lesson, plan: undefined } as BoardLesson;
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const upgraded = enrichBoardLessonWithSafeAids(session, legacy);
 
     expect(upgraded.plan?.scenes).toHaveLength(legacy.blocks.length);
-    expect(upgraded.plan?.scenes.some((scene) => scene.visual?.kind === "concept_graph")).toBe(true);
+    expect(upgraded.plan?.scenes.some((scene) => scene.visual?.kind === "concept_graph")).toBe(false);
+  });
+
+  it("服务端恢复旧缓存时重建为新版教学内容，不再复用 Chat 式长段落", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    session.problemGuide.approach = "### 这是 Chat 讲解\n\n第一大段解释。第二大段解释。第三大段解释，不应进入板书正文。";
+    const legacy = structuredClone(lesson) as BoardLesson;
+    legacy.blocks[1].content = "这是旧会话里直接复制的一整段聊天解释，不应该继续作为新版板书正文展示。";
+    legacy.plan!.scenes[1].content = legacy.blocks[1].content;
+
+    const restored = restoreBoardLesson(session, legacy);
+
+    expect(restored?.plan?.version).toBe(2);
+    expect(restored?.blocks).toHaveLength(6);
+    expect(restored?.plan?.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "transfer", "recap"]);
+    expect(restored?.blocks.some((block) => block.content.includes("直接复制的一整段聊天解释"))).toBe(false);
+    expect(restored?.blocks.some((block) => block.content.includes("这是 Chat 讲解"))).toBe(false);
+    expect(restored?.blocks.every((block) => block.content.length < 260)).toBe(true);
+  });
+
+  it("拒绝缺少教学职责字段的伪新版缓存", () => {
+    const fakeNative = structuredClone(lesson) as BoardLesson;
+    fakeNative.plan = { ...fakeNative.plan!, version: 2, contentRevision: 1, subject: "math", thesis: "先建立关系，再检查每一步依据。" };
+
+    expect(isStoredBoardLesson(fakeNative)).toBe(false);
+  });
+
+  it("拒绝职责重复或缺少收束环节的伪新版缓存", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const blocks = createNativeBoardBlocks(session, session.flow.focus);
+    const native = {
+      ...structuredClone(lesson),
+      blocks,
+      plan: createNativeBoardFallbackPlan(session, blocks),
+    } as BoardLesson;
+    native.plan!.scenes[4].role = "model";
+
+    expect(isStoredBoardLesson(native)).toBe(false);
   });
 
   it("结构合法但泄露答案的旧缓存不会重新展示", () => {
@@ -80,11 +132,40 @@ describe("板书缓存恢复", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const root = session.nodes.find((node) => node.id === session.rootNodeId)!;
     root.check.answer = "8";
-    const leaked = structuredClone(lesson) as BoardLesson;
+    const blocks = createNativeBoardBlocks(session, session.flow.focus);
+    const leaked = {
+      ...structuredClone(lesson),
+      blocks,
+      annotations: [],
+      plan: createNativeBoardFallbackPlan(session, blocks),
+    } as BoardLesson;
     leaked.plan!.learningGoal = "最终答案是8";
 
     expect(isStoredBoardCache({ version: 2, requestId: session.requestId, lesson: leaked }, session.requestId)).toBe(true);
     expect(restoreBoardLesson(session, leaked)).toBeNull();
+  });
+
+  it("新版缓存中的配图也必须重新核对原题依据", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const blocks = createNativeBoardBlocks(session, session.flow.focus);
+    const tampered = {
+      ...structuredClone(lesson),
+      blocks,
+      annotations: [],
+      plan: createNativeBoardFallbackPlan(session, blocks),
+    } as BoardLesson;
+    tampered.plan!.scenes[1].visual = {
+      kind: "concept_graph",
+      title: "虚构关系",
+      evidence: "题目从未给出的条件",
+      caption: "这张图的字段完整，但事实依据并不存在。",
+      direction: "left-right",
+      nodes: [{ id: "a", label: "条件", role: "given" }, { id: "b", label: "结论", role: "step" }],
+      edges: [{ from: "a", to: "b", label: "导致" }],
+    };
+
+    expect(isStoredBoardLesson(tampered)).toBe(true);
+    expect(restoreBoardLesson(session, tampered)).toBeNull();
   });
 
   it("识别 KaTeX 包装中的单字符答案泄露", () => {

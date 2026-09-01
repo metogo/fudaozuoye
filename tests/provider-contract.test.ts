@@ -630,39 +630,36 @@ describe("真实供应商协议契约", () => {
     expect(board.blocks.map((block) => block.content).join(" ")).not.toContain(session.nodes.find((node) => node.id === session.rootNodeId)?.check.answer);
   });
 
-  it("豆包板书只接受语义计划并通过独立事实审校", async () => {
+  it("豆包板书只生成紧凑正文并通过独立事实审校", async () => {
     const mock = new MockProviderAdapter("doubao");
     const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "junior"));
     let calls = 0;
     const fetcher: typeof fetch = async (_input, init) => {
       calls += 1;
-      const body = JSON.parse(String(init?.body)) as { tools?: Array<{ function?: { name?: string; parameters?: { required?: string[] } } }> };
+      const body = JSON.parse(String(init?.body)) as { tools?: Array<{ function?: { name?: string; parameters?: { required?: string[]; properties?: Record<string, unknown> } } }> };
       if (body.tools?.[0]?.function?.name === "submit_board_content") {
-        expect((body as { max_tokens?: number }).max_tokens).toBe(6000);
-        expect(body.tools[0].function.parameters?.required).toContain("visual");
-        expect(JSON.stringify(body.tools[0].function.parameters)).not.toContain('"x"');
+        expect((body as { max_tokens?: number }).max_tokens).toBe(1400);
+        expect(body.tools[0].function.parameters?.properties).toMatchObject({ title: { maxLength: 40 } });
+        expect(body.tools[0].function.parameters?.required).toEqual(["title", "blocks"]);
+        expect(JSON.stringify(body)).not.toContain("geometry_model");
+        expect(JSON.stringify(body.tools[0].function.parameters)).not.toContain('"plan"');
         const argumentsText = JSON.stringify({
           title: "把方程关系画出来",
           blocks: [
             { label: "题目任务", content: "先辨认方程里未知量和已知量各自出现的位置，再确定要保持等式两边相等。", tone: "plain" },
             { label: "核心关系", content: "把括号里的部分看成一个整体，等号表示左右两边始终保持相同的量。", tone: "key" },
             { label: "推理顺序", content: "先处理整体外面的运算，再回到整体内部，顺序不能随意颠倒。", tone: "example" },
-            { label: "易错自查", content: "每改变等式一边时都检查另一边是否做了对应变化，并保留原有数量关系。", tone: "plain" },
+            { label: "成立依据", content: "每次变形都要使用等式性质，并说明两边进行了同一种运算，而不是只写下一行。", tone: "plain" },
+            { label: "易错辨析", content: "如果只改变等式一边，原来的相等关系就会被破坏；这与正常的等式变形不同。", tone: "example" },
+            { label: "一页记忆", content: "合上板书后，复述整体、等式性质和运算顺序，再用一道同类方程检查方法。", tone: "key" },
           ],
-          visual: { kind: "none", title: "", evidence: "", caption: "", elements: [] },
-          plan: {
-            learningGoal: "看清方程变形时必须保持的数量关系",
-            sourceMessageIds: [],
-            scenes: ["extract", "connect", "derive", "verify"].map((intent) => ({
-              intent,
-              sourceMessageIds: [],
-              visual: { kind: "none", title: "", evidence: "", caption: "" },
-            })),
-          },
         });
         return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ function: { name: "submit_board_content", arguments: argumentsText } }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
-      return chatJsonResponse({ correct: true, grounded: true, noAnswerLeak: true, markingRelevant: true, visualCorrect: true, visualGrounded: true, reason: "正文、标记和关系示意均与题干条件一致。" });
+      expect(body.tools?.[0]?.function?.name).toBe("submit_board_audit");
+      expect((body as { max_tokens?: number }).max_tokens).toBe(320);
+      const auditArguments = JSON.stringify({ correct: true, grounded: true, noAnswerLeak: true, markingRelevant: true, visualCorrect: true, visualGrounded: true, contentDistinct: true, teachingComplete: true, aidUseful: true, reason: "正文、标记和关系示意均与题干条件一致。" });
+      return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ function: { name: "submit_board_audit", arguments: auditArguments } }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
     };
     const board = await new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem", section: "keyClue" }, { recommended: true, reason: "数量关系适合用示意图呈现。", layout: "relation" });
     expect(calls).toBe(2);

@@ -14,7 +14,7 @@ import {
   type EvidenceSource,
 } from "./blueprint";
 import type { ProviderConfig } from "./config";
-import { addSafeBoardAnnotations, boardAnnotationsPrompt, boardAuditPrompt, boardAuditSystemPrompt, boardContentTool, boardLessonPrompt, boardLessonSystemPrompt, createSafeBoardLesson, parseBoardAnnotations, parseBoardAudit, parseBoardContent, recoverBoardContentPlan } from "./board";
+import { addSafeBoardAnnotations, boardAnnotationsPrompt, boardAuditPrompt, boardAuditSystemPrompt, boardAuditTool, boardContentTool, boardCoreContentSystemPrompt, boardLessonPrompt, boardLessonSystemPrompt, createSafeBoardLesson, parseBoardAnnotations, parseBoardAudit, parseBoardContent, recoverBoardContentPlan } from "./board";
 import {
   boardSuggestionTool,
   chatBody,
@@ -511,13 +511,21 @@ export class LiveProviderAdapter implements ProviderAdapter {
     if (!suggestion.recommended) throw new Error("当前步骤不需要切换板书讲解");
     try {
       const lesson = await this.generateBoardCandidate(session, scope, suggestion, context);
-      const audit = parseBoardAudit(parseJsonObject(await this.textRequest(boardAuditSystemPrompt(), boardAuditPrompt(session, scope, lesson, context), undefined, true, 15_000)));
+      const auditPrompt = boardAuditPrompt(session, scope, lesson, context);
+      const auditRaw = this.config.protocol === "chat-completions"
+        ? await this.toolRequest(boardAuditSystemPrompt(), auditPrompt, boardAuditTool(), 320, 8_000)
+        : await this.textRequest(boardAuditSystemPrompt(), auditPrompt, undefined, true, 8_000);
+      const audit = parseBoardAudit(parseJsonObject(auditRaw));
       if (audit.passed) return lesson;
       console.warn("板书候选未通过事实审校，已使用可验证的安全板书", audit.reason);
-      return createSafeBoardLesson(session, scope, suggestion);
+      return createSafeBoardLesson(session, scope, suggestion, `完整板书未通过内容验收：${audit.reason}`);
     } catch (error) {
-      console.warn("板书生成未通过结构校验，已使用可验证的安全板书", error instanceof Error ? error.message : "未知错误");
-      return createSafeBoardLesson(session, scope, suggestion);
+      const reason = error instanceof Error ? error.message : "未知错误";
+      console.warn("板书生成未通过结构校验，已使用可验证的安全板书", reason);
+      const fallbackReason = /超时|timeout/i.test(reason)
+        ? "完整板书生成超时，当前内容已降级。"
+        : "完整板书的结构或事实校验未通过，当前内容已降级。";
+      return createSafeBoardLesson(session, scope, suggestion, fallbackReason);
     }
   }
 
@@ -526,19 +534,13 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const prompt = boardLessonPrompt(session, scope, suggestion, context);
     if (this.config.protocol === "chat-completions") {
       const value = parseJsonObject(await this.toolRequest(
-        `${system}\n先只输出板书正文、教学顺序与语义配图，不输出重点标记。`,
-        `${prompt}\n旧版 visual 固定返回 kind=none，其余文字留空、elements 为空数组。`,
+        boardCoreContentSystemPrompt(),
+        `${prompt}\n优先使用 5 个教学单元，直接调用指定函数。`,
         boardContentTool(),
-        6000,
-        30_000,
+        1400,
+        18_000,
       ));
-      let content: BoardLesson;
-      try { content = parseBoardContent(value, session, suggestion, context); }
-      catch (error) {
-        console.warn("板书语义计划不合法，保留已校验正文并改用本地教学顺序", error instanceof Error ? error.message : "结构不合法");
-        content = recoverBoardContentPlan(value, session, suggestion);
-      }
-      return addSafeBoardAnnotations(content, session);
+      return addSafeBoardAnnotations(recoverBoardContentPlan(value, session, suggestion), session);
     }
     const parseContent = (value: JsonObject) => parseBoardContent(value, session, suggestion, context);
     const contentSystem = `${system}\n先只输出板书正文与可选配图，不输出重点标记。`;

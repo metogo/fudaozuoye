@@ -1,12 +1,6 @@
-const flattenCascadeLayers = {
-  postcssPlugin: "flatten-cascade-layers-for-legacy-mobile",
-  OnceExit(root) {
-    root.walkAtRules("layer", (rule) => {
-      if (rule.nodes?.length) rule.replaceWith(...rule.nodes);
-      else rule.remove();
-    });
-  },
-};
+import { fileURLToPath } from "node:url";
+
+const flattenCascadeLayers = fileURLToPath(new URL("./postcss-flatten-cascade-layers.cjs", import.meta.url));
 
 const postcssConfig = {
   plugins: ["@tailwindcss/postcss", flattenCascadeLayers],

@@ -184,17 +184,29 @@ export interface BoardFormulaVisual {
 
 export type BoardSemanticVisual = BoardConceptVisual | BoardGeometryVisual | BoardFunctionVisual | BoardFormulaVisual;
 
+export type BoardTeachingSubject = "math" | "science" | "language" | "humanities" | "general";
+export type BoardTeachingRole = "orient" | "model" | "reason" | "misconception" | "transfer" | "recap";
+
 export interface BoardScene {
   id: string;
   intent: BoardSceneIntent;
+  role?: BoardTeachingRole;
   title: string;
   content: string;
   tone: BoardBlock["tone"];
+  purpose?: string;
+  evidence?: string;
+  why?: string;
+  selfCheck?: string;
   sourceMessageIds: string[];
   visual?: BoardSemanticVisual | null;
 }
 
 export interface BoardPlan {
+  version?: 2;
+  contentRevision?: 1;
+  subject?: BoardTeachingSubject;
+  thesis?: string;
   learningGoal: string;
   sourceMessageIds: string[];
   scenes: BoardScene[];
@@ -208,7 +220,45 @@ export interface BoardLesson {
   annotations: BoardAnnotation[];
   visual?: BoardVisual | null;
   plan?: BoardPlan;
+  quality?: {
+    status: "safe_fallback";
+    reason: string;
+  };
   returnLabel: string;
+}
+
+export type BoardWorkspaceMode = "overview" | "derive" | "recall";
+
+export interface BoardDocumentNode {
+  id: string;
+  sceneIndex: number;
+  title: string;
+  intent: BoardSceneIntent;
+  prerequisiteIds: string[];
+  dependentIds: string[];
+  sourceMessageIds: string[];
+  visualKind?: BoardSemanticVisual["kind"];
+}
+
+export interface BoardDocument {
+  version: 1;
+  key: string;
+  title: string;
+  learningGoal: string;
+  nodes: BoardDocumentNode[];
+}
+
+export interface BoardNodeRecallState {
+  nodeId: string;
+  revealed: boolean;
+}
+
+export interface BoardWorkspaceState {
+  version: 1;
+  documentKey: string;
+  mode: BoardWorkspaceMode;
+  activeNodeId: string;
+  nodes: BoardNodeRecallState[];
 }
 
 export interface LearningGateOption {

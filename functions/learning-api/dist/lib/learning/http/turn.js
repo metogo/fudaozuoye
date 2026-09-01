@@ -5,6 +5,7 @@ const api_1 = require("../api");
 const flow_1 = require("../flow");
 const graph_1 = require("../graph");
 const providers_1 = require("../providers");
+const board_1 = require("../providers/board");
 const provider_validation_1 = require("../providers/provider-validation");
 const assessment_1 = require("../providers/assessment");
 const request_guards_1 = require("../request-guards");
@@ -187,14 +188,17 @@ async function handleChoice(session, gateId, choice, boardContext, adapter, send
     if (choice === "view_board") {
         requireGate(session, gateId);
         const suggestion = requestedBoardSuggestion(session);
-        send("flow.progress", { key: "board", label: "正在把条件、关系和易错点整理成一张板书" });
+        send("board.lesson", (0, board_1.createInstantBoardLesson)(session, session.flow.focus, suggestion));
+        send("flow.progress", { key: "board", label: "板书已经打开，正在补充更贴合这道题的内容" });
         try {
-            send("board.lesson", await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 60_000, () => adapter.cancelPendingRequests()));
+            const enhanced = await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 30_000, () => adapter.cancelPendingRequests());
+            if (enhanced.quality?.status !== "safe_fallback")
+                send("board.lesson", enhanced);
         }
         catch (error) {
             if (isAbortError(error))
                 throw error;
-            send("presentation.unavailable", { message: "这次板书没有通过可靠性检查，仍可在当前对话继续学习" });
+            console.warn("完整板书增强未完成，继续使用已展示的即时板书", error instanceof Error ? error.message : "未知错误");
         }
         emitState(touch(session), send);
         return;

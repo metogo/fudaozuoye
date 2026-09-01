@@ -3,6 +3,7 @@ import { postTurn } from "@/lib/learning/http/turn";
 import { answerGate, understandingGate } from "@/lib/learning/flow";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { MockProviderAdapter } from "@/lib/learning/providers/adapter";
+import { createInstantBoardLesson } from "@/lib/learning/providers/board";
 import { openSession, sealSession } from "@/lib/learning/server-state";
 import type { ClientSessionState, LearningTurnInput } from "@/lib/learning/types";
 
@@ -154,7 +155,7 @@ describe("教育 Chat 学习回合", () => {
     const board = event<{ title: string; blocks: Array<{ id: string; content: string }>; annotations: Array<{ blockId: string; target: string; reason: string }> }>(body, "board.lesson");
 
     expect(board.title).toBeTruthy();
-    expect(board.blocks).toHaveLength(5);
+    expect(board.blocks).toHaveLength(6);
     expect(board.annotations.length).toBeGreaterThanOrEqual(3);
     expect(board.annotations.every((annotation) => board.blocks.find((block) => block.id === annotation.blockId)?.content.includes(annotation.target))).toBe(true);
     expect(board.annotations.every((annotation) => annotation.reason.length >= 8)).toBe(true);
@@ -162,7 +163,32 @@ describe("教育 Chat 学习回合", () => {
     expect(next.session.flow.stage).toBe("core_explanation");
   });
 
-  it("模型板书生成失败时使用安全板书，当前互动与学习进度保持不变", async () => {
+  it("模型增强尚未返回时已经先展示可学习的即时板书", async () => {
+    let releaseEnhancement: (() => void) | undefined;
+    vi.spyOn(MockProviderAdapter.prototype, "generateBoardLesson").mockImplementation((session, scope, suggestion) => new Promise((resolve) => {
+      releaseEnhancement = () => resolve(createInstantBoardLesson(session, scope, suggestion));
+    }));
+    const started = await startState("math", "primary");
+    const gate = started.session.flow.activeGate!;
+    const response = await postTurn(request(started.stateToken, { type: "choose", gateId: gate.id, choice: "view_board" }));
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let earlyBody = "";
+    while (!earlyBody.includes("event: board.lesson")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      earlyBody += decoder.decode(chunk.value, { stream: true });
+    }
+
+    const instant = event<{ quality?: unknown; blocks: unknown[] }>(earlyBody, "board.lesson");
+    expect(instant.quality).toBeUndefined();
+    expect(instant.blocks).toHaveLength(6);
+    expect(earlyBody).not.toContain("当前是安全学习框架");
+    releaseEnhancement?.();
+    while (!(await reader.read()).done) { /* drain */ }
+  });
+
+  it("模型板书生成失败时保留即时板书，当前互动与学习进度保持不变", async () => {
     enableFailingLiveProvider();
     const base = analyzeMock(recognizeMock("math", "junior"), "doubao");
     const gate = understandingGate("核心关系听懂了吗？");
@@ -170,6 +196,7 @@ describe("教育 Chat 学习回合", () => {
     const body = await turn(sealSession(session), { type: "choose", gateId: gate.id, choice: "view_board" });
     const next = event<ClientSessionState>(body, "flow.update");
     expect(body).toContain("event: board.lesson");
+    expect(eventNames(body).filter((name) => name === "board.lesson")).toHaveLength(1);
     expect(body).not.toContain("event: presentation.unavailable");
     expect(next.session.flow.activeGate?.id).toBe(gate.id);
     expect(next.session.flow.stage).toBe("core_explanation");

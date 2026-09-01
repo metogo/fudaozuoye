@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { learningTextToPlainText } from "@/lib/learning/presentation";
-import type { BoardAnnotation, BoardConversationMessage, BoardLesson, ChatMessage } from "@/lib/learning/types";
+import type { BoardConversationMessage, BoardDocument, BoardLesson, BoardWorkspaceState, ChatMessage } from "@/lib/learning/types";
 import { BoardVisualFigure } from "./board-visual";
-import { BoardSceneVisual } from "./board-scene-visual";
+import { BoardWorkspace } from "./board-workspace";
 import { ArrowIcon, ChevronIcon, NetworkIcon } from "./icons";
 import { RichLearningText } from "./rich-learning-text";
 import { StreamingIndicator } from "./streaming-indicator";
@@ -19,26 +18,22 @@ interface LearningBoardProps {
   loadingLabel: string;
   notice: string;
   retryLabel: string;
+  document: BoardDocument;
+  workspaceState: BoardWorkspaceState;
+  onWorkspaceChange: (next: BoardWorkspaceState) => void;
   onAsk: (text: string) => void;
+  onRegenerate: () => void;
   onClose: () => void;
   onRetry: () => void;
 }
 
-const emptyBoardAnnotations: BoardAnnotation[] = [];
-
-export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loadingLabel, notice, retryLabel, onAsk, onClose, onRetry }: LearningBoardProps) {
-  const annotations = lesson.annotations ?? emptyBoardAnnotations;
+export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loadingLabel, notice, retryLabel, document: boardDocument, workspaceState, onWorkspaceChange, onAsk, onRegenerate, onClose, onRetry }: LearningBoardProps) {
   const [input, setInput] = useState("");
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [hasUnreadAnswer, setHasUnreadAnswer] = useState(false);
   const [questionDockHeight, setQuestionDockHeight] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
-  const [activeScene, setActiveScene] = useState(0);
-  const [allScenesVisible, setAllScenesVisible] = useState(true);
-  const [replayKey, setReplayKey] = useState(0);
-  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
-  const reducedMotion = useReducedMotion();
   const boardRef = useRef<HTMLElement>(null);
   const dialogueRef = useRef<HTMLDivElement>(null);
   const questionDockRef = useRef<HTMLDivElement>(null);
@@ -109,8 +104,6 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
   const quote = loadingLearningQuotes[quoteIndex % loadingLearningQuotes.length];
   const plan = lesson.plan;
   const showLegacyVisual = lesson.visual && !legacyVisualCovered(lesson.visual, plan) ? lesson.visual : null;
-  const visibleScenes = plan ? plan.scenes.slice(0, allScenesVisible ? plan.scenes.length : activeScene + 1) : [];
-  const citedMessages = plan ? sourceMessages.filter((message) => plan.sourceMessageIds.includes(message.id)) : [];
   const togglePanel = () => {
     if (!panelExpanded) setHasUnreadAnswer(false);
     setPanelExpanded((value) => !value);
@@ -143,28 +136,12 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
 
     <div className="board-scroll min-h-0 flex-1 overflow-y-auto px-4 pt-6 sm:px-7 sm:pt-10" style={{ paddingBottom: questionDockHeight > 0 ? questionDockHeight + 44 : panelExpanded ? 280 : 112 }}>
       <article className="mx-auto w-full max-w-4xl">
-        <div className="board-overview mb-7 max-w-2xl rounded-[20px] border border-emerald-950/10 bg-white/45 p-4"><p className="text-[9px] font-semibold tracking-[.14em] text-emerald-900">{plan ? "本次板书要帮你看清" : "完整板书 · 关系总览"}</p><div className="mt-2 text-xs leading-6 text-stone-600"><RichLearningText text={plan?.learningGoal ?? lesson.subtitle} compact/></div>{plan && <p className="mt-3 flex items-center gap-2 border-t border-emerald-950/10 pt-3 text-[10px] text-stone-500"><span className="h-1.5 w-1.5 rounded-full bg-amber-500"/>整条脉络已展开 · {plan.scenes.filter((scene) => scene.visual).length} 处辅助理解</p>}{citedMessages.length > 0 && <SourceTrail label="板书承接了" messages={citedMessages.slice(-3)} expandedId={expandedSourceId} onToggle={(id) => setExpandedSourceId((current) => current === id ? null : id)}/>} {annotations.length > 0 && <p className="mt-3 border-t border-emerald-950/10 pt-3 text-[10px] leading-5 text-stone-500">圈、线、框只标记关键条件、核心关系和易错边界；图形只表达有题目依据的关系。</p>}</div>
-        {showLegacyVisual && <BoardVisualFigure visual={showLegacyVisual}/>}
-        {plan ? <div className="board-scene-list">{visibleScenes.map((scene, index) => {
-          const blockAnnotations = annotations.filter((item) => item.blockId === scene.id);
-          const sceneSources = sourceMessages.filter((message) => scene.sourceMessageIds.includes(message.id));
-          return <motion.section key={`${scene.id}-${replayKey}`} initial={reducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.38, delay: reducedMotion || !allScenesVisible ? 0 : Math.min(index * 0.07, 0.28), ease: [0.2, 0.8, 0.2, 1] }} className={`board-block board-block--${scene.tone}`}>
-            <div className="flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-900/20 bg-[#f1f2ea] text-[10px] font-bold text-emerald-950">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0"><p className="text-[9px] font-semibold tracking-[.12em] text-amber-700">{sceneIntentLabel(scene.intent)}</p><h2 className="mt-1 text-sm font-bold text-emerald-950">{scene.title}</h2></div></div>
-            <div className="mt-4 whitespace-pre-wrap text-[17px] font-medium leading-8 tracking-[-.015em] text-stone-800 sm:text-xl sm:leading-9"><MarkedBoardText content={scene.content} annotations={blockAnnotations}/></div>
-            {sceneSources.length > 0 && <SourceTrail label="这一步承接" messages={sceneSources} expandedId={expandedSourceId} onToggle={(id) => setExpandedSourceId((current) => current === id ? null : id)}/>}
-            {scene.visual && <BoardSceneVisual visual={scene.visual}/>}
-            {blockAnnotations.length > 0 && <div className="mt-4 space-y-2" aria-label="重点标记说明">{blockAnnotations.map((annotation) => <div key={`${annotation.blockId}-${annotation.target}`} className="board-annotation-note"><span>{markLabel(annotation.kind)}</span><RichLearningText text={annotation.reason} compact/></div>)}</div>}
-          </motion.section>;
-        })}<SceneControls active={activeScene} count={plan.scenes.length} allVisible={allScenesVisible} onPrevious={() => { setAllScenesVisible(false); setActiveScene((value) => Math.max(0, value - 1)); }} onNext={() => setActiveScene((value) => Math.min(plan.scenes.length - 1, value + 1))} onAll={() => setAllScenesVisible(true)} onReplay={() => { setAllScenesVisible(false); setActiveScene(0); setReplayKey((value) => value + 1); }}/></div> : <div className={`board-grid board-grid--${lesson.layout}`}>
-          {lesson.blocks.map((block, index) => {
-            const blockAnnotations = annotations.filter((item) => item.blockId === block.id);
-            return <section key={block.id} className={`board-block board-block--${block.tone}`}>
-            <div className="flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-900/20 bg-[#f1f2ea] text-[10px] font-bold text-emerald-950">{String(index + 1).padStart(2, "0")}</span><h2 className="text-sm font-bold text-emerald-950">{block.label}</h2></div>
-            <div className="mt-4 whitespace-pre-wrap text-[17px] font-medium leading-8 tracking-[-.015em] text-stone-800 sm:text-xl sm:leading-9"><MarkedBoardText content={block.content} annotations={blockAnnotations}/></div>
-            {blockAnnotations.length > 0 && <div className="mt-4 space-y-2" aria-label="重点标记说明">{blockAnnotations.map((annotation) => <div key={`${annotation.blockId}-${annotation.target}`} className="board-annotation-note"><span>{markLabel(annotation.kind)}</span><RichLearningText text={annotation.reason} compact/></div>)}</div>}
-          </section>;
-          })}
+        {lesson.quality?.status === "safe_fallback" && <div role="status" className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1"><p className="text-xs font-bold">当前是安全学习框架，不是完整板书</p><p className="mt-1 text-[11px] leading-5 text-amber-900/75">{lesson.quality.reason} 已保留原学习位置，你可以重试完整板书。</p></div>
+          <button type="button" disabled={busy} onClick={onRegenerate} className="min-h-11 shrink-0 rounded-xl bg-amber-950 px-4 text-xs font-semibold text-white disabled:opacity-40">重试完整板书</button>
         </div>}
+        {showLegacyVisual && <BoardVisualFigure visual={showLegacyVisual}/>}
+        <BoardWorkspace document={boardDocument} lesson={lesson} sourceMessages={sourceMessages} state={workspaceState} onChange={onWorkspaceChange}/>
       </article>
     </div>
 
@@ -210,72 +187,9 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
   </section>;
 }
 
-function SourceTrail({ label, messages, expandedId, onToggle }: { label: string; messages: BoardConversationMessage[]; expandedId: string | null; onToggle: (id: string) => void }) {
-  return <div className="board-source-trail" aria-label="板书内容来源"><span>{label}</span>{messages.map((message) => <div className={`board-source-item${expandedId === message.id ? " board-source-item--expanded" : ""}`} key={message.id}><button type="button" aria-expanded={expandedId === message.id} onClick={() => onToggle(message.id)}>{message.scopeLabel ?? (message.role === "user" ? "你的提问" : "刚才的讲解")}</button>{expandedId === message.id && <div className="board-source-excerpt"><RichLearningText text={message.text.slice(0, 180)} compact/>{message.text.length > 180 && "…"}</div>}</div>)}</div>;
-}
-
-function SceneControls({ active, count, allVisible, onPrevious, onNext, onAll, onReplay }: { active: number; count: number; allVisible: boolean; onPrevious: () => void; onNext: () => void; onAll: () => void; onReplay: () => void }) {
-  const atEnd = active >= count - 1;
-  const controlsRef = useRef<HTMLElement>(null);
-  const previousModeRef = useRef(allVisible);
-  useEffect(() => {
-    if (previousModeRef.current === allVisible) return;
-    previousModeRef.current = allVisible;
-    const frame = window.requestAnimationFrame(() => controlsRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus({ preventScroll: true }));
-    return () => window.cancelAnimationFrame(frame);
-  }, [allVisible]);
-  return <nav ref={controlsRef} className={`board-scene-controls${allVisible ? " board-scene-controls--overview" : ""}`} aria-label="板书步骤控制">
-    <div><span>{allVisible ? `完整脉络 · ${count} 个环节` : `正在聚焦第 ${active + 1} / ${count} 个环节`}</span><i style={{ width: `${allVisible ? 100 : (active + 1) / count * 100}%` }}/></div>
-    {allVisible ? <div className="board-scene-controls__overview"><button type="button" onClick={onReplay}>按环节聚焦学习</button></div> : <div>
-      <button type="button" onClick={onPrevious} disabled={active === 0}>上一个环节</button>
-      {!atEnd ? <button type="button" onClick={onNext} className="board-scene-controls__primary">聚焦下一个</button> : <button type="button" onClick={onAll} className="board-scene-controls__primary">回到完整脉络</button>}
-      <button type="button" onClick={onAll}>完整脉络</button>
-    </div>}
-  </nav>;
-}
-
-function sceneIntentLabel(intent: NonNullable<BoardLesson["plan"]>["scenes"][number]["intent"]): string {
-  if (intent === "extract") return "提取条件";
-  if (intent === "connect") return "连接关系";
-  if (intent === "derive") return "展开推理";
-  if (intent === "compare") return "对照辨析";
-  return "回看验证";
-}
-
 function legacyVisualCovered(visual: NonNullable<BoardLesson["visual"]>, plan?: BoardLesson["plan"]): boolean {
   const semanticKind = visual.kind === "geometry" ? "geometry_model" : visual.kind === "relation" || visual.kind === "process" ? "concept_graph" : null;
   return Boolean(semanticKind && plan?.scenes.some((scene) => scene.visual?.kind === semanticKind));
-}
-
-function MarkedBoardText({ content, annotations }: { content: string; annotations: BoardAnnotation[] }) {
-  const marks = annotations.map((annotation) => {
-    const index = content.indexOf(annotation.target);
-    const range = index >= 0 ? expandProtectedRange(content, index, index + annotation.target.length) : null;
-    return range ? { annotation, start: range.start, end: range.end } : null;
-  }).filter((item): item is { annotation: BoardAnnotation; start: number; end: number } => Boolean(item)).sort((a, b) => a.start - b.start);
-  if (marks.length === 0) return <RichLearningText text={content}/>;
-  const output: ReactNode[] = [];
-  let cursor = 0;
-  marks.forEach(({ annotation, start, end }) => {
-    if (start < cursor) return;
-    const before = content.slice(cursor, start);
-    if (before) output.push(<RichLearningText key={`text-${cursor}`} text={before} compact/>);
-    output.push(<mark key={`${annotation.blockId}-${annotation.target}`} title={learningTextToPlainText(annotation.reason)} className={`board-mark board-mark--${annotation.kind}`}><RichLearningText text={content.slice(start, end)} compact/></mark>);
-    cursor = end;
-  });
-  const remainder = content.slice(cursor);
-  if (remainder) output.push(<RichLearningText key={`text-${cursor}`} text={remainder} compact/>);
-  return <>{output}</>;
-}
-
-function expandProtectedRange(content: string, start: number, end: number): { start: number; end: number } {
-  const protectedRanges = Array.from(content.matchAll(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$|`[^`\n]*`/g)).map((match) => ({ start: match.index!, end: match.index! + match[0].length }));
-  const containing = protectedRanges.find((range) => start >= range.start && end <= range.end);
-  return containing ?? { start, end };
-}
-
-function markLabel(kind: BoardAnnotation["kind"]): string {
-  return kind === "circle" ? "圈出" : kind === "underline" ? "划线" : "框住";
 }
 
 function recentBoardMessages(messages: ChatMessage[]): ChatMessage[] {

@@ -4,19 +4,21 @@ import { normalizedAnswerMath, protectedAnswerVariants, protectedShortAnswers, s
 export function enrichBoardPlanWithSafeAids(session: LearningSession, plan: BoardPlan, options: { contextualAids?: boolean } = {}): BoardPlan {
   const scenes = plan.scenes.map((scene) => ({ ...scene }));
   const existingKeys = new Set(scenes.flatMap((scene) => scene.visual ? [visualKey(scene.visual)] : []));
-  const candidates = options.contextualAids === false ? [lessonPathVisual(plan)] : safeAidCandidates(session, plan);
-  const preferredIndexes: Record<BoardSemanticVisual["kind"], number> = {
-    concept_graph: 0,
-    geometry_model: 1,
-    formula_chain: 2,
-    function_plot: 2,
+  const candidates = options.contextualAids === false ? [] : safeAidCandidates(session);
+  const preferredRoles: Record<BoardSemanticVisual["kind"], string[]> = {
+    concept_graph: ["model", "orient"],
+    geometry_model: ["model", "reason"],
+    formula_chain: ["reason", "model"],
+    function_plot: ["model", "reason"],
   };
   for (const visual of candidates) {
     if (existingKeys.has(visualKey(visual))) continue;
     const sameKindCount = scenes.filter((scene) => scene.visual?.kind === visual.kind).length;
     if (visual.kind !== "concept_graph" && sameKindCount > 0 || visual.kind === "concept_graph" && sameKindCount >= 2) continue;
-    const preferred = Math.min(preferredIndexes[visual.kind], scenes.length - 1);
-    const target = scenes[preferred]?.visual ? scenes.findIndex((scene) => !scene.visual) : preferred;
+    const targetByPurpose = preferredRoles[visual.kind]
+      .map((role) => scenes.findIndex((scene) => scene.role === role && !scene.visual))
+      .find((index) => index !== undefined && index >= 0);
+    const target = targetByPurpose ?? scenes.findIndex((scene) => !scene.visual);
     if (target < 0) break;
     scenes[target] = { ...scenes[target], visual };
     existingKeys.add(visualKey(visual));
@@ -53,13 +55,11 @@ function safePlanFromLegacyLesson(lesson: BoardLesson): BoardPlan {
   };
 }
 
-function safeAidCandidates(session: LearningSession, plan: BoardPlan): BoardSemanticVisual[] {
+function safeAidCandidates(session: LearningSession): BoardSemanticVisual[] {
   const triangle = rightTriangleContext(session.problem.text);
   const root = session.nodes.find((node) => node.id === session.rootNodeId);
-  if (!root?.check.answer.trim()) return [lessonPathVisual(plan)];
-  if (!triangle) return [lessonPathVisual(plan)];
+  if (!root?.check.answer.trim() || !triangle) return [];
   return [
-    lessonPathVisual(plan),
     triangleGeometryVisual(triangle),
     triangleFormulaVisual(triangle),
     triangleConceptVisual(triangle),
@@ -127,23 +127,6 @@ function triangleConceptVisual(context: RightTriangleContext): BoardConceptVisua
   };
 }
 
-function lessonPathVisual(plan: BoardPlan): BoardConceptVisual {
-  const selected = plan.scenes.length <= 4 ? plan.scenes : [plan.scenes[0], plan.scenes[1], plan.scenes[2], plan.scenes[plan.scenes.length - 1]];
-  const nodes = selected.map((scene, index) => ({
-    id: `stage_${index + 1}`,
-    label: scene.title.slice(0, 24),
-    role: (index === 0 ? "given" : index === selected.length - 1 ? "check" : index === 1 ? "relation" : "step") as "given" | "relation" | "step" | "check",
-  }));
-  return {
-    kind: "concept_graph",
-    title: "先看整条学习脉络",
-    evidence: `本页板书：${selected.map((scene) => scene.title).join("、")}`,
-    caption: "每一块都承接上一块：先辨认信息角色，再连接关系，最后回到检查；可以直接向下阅读，不必逐页解锁。",
-    direction: "left-right",
-    nodes,
-    edges: nodes.slice(0, -1).map((node, index) => ({ from: node.id, to: nodes[index + 1].id, label: "连接" })),
-  };
-}
 
 function triangleGeometryVisual(context: RightTriangleContext): BoardGeometryVisual {
   const labels = context.triangle.split("");
@@ -206,7 +189,7 @@ function boardLessonVisibleText(lesson: BoardLesson): string {
     ...lesson.blocks.flatMap((block) => [block.label, block.content]),
     ...lesson.annotations.flatMap((annotation) => [annotation.target, annotation.reason]),
     ...(lesson.visual ? [lesson.visual.title, lesson.visual.evidence, lesson.visual.caption, ...lesson.visual.elements.map((element) => element.label ?? "")] : []),
-    ...(lesson.plan ? [lesson.plan.learningGoal, ...lesson.plan.scenes.flatMap((scene) => [scene.title, scene.content, ...semanticVisualText(scene.visual)])] : []),
+    ...(lesson.plan ? [lesson.plan.thesis ?? "", lesson.plan.learningGoal, ...lesson.plan.scenes.flatMap((scene) => [scene.title, scene.content, scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? "", ...semanticVisualText(scene.visual)])] : []),
   ].join("\n");
 }
 

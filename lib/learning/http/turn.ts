@@ -2,6 +2,7 @@ import { advanceAfterMastery, fail } from "../api";
 import { answerGate, flowScopeLabel, needsHelpGate, postSolutionGate, removeRepeatedSolutionAction, solutionReviewGate, understandingGate } from "../flow";
 import { mergeDirectKnowledge, mergeExpansion, nextReadyNode } from "../graph";
 import { getSessionProviderAdapter } from "../providers";
+import { createInstantBoardLesson } from "../providers/board";
 import { PENDING_ORIGINAL_ANSWER } from "../providers/provider-validation";
 import { safeAssessmentFeedback } from "../providers/assessment";
 import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
@@ -182,12 +183,14 @@ async function handleChoice(session: LearningSession, gateId: string, choice: Le
   if (choice === "view_board") {
     requireGate(session, gateId);
     const suggestion = requestedBoardSuggestion(session);
-    send("flow.progress", { key: "board", label: "正在把条件、关系和易错点整理成一张板书" });
+    send("board.lesson", createInstantBoardLesson(session, session.flow.focus, suggestion));
+    send("flow.progress", { key: "board", label: "板书已经打开，正在补充更贴合这道题的内容" });
     try {
-      send("board.lesson", await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 60_000, () => adapter.cancelPendingRequests()));
+      const enhanced = await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 30_000, () => adapter.cancelPendingRequests());
+      if (enhanced.quality?.status !== "safe_fallback") send("board.lesson", enhanced);
     } catch (error) {
       if (isAbortError(error)) throw error;
-      send("presentation.unavailable", { message: "这次板书没有通过可靠性检查，仍可在当前对话继续学习" });
+      console.warn("完整板书增强未完成，继续使用已展示的即时板书", error instanceof Error ? error.message : "未知错误");
     }
     emitState(touch(session), send);
     return;

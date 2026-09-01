@@ -9,37 +9,53 @@ import type {
   BoardPlan,
   BoardScene,
   BoardSemanticVisual,
+  BoardTeachingRole,
+  BoardTeachingSubject,
   LearningSession,
 } from "../types";
 import katex from "katex";
 import { enrichBoardPlanWithSafeAids } from "../board-aids";
+import { createNativeBoardFallbackPlan, inferBoardSubject } from "../board-native-fallback";
 import { assertBalancedLearningMarkup } from "../presentation";
 import { normalizedAnswerMath, protectedAnswerVariants, protectedShortAnswers, shortProtectedAnswerLeak } from "./answer-protection";
 import type { JsonObject } from "./model-support";
 
 const sceneIntents = ["extract", "connect", "derive", "compare", "verify"] as const;
+const teachingSubjects = ["math", "science", "language", "humanities", "general"] as const;
+const teachingRoles = ["orient", "model", "reason", "misconception", "transfer", "recap"] as const;
 
-export function boardPlanSchema(): JsonObject {
+export function boardPlanSchema(options: { includeVisuals?: boolean } = {}): JsonObject {
+  const includeVisuals = options.includeVisuals !== false;
+  const sceneProperties = {
+    intent: { type: "string", enum: [...sceneIntents] },
+    role: { type: "string", enum: [...teachingRoles] },
+    purpose: { type: "string", maxLength: 48 },
+    evidence: { type: "string", maxLength: 80 },
+    why: { type: "string", maxLength: 100 },
+    selfCheck: { type: "string", maxLength: 48 },
+    sourceMessageIds: { type: "array", maxItems: 4, items: { type: "string" } },
+    ...(includeVisuals ? { visual: semanticVisualSchema() } : {}),
+  };
   return {
     type: "object",
     properties: {
-      learningGoal: { type: "string" },
+      version: { const: 2 },
+      contentRevision: { const: 1 },
+      subject: { type: "string", enum: [...teachingSubjects] },
+      thesis: { type: "string", maxLength: 120 },
+      learningGoal: { type: "string", maxLength: 80 },
       sourceMessageIds: { type: "array", maxItems: 12, items: { type: "string" } },
       scenes: {
-        type: "array", minItems: 3, maxItems: 6,
+        type: "array", minItems: 5, maxItems: 6,
         items: {
           type: "object",
-          properties: {
-            intent: { type: "string", enum: [...sceneIntents] },
-            sourceMessageIds: { type: "array", maxItems: 4, items: { type: "string" } },
-            visual: semanticVisualSchema(),
-          },
-          required: ["intent", "sourceMessageIds", "visual"],
+          properties: sceneProperties,
+          required: ["intent", "role", "purpose", "evidence", "why", "selfCheck", "sourceMessageIds", ...(includeVisuals ? ["visual"] : [])],
           additionalProperties: false,
         },
       },
     },
-    required: ["learningGoal", "sourceMessageIds", "scenes"],
+    required: ["version", "contentRevision", "subject", "thesis", "learningGoal", "sourceMessageIds", "scenes"],
     additionalProperties: false,
   };
 }
@@ -52,19 +68,27 @@ export function parseBoardPlan(
 ): BoardPlan {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("板书教学计划结构不合法");
   const plan = value as JsonObject;
+  if (plan.version !== undefined && plan.version !== 2) throw new Error("板书教学计划版本不合法");
+  const native = plan.version === 2;
+  if (native && plan.contentRevision !== 1) throw new Error("板书教学内容版本不合法");
   const learningGoal = text(plan.learningGoal, "板书学习目标", 4, 80);
   assertBalancedLearningMarkup(learningGoal, "板书学习目标");
+  const subject = native ? teachingSubject(plan.subject) : inferBoardSubject(session);
+  const thesis = native ? text(plan.thesis, "板书核心结论", 8, 120) : learningGoal;
+  assertBalancedLearningMarkup(thesis, "板书核心结论");
   const allowedIds = new Set(context.map((message) => message.id));
   const sourceMessageIds = sourceIds(plan.sourceMessageIds, allowedIds, 12);
   if (!Array.isArray(plan.scenes) || plan.scenes.length !== blocks.length) throw new Error("板书教学计划必须与正文区块逐项对应");
   const evidenceSources = visualEvidenceSources(session);
   const topLevelIds = new Set(sourceMessageIds);
-  const scenes = plan.scenes.map((raw, index) => parseScene(raw, index, blocks[index], topLevelIds, evidenceSources));
+  const contextById = new Map(context.map((message) => [message.id, message.text]));
+  const scenes = plan.scenes.map((raw, index) => parseScene(raw, index, blocks[index], topLevelIds, evidenceSources, contextById, native));
   if (new Set(scenes.map((scene) => scene.intent)).size < 2) throw new Error("板书场景必须体现至少两种教学意图");
   const sceneIds = new Set(scenes.flatMap((scene) => scene.sourceMessageIds));
   if (sourceMessageIds.some((id) => !sceneIds.has(id))) throw new Error("板书总来源必须由具体场景实际引用");
-  const result = enrichBoardPlanWithSafeAids(session, { learningGoal, sourceMessageIds, scenes });
-  assertPlanNoAnswerLeak(session, result.learningGoal, result.scenes);
+  if (native) assertNativeTeachingPlan(scenes, context);
+  const result = enrichBoardPlanWithSafeAids(session, { ...(native ? { version: 2 as const, contentRevision: 1 as const } : {}), subject, thesis, learningGoal, sourceMessageIds, scenes });
+  assertPlanNoAnswerLeak(session, [result.thesis, result.learningGoal].filter(Boolean).join("\n"), result.scenes);
   return result;
 }
 
@@ -73,28 +97,17 @@ export function createSafeBoardPlan(
   blocks: BoardBlock[],
   options: { contextualAids?: boolean } = {},
 ): BoardPlan {
-  const recentIds: string[] = [];
-  const intents: BoardScene["intent"][] = ["extract", "connect", "derive", "verify", "compare", "verify"];
-  const scenes = blocks.map((block, index): BoardScene => ({
-    id: block.id,
-    intent: intents[index] ?? "verify",
-    title: block.label,
-    content: block.content,
-    tone: block.tone,
-    sourceMessageIds: recentIds,
-    visual: null,
-  }));
-  const learningGoal = safeLearningGoal(session);
-  const result = enrichBoardPlanWithSafeAids(session, { learningGoal, sourceMessageIds: recentIds, scenes }, options);
-  assertPlanNoAnswerLeak(session, result.learningGoal, result.scenes);
+  const result = enrichBoardPlanWithSafeAids(session, createNativeBoardFallbackPlan(session, blocks), options);
+  assertPlanNoAnswerLeak(session, [result.thesis, result.learningGoal].filter(Boolean).join("\n"), result.scenes);
   return result;
 }
 
 export function boardPlanVisibleText(plan?: BoardPlan): string {
   if (!plan) return "";
   return [
+    plan.thesis ?? "",
     plan.learningGoal,
-    ...plan.scenes.flatMap((scene) => [scene.title, scene.content, ...semanticVisualText(scene.visual)]),
+    ...plan.scenes.flatMap((scene) => [scene.title, scene.content, scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? "", ...semanticVisualText(scene.visual)]),
   ].join("\n");
 }
 
@@ -104,20 +117,76 @@ function parseScene(
   fallbackBlock: BoardBlock | undefined,
   allowedIds: Set<string>,
   evidenceSources: string[],
+  contextById: Map<string, string>,
+  native: boolean,
 ): BoardScene {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("板书教学场景结构不合法");
   const item = raw as JsonObject;
   if (!sceneIntents.includes(item.intent as typeof sceneIntents[number])) throw new Error("板书教学意图不合法");
   if (!fallbackBlock) throw new Error("板书教学场景没有对应正文区块");
+  const sourceMessageIds = sourceIds(item.sourceMessageIds, allowedIds, 4);
+  const nativeFields = native ? parseNativeTeachingFields(item, evidenceSources.concat(sourceMessageIds.map((id) => contextById.get(id) ?? ""))) : {};
   return {
     id: fallbackBlock.id,
     intent: item.intent as BoardScene["intent"],
+    ...nativeFields,
     title: fallbackBlock.label,
     content: fallbackBlock.content,
     tone: fallbackBlock.tone,
-    sourceMessageIds: sourceIds(item.sourceMessageIds, allowedIds, 4),
+    sourceMessageIds,
     visual: parseSemanticVisual(item.visual, evidenceSources),
   };
+}
+
+function parseNativeTeachingFields(item: JsonObject, evidenceSources: string[]): Pick<BoardScene, "role" | "purpose" | "evidence" | "why" | "selfCheck"> {
+  if (!teachingRoles.includes(item.role as BoardTeachingRole)) throw new Error("板书教学单元职责不合法");
+  const purpose = text(item.purpose, "板书教学目的", 6, 80);
+  const evidence = text(item.evidence, "板书教学依据", 4, 120);
+  const why = text(item.why, "板书成立原因", 10, 180);
+  const selfCheck = text(item.selfCheck, "板书自查问题", 6, 100);
+  if (!evidenceSources.some((source) => source.includes(evidence))) throw new Error("板书教学依据必须逐字来自原题、知识节点或已引用对话");
+  for (const [label, value] of [["板书教学目的", purpose], ["板书成立原因", why], ["板书自查问题", selfCheck]] as const) assertBalancedLearningMarkup(value, label);
+  return { role: item.role as BoardTeachingRole, purpose, evidence, why, selfCheck };
+}
+
+function assertNativeTeachingPlan(scenes: BoardScene[], context: BoardConversationMessage[]) {
+  if (scenes.length < 5 || scenes.length > 6) throw new Error("新版板书必须包含 5 到 6 个职责完整的教学单元");
+  const roles = scenes.map((scene) => scene.role!);
+  for (const required of ["orient", "model", "reason", "recap"] as const) {
+    if (!roles.includes(required)) throw new Error(`新版板书缺少 ${required} 教学职责`);
+  }
+  if (!roles.includes("misconception") && !roles.includes("transfer")) throw new Error("新版板书必须包含易错辨析或迁移应用");
+  if (new Set(roles).size !== roles.length) throw new Error("新版板书教学职责不能重复");
+  const contents = scenes.map((scene) => compact(scene.content));
+  if (new Set(contents).size !== contents.length) throw new Error("新版板书不能重复相同正文");
+  for (const [label, values] of [
+    ["教学目的", scenes.map((scene) => compact(scene.purpose ?? ""))],
+    ["成立原因", scenes.map((scene) => compact(scene.why ?? ""))],
+    ["自查问题", scenes.map((scene) => compact(scene.selfCheck ?? ""))],
+  ] as const) {
+    if (new Set(values).size !== values.length) throw new Error(`新版板书${label}不能重复`);
+  }
+  for (const scene of scenes) {
+    for (const message of context) {
+      if (copiesChatParagraph(scene.content, message.text) || copiesChatParagraph(scene.why ?? "", message.text)) throw new Error("新版板书不能整段搬运 Chat 内容");
+    }
+  }
+}
+
+function copiesChatParagraph(candidate: string, source: string): boolean {
+  const normalizedCandidate = compact(candidate);
+  const normalizedSource = compact(source);
+  if (normalizedCandidate.length < 36 || normalizedSource.length < 36) return false;
+  if (normalizedSource.includes(normalizedCandidate)) return true;
+  return candidate.split(/[。！？；\n]/).some((sentence) => {
+    const normalized = compact(sentence);
+    return normalized.length >= 36 && normalizedSource.includes(normalized);
+  });
+}
+
+function teachingSubject(value: unknown): BoardTeachingSubject {
+  if (!teachingSubjects.includes(value as BoardTeachingSubject)) throw new Error("板书学科表达类型不合法");
+  return value as BoardTeachingSubject;
 }
 
 function parseSemanticVisual(value: unknown, evidenceSources: string[]): BoardSemanticVisual | null {
@@ -286,7 +355,7 @@ function parseFormulaVisual(value: JsonObject, common: Omit<BoardFormulaVisual, 
 }
 
 function semanticVisualSchema(): JsonObject {
-  const common = { title: { type: "string" }, evidence: { type: "string" }, caption: { type: "string" } };
+  const common = { title: { type: "string", maxLength: 28 }, evidence: { type: "string", maxLength: 80 }, caption: { type: "string", maxLength: 100 } };
   return { oneOf: [
     { type: "object", properties: { kind: { const: "none" }, ...common }, required: ["kind", "title", "evidence", "caption"], additionalProperties: false },
     { type: "object", properties: { kind: { const: "concept_graph" }, ...common, direction: { type: "string", enum: ["top-down", "left-right"] }, nodes: { type: "array", minItems: 2, maxItems: 10, items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, role: { type: "string", enum: ["given", "relation", "step", "check"] } }, required: ["id", "label", "role"], additionalProperties: false } }, edges: { type: "array", minItems: 1, maxItems: 14, items: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, label: { type: "string" } }, required: ["from", "to"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "direction", "nodes", "edges"], additionalProperties: false },
@@ -300,16 +369,9 @@ function semanticVisualSchema(): JsonObject {
   ] };
 }
 
-function safeLearningGoal(session: LearningSession): string {
-  const root = session.nodes.find((node) => node.id === session.rootNodeId);
-  const candidate = session.problemGuide.goal || root?.title || "看清原题的条件、关系和下一步";
-  const answer = root?.check.answer ?? "";
-  return answer && compact(candidate).includes(compact(answer)) ? "看清原题的条件、关系和下一步" : candidate.slice(0, 80);
-}
-
 function assertPlanNoAnswerLeak(session: LearningSession, learningGoal: string, scenes: BoardScene[]) {
   const root = session.nodes.find((node) => node.id === session.rootNodeId);
-  const visibleText = [learningGoal, ...scenes.flatMap((scene) => [scene.title, scene.content, ...semanticVisualText(scene.visual)])].join("\n");
+  const visibleText = [learningGoal, ...scenes.flatMap((scene) => [scene.title, scene.content, scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? "", ...semanticVisualText(scene.visual)])].join("\n");
   const answer = compact(root?.check.answer ?? "");
   const explanation = compact(root?.check.explanation ?? "");
   const boardText = compact(visibleText);

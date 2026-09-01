@@ -7,10 +7,13 @@ import { RichLearningText } from "@/components/rich-learning-text";
 import { STREAMING_FINISH_MS, StreamingIndicator } from "@/components/streaming-indicator";
 import { understandingChoiceFromText } from "@/components/education-chat-app";
 import { answerGate, understandingGate } from "@/lib/learning/flow";
+import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "@/lib/learning/board-native-fallback";
+import { compileBoardDocument, createBoardWorkspaceState } from "@/lib/learning/board-workspace";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { learningTextToPlainText, parseLearningPrompt, prepareLearningMarkdown, stripLearningChoiceLabel } from "@/lib/learning/presentation";
 import { solutionSystemPrompt } from "@/lib/learning/providers/model-support";
 import { tutorSystemPrompt } from "@/lib/learning/providers/tutor";
+import type { BoardLesson } from "@/lib/learning/types";
 
 describe("AI 教学内容排版", () => {
   it("SSE 状态标记覆盖输出与 Bingo 完成状态，并提供无障碍说明", () => {
@@ -432,18 +435,20 @@ describe("AI 教学内容排版", () => {
   });
 
   it("板书正文、重点标记和说明共用同一套公式渲染", () => {
+    const lesson: BoardLesson = {
+      title: "速度关系 $v=s/t$",
+      subtitle: "把 $s$、$t$ 与 $v$ 的关系放在一起看。",
+      layout: "formula",
+      blocks: [{ id: "board-1", label: "核心关系", content: "先圈出 $v=s/t$，再核对单位。", tone: "key" }],
+      annotations: [{ blockId: "board-1", target: "$v=s/t$", kind: "circle", reason: "这是连接路程与时间的核心公式 $v=s/t$。" }],
+      visual: null,
+      returnLabel: "回到原题",
+    };
+    const document = compileBoardDocument(lesson);
     const html = renderToStaticMarkup(createElement(LearningBoard, {
-      lesson: {
-        title: "速度关系 $v=s/t$",
-        subtitle: "把 $s$、$t$ 与 $v$ 的关系放在一起看。",
-        layout: "formula",
-        blocks: [{ id: "board-1", label: "核心关系", content: "先圈出 $v=s/t$，再核对单位。", tone: "key" }],
-        annotations: [{ blockId: "board-1", target: "$v=s/t$", kind: "circle", reason: "这是连接路程与时间的核心公式 $v=s/t$。" }],
-        visual: null,
-        returnLabel: "回到原题",
-      },
+      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
       messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
-      onAsk: () => {}, onClose: () => {}, onRetry: () => {},
+      onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
     }));
 
     expect(html).toContain("board-mark--circle");
@@ -451,23 +456,60 @@ describe("AI 教学内容排版", () => {
   });
 
   it("板书重点只命中公式内部时仍保留完整 KaTeX 公式", () => {
+    const lesson: BoardLesson = {
+      title: "速度关系",
+      subtitle: "看清变量之间的关系。",
+      layout: "formula",
+      blocks: [{ id: "board-1", label: "核心关系", content: "先由 $x+2=5$ 求出未知数。", tone: "key" }],
+      annotations: [{ blockId: "board-1", target: "x+2=5", kind: "circle", reason: "这是当前推理使用的核心等式。" }],
+      visual: null,
+      returnLabel: "回到原题",
+    };
+    const document = compileBoardDocument(lesson);
     const html = renderToStaticMarkup(createElement(LearningBoard, {
-      lesson: {
-        title: "速度关系",
-        subtitle: "看清变量之间的关系。",
-        layout: "formula",
-        blocks: [{ id: "board-1", label: "核心关系", content: "先由 $x+2=5$ 求出未知数。", tone: "key" }],
-        annotations: [{ blockId: "board-1", target: "x+2=5", kind: "circle", reason: "这是当前推理使用的核心等式。" }],
-        visual: null,
-        returnLabel: "回到原题",
-      },
+      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
       messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
-      onAsk: () => {}, onClose: () => {}, onRetry: () => {},
+      onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
     }));
 
     expect(html).toContain("board-mark--circle");
     expect(html).toContain("class=\"katex\"");
     expect(html).not.toContain("$</span>");
+  });
+
+  it("新版板书默认是一页连续课程，不展示无持久价值的学习记录工具", () => {
+    const session = analyzeMock(recognizeMock("math", "junior"), "doubao");
+    const blocks = createNativeBoardBlocks(session, session.flow.focus);
+    const lesson: BoardLesson = {
+      title: "把题目关系铺开来看",
+      subtitle: "独立学习板书",
+      layout: "relation",
+      blocks,
+      annotations: [],
+      visual: null,
+      plan: createNativeBoardFallbackPlan(session, blocks),
+      quality: { status: "safe_fallback", reason: "完整板书没有通过内容验收。" },
+      returnLabel: "回到原题",
+    };
+    const document = compileBoardDocument(lesson);
+    const html = renderToStaticMarkup(createElement(LearningBoard, {
+      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
+      messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
+      onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("board-course-route");
+    expect(html).toContain("读懂任务");
+    expect(html).toContain("建立关系");
+    expect(html).toContain("关键推导");
+    expect(html).toContain("为什么成立");
+    expect(html).toContain("停一下，自查");
+    expect(html).toContain("当前是安全学习框架，不是完整板书");
+    expect(html).toContain("重试完整板书");
+    expect(html).not.toContain("按需使用");
+    expect(html).not.toContain("记笔记、标掌握、做草稿");
+    expect(html).not.toContain("board-mode-switch");
+    expect(html).not.toContain("先看结构，再进入细节");
   });
 
   it("要求自由追问和完整讲解输出结构化 Markdown 与 KaTeX", () => {

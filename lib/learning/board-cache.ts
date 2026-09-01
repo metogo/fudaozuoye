@@ -1,5 +1,7 @@
 import type { BoardLesson, LearningSession } from "./types";
 import { enrichBoardLessonWithSafeAids, isBoardLessonSafeForRestore } from "./board-aids";
+import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "./board-native-fallback";
+import { parseBoardPlan } from "./providers/board-plan";
 
 export const BOARD_CACHE_VERSION = 2 as const;
 
@@ -16,7 +18,23 @@ export function isStoredBoardCache(value: unknown, requestId: string): value is 
 
 export function restoreBoardLesson(session: LearningSession, value: unknown): BoardLesson | null {
   if (!isStoredBoardLesson(value)) return null;
-  const lesson = enrichBoardLessonWithSafeAids(session, value);
+  const nativeLesson = value.plan?.version === 2 && value.plan.contentRevision === 1 ? value : upgradeLegacyBoardLesson(session, value);
+  if (!nativeLesson.plan) return null;
+  let verifiedPlan;
+  try {
+    const planForValidation = {
+      ...nativeLesson.plan,
+      scenes: nativeLesson.plan.scenes.map((scene) => ({
+        ...scene,
+        visual: scene.visual ?? { kind: "none", title: "", evidence: "", caption: "" },
+      })),
+    };
+    verifiedPlan = parseBoardPlan(planForValidation, session, nativeLesson.blocks, []);
+  } catch (error) {
+    console.warn("板书缓存未通过事实复检", error instanceof Error ? error.message : "未知错误");
+    return null;
+  }
+  const lesson = enrichBoardLessonWithSafeAids(session, { ...nativeLesson, plan: verifiedPlan });
   return isBoardLessonSafeForRestore(session, lesson) ? lesson : null;
 }
 
@@ -25,12 +43,14 @@ export function isStoredBoardLesson(value: unknown): value is BoardLesson {
   const lesson = value as Partial<BoardLesson>;
   const layouts = new Set(["relation", "steps", "comparison", "formula"]);
   return typeof lesson.title === "string"
+    && lesson.quality?.status !== "safe_fallback"
     && typeof lesson.subtitle === "string"
     && typeof lesson.returnLabel === "string"
     && layouts.has(String(lesson.layout))
     && Array.isArray(lesson.blocks)
     && lesson.blocks.length > 0
     && lesson.blocks.every((block) => Boolean(block && typeof block.id === "string" && typeof block.label === "string" && typeof block.content === "string" && ["plain", "key", "example"].includes(block.tone)))
+    && new Set(lesson.blocks.map((block) => block.id)).size === lesson.blocks.length
     && Array.isArray(lesson.annotations)
     && lesson.annotations.every((annotation) => Boolean(annotation && typeof annotation.blockId === "string" && typeof annotation.target === "string" && typeof annotation.reason === "string" && ["circle", "underline", "box"].includes(annotation.kind)))
     && (lesson.visual === undefined || lesson.visual === null || isStoredLegacyVisual(lesson.visual))
@@ -40,6 +60,10 @@ export function isStoredBoardLesson(value: unknown): value is BoardLesson {
 function isStoredBoardPlan(value: unknown, blocks: BoardLesson["blocks"]): boolean {
   if (!value || typeof value !== "object") return false;
   const plan = value as NonNullable<BoardLesson["plan"]>;
+  const native = plan.version === 2 && plan.contentRevision === 1;
+  if (plan.version !== undefined && plan.version !== 2) return false;
+  if (plan.contentRevision !== undefined && plan.contentRevision !== 1) return false;
+  if (native && (!["math", "science", "language", "humanities", "general"].includes(String(plan.subject)) || typeof plan.thesis !== "string" || plan.thesis.length < 8 || plan.thesis.length > 120)) return false;
   return typeof plan.learningGoal === "string"
     && Array.isArray(plan.sourceMessageIds)
     && plan.sourceMessageIds.length <= 12
@@ -47,8 +71,42 @@ function isStoredBoardPlan(value: unknown, blocks: BoardLesson["blocks"]): boole
     && Array.isArray(plan.scenes)
     && plan.scenes.length >= 3 && plan.scenes.length <= 6
     && plan.scenes.length === blocks.length
-    && plan.scenes.every((scene, index) => Boolean(scene && scene.id === blocks[index]?.id && scene.title === blocks[index]?.label && scene.content === blocks[index]?.content && scene.tone === blocks[index]?.tone && scene.id.length <= 100 && scene.title.length <= 80 && scene.content.length <= 1_200 && ["extract", "connect", "derive", "compare", "verify"].includes(scene.intent) && Array.isArray(scene.sourceMessageIds) && scene.sourceMessageIds.length <= 4 && scene.sourceMessageIds.every((id) => typeof id === "string" && plan.sourceMessageIds.includes(id)) && (scene.visual === undefined || scene.visual === null || isStoredSemanticVisual(scene.visual))))
+    && (!native || plan.scenes.length >= 5)
+    && plan.scenes.every((scene, index) => Boolean(scene && scene.id === blocks[index]?.id && scene.title === blocks[index]?.label && scene.content === blocks[index]?.content && scene.tone === blocks[index]?.tone && scene.id.length <= 100 && scene.title.length <= 80 && scene.content.length <= 1_200 && ["extract", "connect", "derive", "compare", "verify"].includes(scene.intent) && Array.isArray(scene.sourceMessageIds) && scene.sourceMessageIds.length <= 4 && scene.sourceMessageIds.every((id) => typeof id === "string" && plan.sourceMessageIds.includes(id)) && (!native || isStoredNativeTeachingScene(scene)) && (scene.visual === undefined || scene.visual === null || isStoredSemanticVisual(scene.visual))))
+    && (!native || hasCompleteNativeTeachingRoles(plan.scenes))
     && plan.sourceMessageIds.every((id) => plan.scenes.some((scene) => scene.sourceMessageIds.includes(id)));
+}
+
+function hasCompleteNativeTeachingRoles(scenes: NonNullable<BoardLesson["plan"]>["scenes"]): boolean {
+  const roles = scenes.map((scene) => scene.role);
+  const uniqueRoles = new Set<string | undefined>(roles);
+  return uniqueRoles.size === roles.length
+    && ["orient", "model", "reason", "recap"].every((role) => uniqueRoles.has(role))
+    && (uniqueRoles.has("misconception") || uniqueRoles.has("transfer"));
+}
+
+function upgradeLegacyBoardLesson(session: LearningSession, legacy: BoardLesson): BoardLesson {
+  const focus = session.flow.focus;
+  const blocks = createNativeBoardBlocks(session, focus);
+  return {
+    ...legacy,
+    title: focus.kind === "node"
+      ? session.nodes.find((node) => node.id === focus.nodeId)?.title ?? "把当前卡点讲透"
+      : "把题目关系铺开来看",
+    blocks,
+    annotations: [],
+    visual: null,
+    plan: createNativeBoardFallbackPlan(session, blocks),
+    returnLabel: session.flow.activeGate?.title ?? legacy.returnLabel,
+  };
+}
+
+function isStoredNativeTeachingScene(scene: NonNullable<BoardLesson["plan"]>["scenes"][number]): boolean {
+  return ["orient", "model", "reason", "misconception", "transfer", "recap"].includes(String(scene.role))
+    && typeof scene.purpose === "string" && scene.purpose.length >= 6 && scene.purpose.length <= 80
+    && typeof scene.evidence === "string" && scene.evidence.length >= 4 && scene.evidence.length <= 120
+    && typeof scene.why === "string" && scene.why.length >= 10 && scene.why.length <= 180
+    && typeof scene.selfCheck === "string" && scene.selfCheck.length >= 6 && scene.selfCheck.length <= 100;
 }
 
 function isStoredSemanticVisual(value: unknown): boolean {
