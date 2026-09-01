@@ -1,7 +1,7 @@
 import { getConcept, listConcepts } from "../curriculum";
-import { providerError } from "../errors";
+import { providerError, ServiceError } from "../errors";
 import { isConcreteRecallAnswer, matchesTrustedRecallReference } from "../solution-recall";
-import type { BoardLesson, BoardSuggestion, CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
+import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
@@ -14,7 +14,7 @@ import {
   type EvidenceSource,
 } from "./blueprint";
 import type { ProviderConfig } from "./config";
-import { addSafeBoardAnnotations, boardAnnotationsPrompt, boardAuditPrompt, boardAuditSystemPrompt, boardLessonPrompt, boardLessonSystemPrompt, boardLessonTool, createSafeBoardLesson, parseBoardAnnotations, parseBoardAudit, parseBoardContent, parseBoardLesson } from "./board";
+import { addSafeBoardAnnotations, boardAnnotationsPrompt, boardAuditPrompt, boardAuditSystemPrompt, boardContentTool, boardLessonPrompt, boardLessonSystemPrompt, createSafeBoardLesson, parseBoardAnnotations, parseBoardAudit, parseBoardContent, recoverBoardContentPlan } from "./board";
 import {
   boardSuggestionTool,
   chatBody,
@@ -35,14 +35,13 @@ import {
   type JsonObject,
 } from "./model-support";
 import { parseQuestionSuggestions, questionSuggestionsPrompt, tutorPrompt, tutorSystemPrompt } from "./tutor";
+import { RequestControllerRegistry } from "./request-controller-registry";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
 import { transcribeStudentResponse } from "./student-response";
 import { fetchWithTransientRetry } from "./transient-fetch";
 import { assertBlueprintBatchUnique, buildSession, edgeReason, evidenceCandidates, expansionEvidenceSources, expansionSelectionOptions, isRecoverableReasonGroundingError, NonRepairableValidationError, normalizeBlueprintDetail, parseBoardSuggestion, parseInitialAnalysisSelection, parseProblem, parseProblemSolution, parseTextProblem, pendingChatSession, problemEvidenceSources } from "./provider-validation";
 import { generateValidatedSolution, streamValidatedSolution } from "./solution";
-
 export type AnalysisPhaseReporter = (key: string, label: string) => void;
-
 export interface ProviderAdapter {
   readonly id: ProviderId;
   readonly reasoningLevel: ReasoningLevel;
@@ -64,20 +63,22 @@ export interface ProviderAdapter {
   suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]>;
   transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }>;
   decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion>;
-  generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson>;
+  generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context?: BoardConversationMessage[]): Promise<BoardLesson>;
+  cancelPendingRequests(): void;
 }
-
 export { MockProviderAdapter } from "./mock-adapter";
-
 export class LiveProviderAdapter implements ProviderAdapter {
   readonly mode = "live" as const;
   readonly id: ProviderId;
   readonly modelId: string;
+  private readonly requests = new RequestControllerRegistry();
 
   constructor(private readonly config: ProviderConfig, private readonly fetcher: typeof fetch = fetch, readonly reasoningLevel: ReasoningLevel = "light", private readonly requestSignal?: AbortSignal) {
     this.id = config.id;
     this.modelId = config.modelId;
   }
+
+  cancelPendingRequests(): void { this.requests.cancelAll(); }
 
   async recognizeProblem(imageDataUrl: string, subject?: ProblemSnapshot["subject"], gradeBand?: ProblemSnapshot["gradeBand"]): Promise<ProblemSnapshot> {
     void subject;
@@ -506,35 +507,43 @@ export class LiveProviderAdapter implements ProviderAdapter {
     return this.validatedJsonRequest(`${system} 只输出严格 JSON。`, `${prompt}\n输出字段：recommended(boolean)、reason(string)、layout(relation|steps|comparison|formula)。`, parseBoardSuggestion);
   }
 
-  async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson> {
+  async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[] = []): Promise<BoardLesson> {
     if (!suggestion.recommended) throw new Error("当前步骤不需要切换板书讲解");
     try {
-      const lesson = await this.generateBoardCandidate(session, scope, suggestion);
-      const audit = parseBoardAudit(parseJsonObject(await this.textRequest(boardAuditSystemPrompt(), boardAuditPrompt(session, scope, lesson), undefined, true)));
+      const lesson = await this.generateBoardCandidate(session, scope, suggestion, context);
+      const audit = parseBoardAudit(parseJsonObject(await this.textRequest(boardAuditSystemPrompt(), boardAuditPrompt(session, scope, lesson, context), undefined, true, 15_000)));
       if (audit.passed) return lesson;
+      console.warn("板书候选未通过事实审校，已使用可验证的安全板书", audit.reason);
       return createSafeBoardLesson(session, scope, suggestion);
-    } catch {
+    } catch (error) {
+      console.warn("板书生成未通过结构校验，已使用可验证的安全板书", error instanceof Error ? error.message : "未知错误");
       return createSafeBoardLesson(session, scope, suggestion);
     }
   }
 
-  private async generateBoardCandidate(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson> {
+  private async generateBoardCandidate(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[]): Promise<BoardLesson> {
     const system = boardLessonSystemPrompt();
-    const prompt = boardLessonPrompt(session, scope, suggestion);
+    const prompt = boardLessonPrompt(session, scope, suggestion, context);
     if (this.config.protocol === "chat-completions") {
-      const value = parseJsonObject(await this.toolRequest(system, prompt, boardLessonTool()));
-      try {
-        return parseBoardLesson(value, session, suggestion);
-      } catch {
-        const content = parseBoardContent(value, session, suggestion);
-        try { return parseBoardAnnotations(value, content, session); }
-        catch { return addSafeBoardAnnotations(content, session); }
+      const value = parseJsonObject(await this.toolRequest(
+        `${system}\n先只输出板书正文、教学顺序与语义配图，不输出重点标记。`,
+        `${prompt}\n旧版 visual 固定返回 kind=none，其余文字留空、elements 为空数组。`,
+        boardContentTool(),
+        6000,
+        30_000,
+      ));
+      let content: BoardLesson;
+      try { content = parseBoardContent(value, session, suggestion, context); }
+      catch (error) {
+        console.warn("板书语义计划不合法，保留已校验正文并改用本地教学顺序", error instanceof Error ? error.message : "结构不合法");
+        content = recoverBoardContentPlan(value, session, suggestion);
       }
+      return addSafeBoardAnnotations(content, session);
     }
-    const parseContent = (value: JsonObject) => parseBoardContent(value, session, suggestion);
+    const parseContent = (value: JsonObject) => parseBoardContent(value, session, suggestion, context);
     const contentSystem = `${system}\n先只输出板书正文与可选配图，不输出重点标记。`;
     const contentPrompt = `${prompt}\nvisual 不需要时返回 kind=none，其余文字留空、elements 为空数组。`;
-    const content = await this.validatedJsonRequest(`${contentSystem}\n只输出严格 JSON。`, `${contentPrompt}\n输出字段：title、blocks、visual。`, parseContent);
+    const content = await this.validatedJsonRequest(`${contentSystem}\n只输出严格 JSON。`, `${contentPrompt}\n输出字段：title、blocks、visual、plan。`, parseContent);
     const annotationSystem = "你是 K12 板书重点标记老师。只能从已完成板书的原文中选重点，不能改写正文、补充答案或添加推理。重点必须由教学作用决定，禁止机械选择每段开头。";
     const annotationPrompt = boardAnnotationsPrompt(content);
     const parseAnnotations = (value: JsonObject) => parseBoardAnnotations(value, content, session);
@@ -566,6 +575,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
     try {
       return await this.validatedToolRequest(system, prompt, tool, parse);
     } catch (error) {
+      if (error instanceof ServiceError && error.code === "PROVIDER_TIMEOUT") throw error;
       if (error instanceof NonRepairableValidationError) throw error;
       const reason = error instanceof Error ? error.message : "结构函数输出无效";
       const functionSchema = tool.function && typeof tool.function === "object" && !Array.isArray(tool.function)
@@ -579,29 +589,31 @@ export class LiveProviderAdapter implements ProviderAdapter {
     }
   }
 
-  private async validatedToolRequest<T>(system: string, prompt: string, tool: JsonObject, parse: (value: JsonObject) => T): Promise<T> {
-    const first = await this.toolRequest(system, prompt, tool);
+  private async validatedToolRequest<T>(system: string, prompt: string, tool: JsonObject, parse: (value: JsonObject) => T, maxTokens = 3000): Promise<T> {
+    const first = await this.toolRequest(system, prompt, tool, maxTokens);
     try { return parse(parseJsonObject(first)); } catch (error) {
       const repaired = await this.toolRequest(
         "你是结构修复器。根据校验错误重新调用指定函数；不得缺少必填字段，不改变题目事实。",
         JSON.stringify({ originalRequirement: prompt.slice(0, 6000), validationError: error instanceof Error ? error.message : "结构不合法", invalidOutput: first.slice(0, 6000) }),
         tool,
+        maxTokens,
       );
       return parse(parseJsonObject(repaired));
     }
   }
 
-  private async toolRequest(system: string, prompt: string, tool: JsonObject): Promise<string> {
+  private async toolRequest(system: string, prompt: string, tool: JsonObject, maxTokens = 3000, timeoutMs = 60_000): Promise<string> {
     const controller = new AbortController();
+    const release = this.requests.track(controller);
     const abort = () => controller.abort();
     this.requestSignal?.addEventListener("abort", abort, { once: true });
     if (this.requestSignal?.aborted) controller.abort();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
-        body: JSON.stringify(chatToolBody(this.modelId, system, prompt, tool, this.id === "doubao")),
+        body: JSON.stringify(chatToolBody(this.modelId, system, prompt, tool, this.id === "doubao", maxTokens)),
         signal: controller.signal,
       });
       if (!response.ok) throw providerError(`模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
@@ -609,15 +621,16 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); }
+    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); release(); }
   }
 
-  private async textRequest(system: string, prompt: string, imageDataUrl?: string, jsonMode = false): Promise<string> {
+  private async textRequest(system: string, prompt: string, imageDataUrl?: string, jsonMode = false, timeoutMs = 60_000): Promise<string> {
     const controller = new AbortController();
+    const release = this.requests.track(controller);
     const abort = () => controller.abort();
     this.requestSignal?.addEventListener("abort", abort, { once: true });
     if (this.requestSignal?.aborted) controller.abort();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
@@ -633,11 +646,12 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); }
+    } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); release(); }
   }
 
   private async streamTextRequest(system: string, prompt: string, onDelta: (text: string) => void, externalSignal?: AbortSignal, imageDataUrl?: string, maxTokens = 3_000): Promise<void> {
     const controller = new AbortController();
+    const release = this.requests.track(controller);
     const abort = () => controller.abort();
     externalSignal?.addEventListener("abort", abort, { once: true });
     this.requestSignal?.addEventListener("abort", abort, { once: true });
@@ -676,7 +690,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); clearTimeout(timeout); }
+    } finally { externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); clearTimeout(timeout); release(); }
   }
 }
 

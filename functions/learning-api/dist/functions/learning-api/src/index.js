@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = void 0;
 const node_http_1 = require("node:http");
 const analyze_1 = require("../../../lib/learning/http/analyze");
+const board_cache_1 = require("../../../lib/learning/http/board-cache");
 const consent_1 = require("../../../lib/learning/http/consent");
 const expand_1 = require("../../../lib/learning/http/expand");
 const providers_1 = require("../../../lib/learning/http/providers");
@@ -17,6 +18,7 @@ const routes = {
     "POST /consent": consent_1.postConsent,
     "GET /providers": providers_1.getProviders,
     "POST /learning/analyze": analyze_1.postAnalyze,
+    "POST /learning/board-cache": board_cache_1.postBoardCache,
     "POST /learning/expand": expand_1.postExpand,
     "POST /learning/verify": verify_1.postVerify,
     "POST /learning/transfer": transfer_1.postTransfer,

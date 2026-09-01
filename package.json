@@ -21,7 +21,10 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.3",
+    "jsxgraph": "^1.13.2",
     "katex": "^0.18.4",
+    "mermaid": "^11.17.2",
+    "motion": "^13.1.1",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",

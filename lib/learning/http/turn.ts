@@ -4,12 +4,14 @@ import { mergeDirectKnowledge, mergeExpansion, nextReadyNode } from "../graph";
 import { getSessionProviderAdapter } from "../providers";
 import { PENDING_ORIGINAL_ANSWER } from "../providers/provider-validation";
 import { safeAssessmentFeedback } from "../providers/assessment";
-import { assertContentLength, assertImageFile, assertRateLimit, assertSameOrigin } from "../request-guards";
+import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
 import { openSession, toClientState } from "../server-state";
 import { solutionRecallCheck } from "../solution-recall";
 import { assertDetailedSolution } from "../solution-quality";
 import type { AssessmentEvidence, BoardSuggestion, LearningChoice, LearningGateKind, LearningSession, LearningTurnInput, SuggestedQuestion, TutorScope } from "../types";
 import { sse } from "./sse";
+import { cleanText, parseTurnRequest } from "./turn-request";
+import { appendUnique, pathLabels, requireImage } from "./turn-support";
 
 type Send = (event: string, data: unknown) => void;
 type Adapter = ReturnType<typeof getSessionProviderAdapter>;
@@ -69,7 +71,7 @@ async function dispatchTurn(session: LearningSession, input: LearningTurnInput, 
   if (input.type === "image_answer") return handleImageAnswer(working, input.gateId, requireImage(imageDataUrl), adapter, send, signal);
   if (input.type === "retry_original") return offerOriginalAnswer(working, send, "继续验证：遮住讲解，重做同一道原题");
   if (input.type === "request_transfer") return offerTransfer(working, adapter, send, signal);
-  if (input.type === "choose") return handleChoice(working, input.gateId, input.choice, adapter, send, signal);
+  if (input.type === "choose") return handleChoice(working, input.gateId, input.choice, input.boardContext ?? [], adapter, send, signal);
   return handleAnswer(working, input.gateId, input.answer, adapter, send, signal);
 }
 
@@ -154,7 +156,7 @@ async function answerSuggestedQuestion(session: LearningSession, suggestionId: s
   emitState(next, send);
 }
 
-async function handleChoice(session: LearningSession, gateId: string, choice: LearningChoice, adapter: Adapter, send: Send, signal: AbortSignal) {
+async function handleChoice(session: LearningSession, gateId: string, choice: LearningChoice, boardContext: NonNullable<Extract<LearningTurnInput, { type: "choose" }>["boardContext"]>, adapter: Adapter, send: Send, signal: AbortSignal) {
   if (choice === "start_recall") {
     requireGate(session, gateId, "solution_review");
     const check = solutionRecallCheck(session);
@@ -182,7 +184,7 @@ async function handleChoice(session: LearningSession, gateId: string, choice: Le
     const suggestion = requestedBoardSuggestion(session);
     send("flow.progress", { key: "board", label: "正在把条件、关系和易错点整理成一张板书" });
     try {
-      send("board.lesson", await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion), signal));
+      send("board.lesson", await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 60_000, () => adapter.cancelPendingRequests()));
     } catch (error) {
       if (isAbortError(error)) throw error;
       send("presentation.unavailable", { message: "这次板书没有通过可靠性检查，仍可在当前对话继续学习" });
@@ -242,7 +244,7 @@ async function remediate(session: LearningSession, adapter: Adapter, send: Send,
     if (count >= 2 && !node) {
       send("flow.progress", { key: "diagnosing", label: "正在定位这一步真正缺少的基础" });
       try {
-        const diagnosis = await awaitOptional(adapter.diagnoseProblem(working, (key, label) => send("flow.progress", { key, label })), signal);
+        const diagnosis = await awaitOptional(adapter.diagnoseProblem(working, (key, label) => send("flow.progress", { key, label })), signal, 60_000, () => adapter.cancelPendingRequests());
         working = mergeDirectKnowledge(working, diagnosis.nodes, diagnosis.edges);
         node = currentConcept(working) ?? nextReadyNode(working);
       } catch (error) {
@@ -298,7 +300,7 @@ async function remediateNode(session: LearningSession, nodeId: string, count: nu
     send("flow.milestone", { key: "foundation_added", label: `继续往基础处找：${node.title}` });
     let expanded: LearningSession;
     try {
-      const expansion = await awaitOptional(adapter.expandNode(session, node.id, (key, label) => send("flow.progress", { key, label })), signal);
+      const expansion = await awaitOptional(adapter.expandNode(session, node.id, (key, label) => send("flow.progress", { key, label })), signal, 60_000, () => adapter.cancelPendingRequests());
       expanded = mergeExpansion(session, node.id, expansion.nodes, expansion.edges);
     } catch (error) {
       if (isAbortError(error)) throw error;
@@ -474,10 +476,10 @@ async function offerTransfer(session: LearningSession, adapter: Adapter, send: S
   let working = session.transferPassed ? touch({ ...session, transferCheck: null, transferPassed: false }) : session;
   try {
     if (!working.nodes.some((node) => node.kind === "concept")) {
-      const diagnosis = await awaitOptional(adapter.diagnoseProblem(working), signal);
+      const diagnosis = await awaitOptional(adapter.diagnoseProblem(working), signal, 60_000, () => adapter.cancelPendingRequests());
       working = mergeDirectKnowledge(working, diagnosis.nodes, diagnosis.edges);
     }
-    const transferCheck = await awaitOptional(adapter.generateTransferCheck(working), signal);
+    const transferCheck = await awaitOptional(adapter.generateTransferCheck(working), signal, 60_000, () => adapter.cancelPendingRequests());
     if (!transferCheck.prompt.trim() || !transferCheck.answer.trim() || !transferCheck.conceptId) throw new Error("同类题没有可靠绑定当前知识点");
     working = updateFlow({ ...working, transferCheck }, { activeGate: answerGate("transfer_answer", "再练一道同知识点题", transferCheck.prompt, undefined, transferCheck.choices) });
   } catch (error) {
@@ -562,7 +564,7 @@ async function streamReply(session: LearningSession, scope: TutorScope, question
 async function offerSuggestions(session: LearningSession, scope: TutorScope, sourceText: string, adapter: Adapter, send: Send, signal: AbortSignal): Promise<LearningSession> {
   let suggestions: SuggestedQuestion[] = [];
   try {
-    suggestions = await awaitOptional(adapter.suggestQuestions(session, scope, sourceText), signal, 8_000);
+    suggestions = await awaitOptional(adapter.suggestQuestions(session, scope, sourceText), signal, 8_000, () => adapter.cancelPendingRequests());
   } catch (error) {
     if (isAbortError(error)) throw error;
   }
@@ -575,7 +577,7 @@ async function offerSuggestions(session: LearningSession, scope: TutorScope, sou
 async function decideBoardPresentation(session: LearningSession, scope: TutorScope, adapter: Adapter, send: Send, signal: AbortSignal): Promise<BoardSuggestion | null> {
   if (signal.aborted) return null;
   try {
-    const suggestion = await awaitOptional(adapter.decideBoardPresentation(session, scope), signal, 8_000);
+    const suggestion = await awaitOptional(adapter.decideBoardPresentation(session, scope), signal, 8_000, () => adapter.cancelPendingRequests());
     const previous = session.flow.boardSuggestion;
     const repeatedForSameFocus = previous?.recommended === true && suggestion.recommended && sameScope(session.flow.focus, scope);
     if (suggestion.recommended && !repeatedForSameFocus) send("presentation.suggestion", suggestion);
@@ -625,10 +627,13 @@ function sameScope(first: TutorScope, second: TutorScope) {
   return first.kind === "problem" && second.kind === "problem" && first.section === second.section;
 }
 
-async function awaitOptional<T>(operation: Promise<T>, signal: AbortSignal, timeoutMs = 60_000): Promise<T> {
+async function awaitOptional<T>(operation: Promise<T>, signal: AbortSignal, timeoutMs = 60_000, cancelOperation: () => void = () => undefined): Promise<T> {
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
   return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => finish(() => reject(new Error("可选能力响应超时"))), timeoutMs);
+    const timeout = setTimeout(() => {
+      cancelOperation();
+      finish(() => reject(new Error("可选能力响应超时")));
+    }, timeoutMs);
     const abort = () => finish(() => reject(new DOMException("Aborted", "AbortError")));
     const finish = (complete: () => void) => {
       clearTimeout(timeout);
@@ -692,59 +697,4 @@ function requireGate(session: LearningSession, gateId: string, expected?: Learni
   if (!gate || gate.id !== gateId) throw new Error("当前学习任务已变化，请按页面最新提示继续");
   if (expected && gate.kind !== expected) throw new Error("当前学习任务不接受这个操作");
   return gate;
-}
-
-function parseTurnInput(value: unknown): LearningTurnInput {
-  if (!value || typeof value !== "object") throw new Error("学习操作不合法");
-  const input = value as Record<string, unknown>;
-  if (input.type === "start" || input.type === "retry_original" || input.type === "request_transfer") return { type: input.type };
-  if (input.type === "question") return { type: "question", text: cleanText(input.text, "请输入想问的问题", 300) };
-  if (input.type === "image_question") return { type: "image_question" };
-  if (input.type === "choose_suggestion") return { type: "choose_suggestion", suggestionId: cleanText(input.suggestionId, "推荐问题不存在", 100) };
-  if (input.type === "answer") return { type: "answer", gateId: cleanText(input.gateId, "学习任务不存在", 100), answer: cleanText(input.answer, "请先写下答案", 2_000) };
-  if (input.type === "image_answer") return { type: "image_answer", gateId: cleanText(input.gateId, "学习任务不存在", 100) };
-  if (input.type === "choose" && ["continue", "try", "not_understood", "full_solution", "view_board", "start_recall", "retry_original", "practice_similar", "finish_review"].includes(String(input.choice))) return { type: "choose", gateId: cleanText(input.gateId, "学习任务不存在", 100), choice: input.choice as LearningChoice };
-  throw new Error("学习操作不合法");
-}
-
-async function parseTurnRequest(request: Request, multipart: boolean): Promise<{ stateToken: string; input: LearningTurnInput; imageDataUrl?: string }> {
-  if (!multipart) {
-    const body = await request.json() as Record<string, unknown>;
-    const input = parseTurnInput(body.input);
-    if (input.type === "image_question" || input.type === "image_answer") throw new Error("请先选择要发送的图片");
-    return { stateToken: cleanText(body.stateToken, "学习会话不存在", 100_000), input };
-  }
-  const form = await request.formData();
-  const inputRaw = cleanText(form.get("input"), "学习操作不合法", 5_000);
-  let inputValue: unknown;
-  try { inputValue = JSON.parse(inputRaw); } catch { throw new Error("学习操作不合法"); }
-  const input = parseTurnInput(inputValue);
-  if (input.type !== "image_question" && input.type !== "image_answer") throw new Error("图片只能用于当前提问或作答");
-  const image = form.get("image");
-  if (!(image instanceof File)) throw new Error("请先选择要发送的图片");
-  await assertImageFile(image);
-  const imageDataUrl = `data:${image.type};base64,${Buffer.from(await image.arrayBuffer()).toString("base64")}`;
-  return { stateToken: cleanText(form.get("stateToken"), "学习会话不存在", 100_000), input, imageDataUrl };
-}
-
-function requireImage(imageDataUrl?: string): string {
-  if (!imageDataUrl) throw new Error("请先选择要发送的图片");
-  return imageDataUrl;
-}
-
-function cleanText(value: unknown, emptyMessage: string, maximum: number): string {
-  if (typeof value !== "string") throw new Error(emptyMessage);
-  const text = value.normalize("NFC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
-  if (!text) throw new Error(emptyMessage);
-  if (text.length > maximum) throw new Error(`内容请控制在 ${maximum} 字以内`);
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text)) throw new Error("内容中含有不支持的控制字符");
-  return text;
-}
-
-function appendUnique(values: string[], ...next: string[]) {
-  return [...new Set(values.concat(next))];
-}
-
-function pathLabels(session: LearningSession, nodeIds: string[]) {
-  return nodeIds.map((id) => session.nodes.find((node) => node.id === id)?.title).filter((value): value is string => Boolean(value));
 }

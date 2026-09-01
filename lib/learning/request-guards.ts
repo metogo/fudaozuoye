@@ -1,3 +1,5 @@
+import { ServiceError } from "./errors";
+
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
 export function assertSameOrigin(request: Request): void {
@@ -24,7 +26,7 @@ export function assertRateLimit(request: Request, limit = 50, identity?: string)
     return;
   }
   bucket.count += 1;
-  if (bucket.count > limit) throw new Error("请求过于频繁，请稍后再试");
+  if (bucket.count > limit) throw new ServiceError("请求过于频繁，请稍后再试", 429, "RATE_LIMITED", true);
 }
 
 export async function assertImageFile(file: File): Promise<void> {

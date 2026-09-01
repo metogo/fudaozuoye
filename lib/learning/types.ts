@@ -69,6 +69,15 @@ export interface BoardBlock {
   tone: "plain" | "key" | "example";
 }
 
+export type BoardSceneIntent = "extract" | "connect" | "derive" | "compare" | "verify";
+
+export interface BoardConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  scopeLabel?: string;
+}
+
 export interface BoardAnnotation {
   blockId: string;
   target: string;
@@ -102,6 +111,95 @@ export interface BoardVisual {
   elements: BoardVisualElement[];
 }
 
+export interface BoardConceptNode {
+  id: string;
+  label: string;
+  role: "given" | "relation" | "step" | "check";
+}
+
+export interface BoardConceptEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+export interface BoardConceptVisual {
+  kind: "concept_graph";
+  title: string;
+  evidence: string;
+  caption: string;
+  direction: "top-down" | "left-right";
+  nodes: BoardConceptNode[];
+  edges: BoardConceptEdge[];
+}
+
+export interface BoardGeometryPoint {
+  id: string;
+  label: string;
+}
+
+export type BoardGeometryObject =
+  | { type: "segment" | "line" | "arrow"; from: string; to: string; label?: string }
+  | { type: "circle"; center: string; through?: string; radius?: number; label?: string }
+  | { type: "right_angle"; vertex: string; from: string; to: string };
+
+export interface BoardGeometryVisual {
+  kind: "geometry_model";
+  title: string;
+  evidence: string;
+  caption: string;
+  points: BoardGeometryPoint[];
+  objects: BoardGeometryObject[];
+}
+
+export interface BoardFunctionSeries {
+  id: string;
+  label: string;
+  coefficients: number[];
+  color: "emerald" | "amber" | "rose";
+}
+
+export interface BoardFunctionVisual {
+  kind: "function_plot";
+  title: string;
+  evidence: string;
+  caption: string;
+  domain: [number, number];
+  series: BoardFunctionSeries[];
+}
+
+export interface BoardFormulaStep {
+  id: string;
+  expression: string;
+  explanation: string;
+}
+
+export interface BoardFormulaVisual {
+  kind: "formula_chain";
+  title: string;
+  evidence: string;
+  caption: string;
+  steps: BoardFormulaStep[];
+}
+
+export type BoardSemanticVisual = BoardConceptVisual | BoardGeometryVisual | BoardFunctionVisual | BoardFormulaVisual;
+
+export interface BoardScene {
+  id: string;
+  intent: BoardSceneIntent;
+  title: string;
+  content: string;
+  tone: BoardBlock["tone"];
+  sourceMessageIds: string[];
+  visual?: BoardSemanticVisual | null;
+}
+
+export interface BoardPlan {
+  learningGoal: string;
+  sourceMessageIds: string[];
+  scenes: BoardScene[];
+}
+
 export interface BoardLesson {
   title: string;
   subtitle: string;
@@ -109,6 +207,7 @@ export interface BoardLesson {
   blocks: BoardBlock[];
   annotations: BoardAnnotation[];
   visual?: BoardVisual | null;
+  plan?: BoardPlan;
   returnLabel: string;
 }
 
@@ -164,7 +263,7 @@ export type LearningTurnInput =
   | { type: "start" }
   | { type: "question"; text: string }
   | { type: "image_question" }
-  | { type: "choose"; gateId: string; choice: LearningChoice }
+  | { type: "choose"; gateId: string; choice: LearningChoice; boardContext?: BoardConversationMessage[] }
   | { type: "answer"; gateId: string; answer: string }
   | { type: "image_answer"; gateId: string }
   | { type: "choose_suggestion"; suggestionId: string }

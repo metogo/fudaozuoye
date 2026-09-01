@@ -84,8 +84,10 @@ class MockProviderAdapter {
         const relation = /图|角|三角|四边|函数|坐标|光路|电路|受力|结构|关系|步骤|方程|化学式/.test(text);
         return { recommended: relation, reason: relation ? "这一步包含图形、关系或多步变化，用板书拆开更容易看清。" : "当前关系用短文字已经可以讲清楚。", layout: /对比|区别|变化/.test(text) ? "comparison" : /公式|方程|函数|化学式/.test(text) ? "formula" : /图|角|三角|四边|光路|电路|受力/.test(text) ? "relation" : "steps" };
     }
-    async generateBoardLesson(session, scope, suggestion) {
+    async generateBoardLesson(session, scope, suggestion, context = []) {
+        void context;
         return (0, board_1.createSafeBoardLesson)(session, scope, suggestion);
     }
+    cancelPendingRequests() { }
 }
 exports.MockProviderAdapter = MockProviderAdapter;

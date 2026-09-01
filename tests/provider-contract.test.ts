@@ -630,15 +630,17 @@ describe("真实供应商协议契约", () => {
     expect(board.blocks.map((block) => block.content).join(" ")).not.toContain(session.nodes.find((node) => node.id === session.rootNodeId)?.check.answer);
   });
 
-  it("豆包板书配图使用受约束图元并通过独立事实审校", async () => {
+  it("豆包板书只接受语义计划并通过独立事实审校", async () => {
     const mock = new MockProviderAdapter("doubao");
     const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "junior"));
     let calls = 0;
     const fetcher: typeof fetch = async (_input, init) => {
       calls += 1;
       const body = JSON.parse(String(init?.body)) as { tools?: Array<{ function?: { name?: string; parameters?: { required?: string[] } } }> };
-      if (body.tools?.[0]?.function?.name === "submit_board_lesson") {
+      if (body.tools?.[0]?.function?.name === "submit_board_content") {
+        expect((body as { max_tokens?: number }).max_tokens).toBe(6000);
         expect(body.tools[0].function.parameters?.required).toContain("visual");
+        expect(JSON.stringify(body.tools[0].function.parameters)).not.toContain('"x"');
         const argumentsText = JSON.stringify({
           title: "把方程关系画出来",
           blocks: [
@@ -647,24 +649,25 @@ describe("真实供应商协议契约", () => {
             { label: "推理顺序", content: "先处理整体外面的运算，再回到整体内部，顺序不能随意颠倒。", tone: "example" },
             { label: "易错自查", content: "每改变等式一边时都检查另一边是否做了对应变化，并保留原有数量关系。", tone: "plain" },
           ],
-          annotations: [
-            { blockIndex: 0, target: "未知量和已知量", kind: "circle", reason: "先分清两类量才能确定方程里需要处理的对象。" },
-            { blockIndex: 1, target: "左右两边始终保持相同的量", kind: "underline", reason: "这是所有等式变形都不能破坏的核心关系。" },
-            { blockIndex: 2, target: "顺序不能随意颠倒", kind: "box", reason: "这里直接决定后续变形能否保持正确方向。" },
-          ],
-          visual: {
-            kind: "relation", title: "等式两边的关系", evidence: session.problem.text.slice(0, 12), caption: "把等号两边看成始终保持相等的两个区域。",
-            elements: [{ type: "rect", x: 5, y: 20, width: 30, height: 18, label: "等号左边" }, { type: "arrow", x: 38, y: 29, x2: 62, y2: 29, label: "相等" }, { type: "rect", x: 65, y: 20, width: 30, height: 18, label: "等号右边" }],
+          visual: { kind: "none", title: "", evidence: "", caption: "", elements: [] },
+          plan: {
+            learningGoal: "看清方程变形时必须保持的数量关系",
+            sourceMessageIds: [],
+            scenes: ["extract", "connect", "derive", "verify"].map((intent) => ({
+              intent,
+              sourceMessageIds: [],
+              visual: { kind: "none", title: "", evidence: "", caption: "" },
+            })),
           },
         });
-        return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ function: { name: "submit_board_lesson", arguments: argumentsText } }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ function: { name: "submit_board_content", arguments: argumentsText } }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       return chatJsonResponse({ correct: true, grounded: true, noAnswerLeak: true, markingRelevant: true, visualCorrect: true, visualGrounded: true, reason: "正文、标记和关系示意均与题干条件一致。" });
     };
     const board = await new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem", section: "keyClue" }, { recommended: true, reason: "数量关系适合用示意图呈现。", layout: "relation" });
     expect(calls).toBe(2);
-    expect(board.visual?.kind).toBe("relation");
-    expect(board.visual?.elements).toHaveLength(3);
+    expect(board.visual).toBeNull();
+    expect(board.plan?.scenes.length).toBe(board.blocks.length);
   });
 
   it("上游短暂限流时原样重试一次", async () => {
@@ -735,6 +738,33 @@ describe("真实供应商协议契约", () => {
     const pending = new LiveProviderAdapter(liveConfig(), fetcher, "light", request.signal).recognizeTextProblem("解方程 2x=4");
     request.abort();
     await expect(pending).rejects.toThrow(/超时|中止|Aborted/);
+  });
+
+  it("可选能力超时后会真正取消底层模型调用", async () => {
+    let aborted = false;
+    const fetcher: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    });
+    const adapter = new LiveProviderAdapter(liveConfig(), fetcher);
+    const pending = adapter.recognizeTextProblem("解方程 2x=4");
+    adapter.cancelPendingRequests();
+    await expect(pending).rejects.toThrow(/超时|中止|Aborted/);
+    expect(aborted).toBe(true);
+  });
+
+  it("结构化调用被取消后不会再启动文本降级请求", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    const adapter = new LiveProviderAdapter(liveConfig(), fetcher);
+    const current = await new MockProviderAdapter("doubao").analyzeProblem(await new MockProviderAdapter("doubao").recognizeProblem("data:image/jpeg;base64,demo"));
+    const pending = adapter.decideBoardPresentation(current, { kind: "problem", section: "keyClue" });
+    adapter.cancelPendingRequests();
+    await expect(pending).rejects.toThrow(/超时|中止|Aborted/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 

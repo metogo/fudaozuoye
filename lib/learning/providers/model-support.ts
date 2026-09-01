@@ -20,7 +20,7 @@ export function chatBody(model: string, system: string, prompt: string, image?: 
   };
 }
 
-export function chatToolBody(model: string, system: string, prompt: string, tool: JsonObject, disableThinking = false) {
+export function chatToolBody(model: string, system: string, prompt: string, tool: JsonObject, disableThinking = false, maxTokens = 3000) {
   const name = (tool.function as JsonObject).name as string;
   return {
     model,
@@ -28,7 +28,7 @@ export function chatToolBody(model: string, system: string, prompt: string, tool
     tools: [tool],
     tool_choice: { type: "function", function: { name } },
     stream: false,
-    max_tokens: 3000,
+    max_tokens: maxTokens,
     ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
   };
 }
@@ -194,9 +194,113 @@ export function emitProviderDelta(line: string, protocol: ProviderConfig["protoc
 
 export function parseJsonObject(raw: string): JsonObject {
   const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-  const parsed: unknown = JSON.parse(cleaned);
+  const prepared = escapeModelLatexBackslashes(cleaned);
+  let parsed: unknown;
+  try { parsed = JSON.parse(prepared); }
+  catch (error) {
+    const repaired = escapeInvalidJsonStringBackslashes(prepared);
+    if (repaired === prepared) throw error;
+    parsed = JSON.parse(repaired);
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("模型没有返回 JSON 对象");
   return parsed as JsonObject;
+}
+
+const LATEX_COMMANDS = new Set([
+  "alpha", "angle", "approx", "bar", "begin", "beta", "binom", "bmod", "bottom", "boxed", "bullet", "cdot", "chi", "circ", "cos",
+  "delta", "dfrac", "epsilon", "eta", "frac", "gamma", "geq", "infty", "int", "kappa", "lambda", "left", "leq", "ln", "log", "mu",
+  "nabla", "neq", "nleq", "not", "notin", "nu", "omega", "operatorname", "overline", "phi", "pi", "prod", "psi", "qquad",
+  "rho", "right", "rightarrow", "sigma", "sqrt", "sum", "tan", "tau", "text", "tfrac", "theta", "therefore", "times", "top",
+  "triangle", "underline", "upsilon", "vec", "xi", "zeta",
+]);
+const LATEX_FIELDS = new Set(["formula", "expression"]);
+
+function escapeModelLatexBackslashes(value: string): string {
+  let output = "";
+  let inString = false;
+  let inMath = false;
+  let latexField = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '"' && !isEscaped(value, index)) {
+      inString = !inString;
+      inMath = false;
+      latexField = inString && isLatexValueField(value.slice(0, index));
+      output += character;
+      continue;
+    }
+    if (inString && character === "$" && !isEscaped(value, index)) {
+      inMath = !inMath;
+      if (value[index + 1] === "$") {
+        output += "$$";
+        index += 1;
+        continue;
+      }
+    }
+    if (!inString || character !== "\\") {
+      output += character;
+      continue;
+    }
+    const next = value[index + 1] ?? "";
+    if (next === "\\" || next === '"' || next === "/") {
+      output += character + next;
+      index += 1;
+      continue;
+    }
+    if (next === "u" && /^[0-9a-fA-F]{4}$/.test(value.slice(index + 2, index + 6))) {
+      output += value.slice(index, index + 6);
+      index += 5;
+      continue;
+    }
+    const command = value.slice(index + 1).match(/^[A-Za-z]+/)?.[0] ?? "";
+    if (command && LATEX_COMMANDS.has(command) && (inMath || latexField)) {
+      output += "\\\\";
+      continue;
+    }
+    output += character;
+  }
+  return output;
+}
+
+function isLatexValueField(prefix: string): boolean {
+  const match = prefix.match(/"([A-Za-z][A-Za-z0-9_]*)"\s*:\s*$/);
+  return Boolean(match && LATEX_FIELDS.has(match[1]));
+}
+
+function isEscaped(value: string, index: number): boolean {
+  let count = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) count += 1;
+  return count % 2 === 1;
+}
+
+function escapeInvalidJsonStringBackslashes(value: string): string {
+  let output = "";
+  let inString = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '"') {
+      inString = !inString;
+      output += character;
+      continue;
+    }
+    if (!inString || character !== "\\") {
+      output += character;
+      continue;
+    }
+    const next = value[index + 1];
+    if ('"\\/bfnrt'.includes(next ?? "")) {
+      output += character + next;
+      index += 1;
+      continue;
+    }
+    if (next === "u" && /^[0-9a-fA-F]{4}$/.test(value.slice(index + 2, index + 6))) {
+      output += value.slice(index, index + 6);
+      index += 5;
+      continue;
+    }
+    output += "\\\\";
+  }
+  return output;
 }
 
 export function solutionSystemPrompt(): string {

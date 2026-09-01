@@ -1,6 +1,6 @@
 import { analyzeMock, expandMock, recognizeMock, similarCheckMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
 import { isConcreteRecallAnswer } from "../solution-recall";
-import type { BoardLesson, BoardSuggestion, CheckItem, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
+import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
 import type { AnalysisPhaseReporter, ProviderAdapter } from "./adapter";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
 import { createSafeBoardLesson } from "./board";
@@ -74,7 +74,9 @@ export class MockProviderAdapter implements ProviderAdapter {
     const relation = /图|角|三角|四边|函数|坐标|光路|电路|受力|结构|关系|步骤|方程|化学式/.test(text);
     return { recommended: relation, reason: relation ? "这一步包含图形、关系或多步变化，用板书拆开更容易看清。" : "当前关系用短文字已经可以讲清楚。", layout: /对比|区别|变化/.test(text) ? "comparison" : /公式|方程|函数|化学式/.test(text) ? "formula" : /图|角|三角|四边|光路|电路|受力/.test(text) ? "relation" : "steps" };
   }
-  async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion): Promise<BoardLesson> {
+  async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[] = []): Promise<BoardLesson> {
+    void context;
     return createSafeBoardLesson(session, scope, suggestion);
   }
+  cancelPendingRequests() {}
 }

@@ -4,7 +4,8 @@ import { postSimilarCheck } from "@/lib/learning/http/similar";
 import { postVerify as verifyRoute } from "@/lib/learning/http/verify";
 import { analyzeMock, recognizeMock, transferCheckMock } from "@/lib/learning/mock-engine";
 import { CONSENT_COOKIE, consentRateIdentity, createConsentValue, hasValidConsent, openSession, sealSession, toClientState } from "@/lib/learning/server-state";
-import { assertSameOrigin } from "@/lib/learning/request-guards";
+import { assertRateLimit, assertSameOrigin } from "@/lib/learning/request-guards";
+import { ServiceError } from "@/lib/learning/errors";
 
 describe("无状态学习会话边界", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -162,6 +163,19 @@ describe("无状态学习会话边界", () => {
     expect(hasValidConsent(firstRequest)).toBe(true);
     expect(hasValidConsent(secondRequest)).toBe(true);
     expect(consentRateIdentity(firstRequest)).not.toBe(consentRateIdentity(secondRequest));
+  });
+
+  it("限流是可重试的暂时错误，不会被当成板书内容失效", () => {
+    const request = new Request("http://localhost/api/learning/board-cache");
+    const identity = `board-cache-${crypto.randomUUID()}`;
+    assertRateLimit(request, 1, identity);
+    try {
+      assertRateLimit(request, 1, identity);
+      throw new Error("预期触发限流");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ServiceError);
+      expect(error).toMatchObject({ status: 429, code: "RATE_LIMITED", retryable: true });
+    }
   });
 });
 

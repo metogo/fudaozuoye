@@ -4,6 +4,7 @@ exports.assertSameOrigin = assertSameOrigin;
 exports.assertContentLength = assertContentLength;
 exports.assertRateLimit = assertRateLimit;
 exports.assertImageFile = assertImageFile;
+const errors_1 = require("./errors");
 const requestBuckets = new Map();
 function assertSameOrigin(request) {
     const origin = request.headers.get("origin");
@@ -31,7 +32,7 @@ function assertRateLimit(request, limit = 50, identity) {
     }
     bucket.count += 1;
     if (bucket.count > limit)
-        throw new Error("请求过于频繁，请稍后再试");
+        throw new errors_1.ServiceError("请求过于频繁，请稍后再试", 429, "RATE_LIMITED", true);
 }
 async function assertImageFile(file) {
     const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);

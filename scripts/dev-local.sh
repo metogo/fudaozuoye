@@ -8,6 +8,7 @@ api_port="${API_PORT:-9000}"
 api_pid=""
 web_pid=""
 compiler_pid=""
+api_watch_stamp="$(mktemp "${TMPDIR:-/tmp}/learning-api-watch.XXXXXX")"
 
 start_api() {
   if [ -f "$project_dir/.env.local" ]; then
@@ -15,7 +16,7 @@ start_api() {
     HOST=localhost \
     PUBLIC_APP_ORIGIN="http://localhost:$web_port" \
     NODE_ENV=development \
-    node --watch --env-file="$project_dir/.env.local" "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
+    node --env-file="$project_dir/.env.local" "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
   else
     PORT="$api_port" \
     HOST=localhost \
@@ -23,9 +24,17 @@ start_api() {
     NODE_ENV=development \
     AI_MOCK_MODE=true \
     SESSION_STATE_SECRET=local-development-session-secret-32 \
-    node --watch "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
+    node "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
   fi
   api_pid=$!
+}
+
+api_sources_changed() {
+  find "$project_dir/functions/learning-api/dist" -type f -name '*.js' -newer "$api_watch_stamp" -print -quit | grep -q .
+}
+
+mark_api_sources_seen() {
+  touch "$api_watch_stamp"
 }
 
 wait_for_api() {
@@ -78,6 +87,7 @@ cleanup() {
   stop_process "$current_web_pid"
   stop_process "$current_api_pid"
   stop_process "$current_compiler_pid"
+  rm -f "$api_watch_stamp"
 }
 
 trap cleanup EXIT
@@ -96,6 +106,7 @@ if ! wait_for_api; then
   printf '%s\n' "本地分析服务未能在端口 $api_port 就绪。" >&2
   exit 1
 fi
+mark_api_sources_seen
 
 NEXT_PUBLIC_API_BASE_URL="http://localhost:$api_port/api" \
 "$project_dir/node_modules/.bin/next" dev -p "$web_port" &
@@ -103,7 +114,18 @@ web_pid=$!
 
 api_health_failures=0
 while kill -0 "$web_pid" 2>/dev/null && kill -0 "$compiler_pid" 2>/dev/null; do
-  if kill -0 "$api_pid" 2>/dev/null && curl --connect-timeout 1 --max-time 2 -fsS "http://localhost:$api_port/api/providers" >/dev/null 2>&1; then
+  if api_sources_changed; then
+    printf '%s\n' "检测到分析服务代码更新，正在热重载。"
+    stop_process "$api_pid"
+    api_pid=""
+    start_api
+    if ! wait_for_api; then
+      printf '%s\n' "本地分析服务热重载失败。" >&2
+      exit 1
+    fi
+    mark_api_sources_seen
+    api_health_failures=0
+  elif kill -0 "$api_pid" 2>/dev/null && curl --connect-timeout 1 --max-time 2 -fsS "http://localhost:$api_port/api/providers" >/dev/null 2>&1; then
     api_health_failures=0
   else
     api_health_failures=$((api_health_failures + 1))
