@@ -1,11 +1,12 @@
 import { isSupportedSubjectBand } from "../curriculum";
 import { getProviderAdapter, isProviderId } from "../providers";
+import { isBuiltInMockProblem } from "../mock-engine";
 import { assertContentLength, assertImageFile, assertRateLimit, assertSameOrigin } from "../request-guards";
 import { consentRateIdentity, hasValidConsent, toClientState } from "../server-state";
-import type { GradeBand, ProblemSnapshot, ReasoningLevel, Subject } from "../types";
+import { subjects as supportedSubjects, type GradeBand, type ProblemSnapshot, type ReasoningLevel, type Subject } from "../types";
 import { sse } from "./sse";
 
-const subjects = new Set<Subject>(["math", "physics", "chemistry"]);
+const subjects = new Set<Subject>(supportedSubjects);
 const bands = new Set<GradeBand>(["primary", "junior", "senior"]);
 const reasoningLevels = new Set<ReasoningLevel>(["light", "medium", "high"]);
 
@@ -29,6 +30,7 @@ export async function postAnalyze(request: Request): Promise<Response> {
     const raw = form.get("problem");
     if (typeof raw !== "string" || raw.length > 24_000) return new Response("缺少已确认的题目", { status: 400 });
     const problem = parseProblemSnapshot(JSON.parse(raw));
+    if (adapter.mode === "demo" && !isBuiltInMockProblem(problem)) return new Response("演示模式只支持内置代表题，请返回重新识别题目", { status: 400 });
     return sse(async (send) => {
       const startedAt = Date.now();
       send("phase", { key: "mapping", label: "正在理解题目要解决什么" });

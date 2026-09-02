@@ -41,7 +41,31 @@ export function protectedAnswerVariants(answer: string): string[] {
 export function protectedShortAnswers(answer: string): string[] {
   const normalized = normalizedAnswerMath(answer);
   const withoutUnit = normalized.replace(unitSuffix, "");
-  return Array.from(new Set([normalized, withoutUnit])).filter((value) => value.length === 1);
+  return Array.from(new Set([normalized, withoutUnit])).filter((value) => value.length === 1 || isShortTextAnswer(value));
+}
+
+export function isShortTextAnswer(answer: string): boolean {
+  return /^[\p{Script=Han}]{2,3}$/u.test(normalizedAnswerMath(answer));
+}
+
+export function shortTextAnswerLeak(visibleText: string, answer: string, sourceText: string): boolean {
+  if (!isShortTextAnswer(answer)) return false;
+  const term = answer.normalize("NFKC").trim();
+  return visibleText.normalize("NFKC").includes(term) && !sourceText.normalize("NFKC").includes(term);
+}
+
+export function explicitAnswerClaimLeak(visibleText: string, answer: string): boolean {
+  const variants = protectedAnswerVariants(answer).concat(protectedShortAnswers(answer));
+  const visible = normalizedAnswerMath(visibleText);
+  const resultClaim = "(?:最终答案|答案|最终结果|计算结果|结论|故选|应选|正确选项|正确的|正确答案)(?:应当|应该|应)?(?:是|为|等于|选择|选)?";
+  const selectionClaim = "(?:应当|应该|所以|因此|故而)?(?:应当|应该|应)?选择";
+  return variants.some((variant) => new RegExp(`(?:${resultClaim}|${selectionClaim})${escapeRegExp(variant)}(?![a-z0-9.])`, "u").test(visible));
+}
+
+export function generatedTextContainsAnswer(visibleText: string, answer: string): boolean {
+  const visible = normalizedAnswerMath(visibleText);
+  return protectedAnswerVariants(answer).concat(protectedShortAnswers(answer))
+    .some((variant) => visible.includes(variant));
 }
 
 export function shortProtectedAnswerLeak(visibleText: string, answer: string, sourceText: string): boolean {

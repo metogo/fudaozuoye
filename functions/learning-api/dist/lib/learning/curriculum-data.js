@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.curriculumCatalog = void 0;
+const curriculum_subject_data_1 = require("./curriculum-subject-data");
 const compulsory = "cn-compulsory-2022";
 const highSchool = "cn-highschool-2017-2020";
 const mathConcepts = [
@@ -103,4 +104,4 @@ const chemistryConcepts = [
     { id: "chemistry.equilibrium", title: "化学平衡", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["平衡移动", "可逆反应"], prerequisites: ["chemistry.reaction.rate", "chemistry.equation.meaning"] },
     { id: "chemistry.electrochemistry", title: "原电池与电解", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["原电池", "电极反应"], prerequisites: ["chemistry.redox.valence", "chemistry.particle.molecule-ion"] },
 ];
-exports.curriculumCatalog = [...mathConcepts, ...physicsConcepts, ...chemistryConcepts];
+exports.curriculumCatalog = [...mathConcepts, ...physicsConcepts, ...chemistryConcepts, ...curriculum_subject_data_1.subjectNativeConcepts];

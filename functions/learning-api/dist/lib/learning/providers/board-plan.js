@@ -1,25 +1,29 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.boardPlanSchema = boardPlanSchema;
 exports.parseBoardPlan = parseBoardPlan;
 exports.createSafeBoardPlan = createSafeBoardPlan;
 exports.boardPlanVisibleText = boardPlanVisibleText;
-const katex_1 = __importDefault(require("katex"));
+const types_1 = require("../types");
 const board_aids_1 = require("../board-aids");
+const board_chronology_1 = require("../board-chronology");
+const board_content_contract_1 = require("../board-content-contract");
+const board_evidence_1 = require("../board-evidence");
 const board_native_fallback_1 = require("../board-native-fallback");
+const board_subject_engine_1 = require("../board-subject-engine");
 const presentation_1 = require("../presentation");
 const answer_protection_1 = require("./answer-protection");
+const board_latex_1 = require("./board-latex");
 const sceneIntents = ["extract", "connect", "derive", "compare", "verify"];
 const teachingSubjects = ["math", "science", "language", "humanities", "general"];
 const teachingRoles = ["orient", "model", "reason", "misconception", "transfer", "recap"];
+const disciplineMoves = (0, board_subject_engine_1.allSubjectBoardMoves)();
 function boardPlanSchema(options = {}) {
     const includeVisuals = options.includeVisuals !== false;
     const sceneProperties = {
         intent: { type: "string", enum: [...sceneIntents] },
         role: { type: "string", enum: [...teachingRoles] },
+        move: { type: "string", enum: [...disciplineMoves] },
         purpose: { type: "string", maxLength: 48 },
         evidence: { type: "string", maxLength: 80 },
         why: { type: "string", maxLength: 100 },
@@ -31,22 +35,23 @@ function boardPlanSchema(options = {}) {
         type: "object",
         properties: {
             version: { const: 2 },
-            contentRevision: { const: 1 },
+            contentRevision: { const: 2 },
             subject: { type: "string", enum: [...teachingSubjects] },
+            discipline: { type: "string", enum: [...types_1.subjects] },
             thesis: { type: "string", maxLength: 120 },
             learningGoal: { type: "string", maxLength: 80 },
             sourceMessageIds: { type: "array", maxItems: 12, items: { type: "string" } },
             scenes: {
-                type: "array", minItems: 5, maxItems: 6,
+                type: "array", minItems: 5, maxItems: 5,
                 items: {
                     type: "object",
                     properties: sceneProperties,
-                    required: ["intent", "role", "purpose", "evidence", "why", "selfCheck", "sourceMessageIds", ...(includeVisuals ? ["visual"] : [])],
+                    required: ["intent", "role", "move", "purpose", "evidence", "why", "selfCheck", "sourceMessageIds", ...(includeVisuals ? ["visual"] : [])],
                     additionalProperties: false,
                 },
             },
         },
-        required: ["version", "contentRevision", "subject", "thesis", "learningGoal", "sourceMessageIds", "scenes"],
+        required: ["version", "contentRevision", "subject", "discipline", "thesis", "learningGoal", "sourceMessageIds", "scenes"],
         additionalProperties: false,
     };
 }
@@ -57,11 +62,15 @@ function parseBoardPlan(value, session, blocks, context) {
     if (plan.version !== undefined && plan.version !== 2)
         throw new Error("板书教学计划版本不合法");
     const native = plan.version === 2;
-    if (native && plan.contentRevision !== 1)
+    if (native && plan.contentRevision !== 1 && plan.contentRevision !== 2)
         throw new Error("板书教学内容版本不合法");
+    const revision = native ? plan.contentRevision : undefined;
     const learningGoal = text(plan.learningGoal, "板书学习目标", 4, 80);
     (0, presentation_1.assertBalancedLearningMarkup)(learningGoal, "板书学习目标");
     const subject = native ? teachingSubject(plan.subject) : (0, board_native_fallback_1.inferBoardSubject)(session);
+    const discipline = revision === 2 ? teachingDiscipline(plan.discipline) : session.problem.subject;
+    if (discipline !== session.problem.subject)
+        throw new Error("板书学科必须与当前题目一致");
     const thesis = native ? text(plan.thesis, "板书核心结论", 8, 120) : learningGoal;
     (0, presentation_1.assertBalancedLearningMarkup)(thesis, "板书核心结论");
     const allowedIds = new Set(context.map((message) => message.id));
@@ -69,9 +78,12 @@ function parseBoardPlan(value, session, blocks, context) {
     if (!Array.isArray(plan.scenes) || plan.scenes.length !== blocks.length)
         throw new Error("板书教学计划必须与正文区块逐项对应");
     const evidenceSources = visualEvidenceSources(session);
+    const subjectProfile = (0, board_subject_engine_1.subjectBoardProfileFor)(session);
     const topLevelIds = new Set(sourceMessageIds);
     const contextById = new Map(context.map((message) => [message.id, message.text]));
-    const scenes = plan.scenes.map((raw, index) => parseScene(raw, index, blocks[index], topLevelIds, evidenceSources, contextById, native));
+    const scenes = plan.scenes.map((raw, index) => parseScene(raw, index, blocks[index], topLevelIds, evidenceSources, contextById, native, revision, discipline, subjectProfile));
+    if (scenes.filter((scene) => scene.visual).length > 2)
+        throw new Error("整页板书最多包含两处互补配图");
     if (new Set(scenes.map((scene) => scene.intent)).size < 2)
         throw new Error("板书场景必须体现至少两种教学意图");
     const sceneIds = new Set(scenes.flatMap((scene) => scene.sourceMessageIds));
@@ -79,7 +91,7 @@ function parseBoardPlan(value, session, blocks, context) {
         throw new Error("板书总来源必须由具体场景实际引用");
     if (native)
         assertNativeTeachingPlan(scenes, context);
-    const result = (0, board_aids_1.enrichBoardPlanWithSafeAids)(session, { ...(native ? { version: 2, contentRevision: 1 } : {}), subject, thesis, learningGoal, sourceMessageIds, scenes });
+    const result = (0, board_aids_1.enrichBoardPlanWithSafeAids)(session, { ...(native ? { version: 2, contentRevision: revision } : {}), subject, discipline, thesis, learningGoal, sourceMessageIds, scenes });
     assertPlanNoAnswerLeak(session, [result.thesis, result.learningGoal].filter(Boolean).join("\n"), result.scenes);
     return result;
 }
@@ -97,7 +109,7 @@ function boardPlanVisibleText(plan) {
         ...plan.scenes.flatMap((scene) => [scene.title, scene.content, scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? "", ...semanticVisualText(scene.visual)]),
     ].join("\n");
 }
-function parseScene(raw, index, fallbackBlock, allowedIds, evidenceSources, contextById, native) {
+function parseScene(raw, index, fallbackBlock, allowedIds, evidenceSources, contextById, native, revision, discipline, subjectProfile) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
         throw new Error("板书教学场景结构不合法");
     const item = raw;
@@ -106,7 +118,13 @@ function parseScene(raw, index, fallbackBlock, allowedIds, evidenceSources, cont
     if (!fallbackBlock)
         throw new Error("板书教学场景没有对应正文区块");
     const sourceMessageIds = sourceIds(item.sourceMessageIds, allowedIds, 4);
-    const nativeFields = native ? parseNativeTeachingFields(item, evidenceSources.concat(sourceMessageIds.map((id) => contextById.get(id) ?? ""))) : {};
+    const nativeFields = native ? parseNativeTeachingFields(item, evidenceSources.concat(sourceMessageIds.map((id) => contextById.get(id) ?? "")), revision, discipline, index, subjectProfile) : {};
+    if (revision === 2 && !fallbackBlock.content.includes(nativeFields.purpose ?? ""))
+        throw new Error("新版板书正文必须落实当前学科教学目的");
+    if (revision === 2 && nativeFields.evidence && !fallbackBlock.content.includes(nativeFields.evidence))
+        throw new Error("新版板书正文必须保留原题依据");
+    if (revision === 2 && nativeFields.evidence)
+        (0, board_content_contract_1.assertEnhancedBoardContent)(discipline, fallbackBlock.content, nativeFields.purpose, nativeFields.evidence, evidenceSources.join("\n"));
     return {
         id: fallbackBlock.id,
         intent: item.intent,
@@ -118,22 +136,31 @@ function parseScene(raw, index, fallbackBlock, allowedIds, evidenceSources, cont
         visual: parseSemanticVisual(item.visual, evidenceSources),
     };
 }
-function parseNativeTeachingFields(item, evidenceSources) {
+function parseNativeTeachingFields(item, evidenceSources, revision, discipline, index, subjectProfile) {
     if (!teachingRoles.includes(item.role))
         throw new Error("板书教学单元职责不合法");
     const purpose = text(item.purpose, "板书教学目的", 6, 80);
-    const evidence = text(item.evidence, "板书教学依据", 4, 120);
+    const availableEvidence = evidenceSources.filter((source) => source.length >= 4 && !(0, board_evidence_1.isTaskInstructionText)(source));
+    const evidence = item.evidence === undefined && availableEvidence.length === 0 ? undefined : text(item.evidence, "板书教学依据", 4, 120);
+    if (evidence && (0, board_evidence_1.isTaskInstructionText)(evidence))
+        throw new Error("板书教学依据不能使用作答指令冒充原文证据");
     const why = text(item.why, "板书成立原因", 10, 180);
     const selfCheck = text(item.selfCheck, "板书自查问题", 6, 100);
-    if (!evidenceSources.some((source) => source.includes(evidence)))
+    if (evidence && !evidenceSources.some((source) => source.includes(evidence)))
         throw new Error("板书教学依据必须逐字来自原题、知识节点或已引用对话");
     for (const [label, value] of [["板书教学目的", purpose], ["板书成立原因", why], ["板书自查问题", selfCheck]])
         (0, presentation_1.assertBalancedLearningMarkup)(value, label);
-    return { role: item.role, purpose, evidence, why, selfCheck };
+    const expectedMove = subjectProfile.discipline === discipline ? subjectProfile.moves[index] : (0, board_subject_engine_1.subjectBoardProfile)(discipline).moves[index];
+    const move = revision === 2 ? item.move : expectedMove?.id;
+    if (revision === 2 && (!expectedMove || move !== expectedMove.id || item.role !== expectedMove.role))
+        throw new Error("板书教学动作必须遵循当前学科蓝图");
+    if (revision === 2 && (purpose !== expectedMove.purpose || selfCheck !== expectedMove.selfCheck || why !== (0, board_native_fallback_1.nativeMoveWhy)(expectedMove.label, expectedMove.role)))
+        throw new Error("板书教学目的、成立原因和自查问题必须逐项遵循当前学科蓝图");
+    return { role: item.role, move, purpose, evidence, why, selfCheck };
 }
 function assertNativeTeachingPlan(scenes, context) {
-    if (scenes.length < 5 || scenes.length > 6)
-        throw new Error("新版板书必须包含 5 到 6 个职责完整的教学单元");
+    if (scenes.length !== 5)
+        throw new Error("新版板书必须包含 5 个职责完整的教学单元");
     const roles = scenes.map((scene) => scene.role);
     for (const required of ["orient", "model", "reason", "recap"]) {
         if (!roles.includes(required))
@@ -146,6 +173,9 @@ function assertNativeTeachingPlan(scenes, context) {
     const contents = scenes.map((scene) => compact(scene.content));
     if (new Set(contents).size !== contents.length)
         throw new Error("新版板书不能重复相同正文");
+    const instructionSignatures = scenes.map((scene) => (0, board_content_contract_1.enhancedBoardInstructionSignature)(scene.content, scene.purpose ?? "", scene.evidence ?? ""));
+    if (new Set(instructionSignatures).size !== instructionSignatures.length)
+        throw new Error("新版板书五个动作不能复用同一段学科套话");
     for (const [label, values] of [
         ["教学目的", scenes.map((scene) => compact(scene.purpose ?? ""))],
         ["成立原因", scenes.map((scene) => compact(scene.why ?? ""))],
@@ -178,6 +208,11 @@ function teachingSubject(value) {
         throw new Error("板书学科表达类型不合法");
     return value;
 }
+function teachingDiscipline(value) {
+    if (!types_1.subjects.includes(value))
+        throw new Error("板书学科不合法");
+    return value;
+}
 function parseSemanticVisual(value, evidenceSources) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error("板书场景配图结构不合法");
@@ -193,6 +228,14 @@ function parseSemanticVisual(value, evidenceSources) {
         return parseGeometryVisual(visual, common);
     if (visual.kind === "function_plot")
         return parseFunctionVisual(visual, common, evidenceSources);
+    if (visual.kind === "evidence_chain")
+        return parseEvidenceChainVisual(visual, common, evidenceSources);
+    if (visual.kind === "timeline")
+        return parseTimelineVisual(visual, common, evidenceSources);
+    if (visual.kind === "process_flow")
+        return parseProcessVisual(visual, common, evidenceSources);
+    if (visual.kind === "comparison_matrix")
+        return parseComparisonVisual(visual, common, evidenceSources);
     throw new Error("板书场景配图类型不合法");
 }
 function semanticVisualCommon(value, evidenceSources) {
@@ -201,9 +244,99 @@ function semanticVisualCommon(value, evidenceSources) {
     const caption = text(value.caption, "板书场景配图说明", 6, 120);
     if (!evidenceSources.some((source) => source.includes(evidence)))
         throw new Error("板书场景配图依据必须逐字来自原题或当前知识节点");
+    (0, presentation_1.assertBalancedLearningMarkup)(evidence, "板书场景配图依据");
     (0, presentation_1.assertBalancedLearningMarkup)(title, "板书场景配图标题");
     (0, presentation_1.assertBalancedLearningMarkup)(caption, "板书场景配图说明");
     return { title, evidence, caption };
+}
+function parseEvidenceChainVisual(value, common, evidenceSources) {
+    if (!Array.isArray(value.links) || value.links.length < 2 || value.links.length > 6)
+        throw new Error("板书证据链数量不合法");
+    const links = value.links.map((raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+            throw new Error("板书证据链节点不合法");
+        const item = raw;
+        const quote = text(item.quote, "板书证据原文", 2, 120);
+        (0, presentation_1.assertBalancedLearningMarkup)(quote, "板书证据原文");
+        const meaning = text(item.meaning, "板书证据作用", 4, 80);
+        if (!evidenceSources.some((source) => source.includes(quote)))
+            throw new Error("板书证据链必须逐字引用原题或知识节点");
+        (0, presentation_1.assertBalancedLearningMarkup)(meaning, "板书证据作用");
+        return { id: identifier(item.id, "板书证据链节点"), quote, meaning };
+    });
+    if (new Set(links.map((link) => link.id)).size !== links.length)
+        throw new Error("板书证据链节点不能重复");
+    return { kind: "evidence_chain", ...common, links };
+}
+function parseTimelineVisual(value, common, evidenceSources) {
+    if (!Array.isArray(value.events) || value.events.length < 2 || value.events.length > 8)
+        throw new Error("板书时间线事件数量不合法");
+    const events = value.events.map((raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+            throw new Error("板书时间线事件不合法");
+        const item = raw;
+        const time = plainLabel(item.time, "板书时间", 24);
+        const event = text(item.event, "板书时间线事件", 4, 140);
+        (0, presentation_1.assertBalancedLearningMarkup)(event, "板书时间线事件");
+        if (!event.includes(time) || !evidenceSources.some((source) => source.includes(event)))
+            throw new Error("板书时间线只能排列材料明确给出的事件");
+        return { id: identifier(item.id, "板书时间线事件"), time, event };
+    });
+    if (new Set(events.map((event) => event.id)).size !== events.length)
+        throw new Error("板书时间线事件不能重复");
+    const ordered = (0, board_chronology_1.sortChronology)(events);
+    if (!ordered)
+        throw new Error("板书时间线必须使用可比较的同类时间并按先后排列");
+    return { kind: "timeline", ...common, events: ordered };
+}
+function parseProcessVisual(value, common, evidenceSources) {
+    if (!Array.isArray(value.steps) || value.steps.length < 2 || value.steps.length > 6)
+        throw new Error("板书过程链步骤数量不合法");
+    const steps = value.steps.map((raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+            throw new Error("板书过程链步骤不合法");
+        const item = raw;
+        const evidence = text(item.evidence, "板书过程链依据", 4, 120);
+        (0, presentation_1.assertBalancedLearningMarkup)(evidence, "板书过程链依据");
+        if (!evidenceSources.some((source) => source.includes(evidence)))
+            throw new Error("板书过程链必须保留原题依据");
+        return { id: identifier(item.id, "板书过程链步骤"), label: plainLabel(item.label, "板书过程链标题", 28), evidence };
+    });
+    if (new Set(steps.map((step) => step.id)).size !== steps.length)
+        throw new Error("板书过程链步骤不能重复");
+    return { kind: "process_flow", ...common, steps };
+}
+function parseComparisonVisual(value, common, evidenceSources) {
+    if (!Array.isArray(value.columns) || value.columns.length !== 2)
+        throw new Error("板书对比矩阵必须包含两个对象");
+    const columns = value.columns.map((column) => plainLabel(column, "板书对比对象", 24));
+    const grounded = compact(evidenceSources.join(" "));
+    if (columns.some((column) => !grounded.includes(compact(column))))
+        throw new Error("板书对比对象必须来自原题");
+    if (!Array.isArray(value.rows) || value.rows.length < 1 || value.rows.length > 6)
+        throw new Error("板书对比矩阵维度数量不合法");
+    const safeInstructions = new Set([
+        `只摘录涉及${columns[0]}的原文`,
+        `只摘录涉及${columns[1]}的原文`,
+        "按题目要求的维度判断",
+        "按同一维度判断",
+        "材料未给出，待补证",
+    ]);
+    const rows = value.rows.map((raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+            throw new Error("板书对比矩阵行不合法");
+        const item = raw;
+        const left = text(item.left, "板书对比左项", 2, 80);
+        const right = text(item.right, "板书对比右项", 2, 80);
+        (0, presentation_1.assertBalancedLearningMarkup)(left, "板书对比左项");
+        (0, presentation_1.assertBalancedLearningMarkup)(right, "板书对比右项");
+        if ([left, right].some((cell) => !safeInstructions.has(cell) && !grounded.includes(compact(cell))))
+            throw new Error("板书对比结论必须逐字来自原题；材料未给出时只能标记待补证");
+        return { id: identifier(item.id, "板书对比矩阵行"), aspect: plainLabel(item.aspect, "板书对比维度", 28), left, right };
+    });
+    if (new Set(rows.map((row) => row.id)).size !== rows.length)
+        throw new Error("板书对比矩阵行不能重复");
+    return { kind: "comparison_matrix", ...common, columns, rows };
 }
 function parseConceptVisual(value, common, evidenceSources) {
     const direction = value.direction;
@@ -309,13 +442,14 @@ function parseGeometryObject(raw, pointIds) {
         const label = object.label === undefined || object.label === "" ? undefined : plainLabel(object.label, "板书圆标签", 12);
         return { type, center, ...(through ? { through } : {}), ...(radius !== undefined ? { radius } : {}), ...(label ? { label } : {}) };
     }
-    if (type === "right_angle") {
+    if (type === "right_angle" || type === "angle") {
         const vertex = pointReference(object.vertex, pointIds);
         const from = pointReference(object.from, pointIds);
         const to = pointReference(object.to, pointIds);
         if (new Set([vertex, from, to]).size !== 3)
-            throw new Error("板书直角标记必须引用三个不同的点");
-        return { type, vertex, from, to };
+            throw new Error("板书角标记必须引用三个不同的点");
+        const label = type === "angle" && object.label !== undefined && object.label !== "" ? plainLabel(object.label, "板书角标签", 12) : undefined;
+        return { type, vertex, from, to, ...(label ? { label } : {}) };
     }
     throw new Error("板书几何对象类型不合法");
 }
@@ -370,7 +504,7 @@ function parseFormulaVisual(value, common) {
         const explanation = text(step.explanation, "板书公式说明", 4, 80);
         (0, presentation_1.assertBalancedLearningMarkup)(expression, "板书公式");
         (0, presentation_1.assertBalancedLearningMarkup)(explanation, "板书公式说明");
-        assertValidLatex(expression, "板书公式");
+        (0, board_latex_1.assertValidLatex)(expression, "板书公式");
         return { id: identifier(step.id, "板书公式步骤"), expression, explanation };
     });
     if (new Set(steps.map((step) => step.id)).size !== steps.length)
@@ -386,9 +520,14 @@ function semanticVisualSchema() {
                                 { type: "object", properties: { type: { type: "string", enum: ["segment", "line", "arrow"] }, from: { type: "string" }, to: { type: "string" }, label: { type: "string" } }, required: ["type", "from", "to"], additionalProperties: false },
                                 { type: "object", properties: { type: { const: "circle" }, center: { type: "string" }, through: { type: "string" }, radius: { type: "number" }, label: { type: "string" } }, required: ["type", "center"], additionalProperties: false },
                                 { type: "object", properties: { type: { const: "right_angle" }, vertex: { type: "string" }, from: { type: "string" }, to: { type: "string" } }, required: ["type", "vertex", "from", "to"], additionalProperties: false },
+                                { type: "object", properties: { type: { const: "angle" }, vertex: { type: "string" }, from: { type: "string" }, to: { type: "string" }, label: { type: "string" } }, required: ["type", "vertex", "from", "to"], additionalProperties: false },
                             ] } } }, required: ["kind", "title", "evidence", "caption", "points", "objects"], additionalProperties: false },
             { type: "object", properties: { kind: { const: "function_plot" }, ...common, domain: { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } }, series: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, coefficients: { type: "array", minItems: 1, maxItems: 6, items: { type: "number" } }, color: { type: "string", enum: ["emerald", "amber", "rose"] } }, required: ["id", "label", "coefficients", "color"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "domain", "series"], additionalProperties: false },
             { type: "object", properties: { kind: { const: "formula_chain" }, ...common, steps: { type: "array", minItems: 2, maxItems: 6, items: { type: "object", properties: { id: { type: "string" }, expression: { type: "string" }, explanation: { type: "string" } }, required: ["id", "expression", "explanation"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "steps"], additionalProperties: false },
+            { type: "object", properties: { kind: { const: "evidence_chain" }, ...common, links: { type: "array", minItems: 2, maxItems: 6, items: { type: "object", properties: { id: { type: "string" }, quote: { type: "string" }, meaning: { type: "string" } }, required: ["id", "quote", "meaning"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "links"], additionalProperties: false },
+            { type: "object", properties: { kind: { const: "timeline" }, ...common, events: { type: "array", minItems: 2, maxItems: 8, items: { type: "object", properties: { id: { type: "string" }, time: { type: "string" }, event: { type: "string" } }, required: ["id", "time", "event"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "events"], additionalProperties: false },
+            { type: "object", properties: { kind: { const: "process_flow" }, ...common, steps: { type: "array", minItems: 2, maxItems: 6, items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, evidence: { type: "string" } }, required: ["id", "label", "evidence"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "steps"], additionalProperties: false },
+            { type: "object", properties: { kind: { const: "comparison_matrix" }, ...common, columns: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, rows: { type: "array", minItems: 1, maxItems: 6, items: { type: "object", properties: { id: { type: "string" }, aspect: { type: "string" }, left: { type: "string" }, right: { type: "string" } }, required: ["id", "aspect", "left", "right"], additionalProperties: false } } }, required: ["kind", "title", "evidence", "caption", "columns", "rows"], additionalProperties: false },
         ] };
 }
 function assertPlanNoAnswerLeak(session, learningGoal, scenes) {
@@ -398,7 +537,12 @@ function assertPlanNoAnswerLeak(session, learningGoal, scenes) {
     const explanation = compact(root?.check.explanation ?? "");
     const boardText = compact(visibleText);
     const normalizedMath = comparableMath(visibleText);
-    if (answer.length >= 2 && (boardText.includes(answer) || (0, answer_protection_1.protectedAnswerVariants)(root?.check.answer ?? "").some((variant) => normalizedMath.includes(variant))))
+    const answerAlreadyInProblem = answer.length >= 2 && compact(session.problem.text).includes(answer);
+    if (!answerAlreadyInProblem && !(0, answer_protection_1.isShortTextAnswer)(root?.check.answer ?? "") && answer.length >= 2 && (boardText.includes(answer) || (0, answer_protection_1.protectedAnswerVariants)(root?.check.answer ?? "").some((variant) => normalizedMath.includes(variant))))
+        throw new Error("板书教学计划不能提前泄露原题最终答案");
+    if ((0, answer_protection_1.explicitAnswerClaimLeak)(visibleText, root?.check.answer ?? ""))
+        throw new Error("板书教学计划不能提前泄露原题最终答案");
+    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, root?.check.answer ?? "", session.problem.text))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
     if ((0, answer_protection_1.protectedShortAnswers)(root?.check.answer ?? "").some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, session.problem.text)))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
@@ -415,7 +559,15 @@ function semanticVisualText(visual) {
         return common.concat(visual.steps.flatMap((step) => [step.expression, step.explanation]));
     if (visual.kind === "geometry_model")
         return common.concat(visual.points.map((point) => point.label), visual.objects.map((object) => "label" in object ? object.label ?? "" : ""));
-    return common.concat(visual.series.map((series) => series.label));
+    if (visual.kind === "function_plot")
+        return common.concat(visual.series.map((series) => series.label));
+    if (visual.kind === "evidence_chain")
+        return common.concat(visual.links.flatMap((link) => [link.quote, link.meaning]));
+    if (visual.kind === "timeline")
+        return common.concat(visual.events.flatMap((event) => [event.time, event.event]));
+    if (visual.kind === "process_flow")
+        return common.concat(visual.steps.flatMap((step) => [step.label, step.evidence]));
+    return common.concat(visual.columns, visual.rows.flatMap((row) => [row.aspect, row.left, row.right]));
 }
 function visualEvidenceSources(session) {
     return [session.problem.text, ...session.nodes.flatMap((node) => node.kind === "concept" ? [node.diagnosticEvidence] : [])]
@@ -465,7 +617,7 @@ function assertGeometryGrounded(visual) {
         throw new Error("板书几何点必须逐字来自配图依据");
     const triangleNames = Array.from(visual.evidence.matchAll(/(?:△|三角形)\s*([A-Z])([A-Z])([A-Z])/gi)).map((match) => match.slice(1, 4).join("").toUpperCase());
     for (const object of visual.objects) {
-        if (object.type === "right_angle") {
+        if (object.type === "right_angle" || object.type === "angle") {
             const vertex = visual.points.find((point) => point.id === object.vertex)?.label.toUpperCase() ?? "";
             const from = visual.points.find((point) => point.id === object.from)?.label.toUpperCase() ?? "";
             const to = visual.points.find((point) => point.id === object.to)?.label.toUpperCase() ?? "";
@@ -477,8 +629,10 @@ function assertGeometryGrounded(visual) {
                 const otherVertices = name.split("").filter((point) => point !== vertex);
                 return name.includes(vertex) && otherVertices.length === 2 && outerPointsMatch(otherVertices[0], otherVertices[1]);
             });
-            if (!explicitAngle && !(singleVertex && triangleSupportsRays))
+            if (object.type === "right_angle" && !explicitAngle && !(singleVertex && triangleSupportsRays))
                 throw new Error("板书直角标记的顶点和两条射线必须由 90° 条件直接支持");
+            if (object.type === "angle" && !triangleSupportsRays)
+                throw new Error("板书角标记必须由同一三角形的顶点与两条邻边支持");
             continue;
         }
         if (object.type === "circle") {
@@ -600,17 +754,6 @@ function polynomialExpression(coefficients) {
 }
 function comparableMath(value) {
     return (0, answer_protection_1.normalizedAnswerMath)(value);
-}
-function assertValidLatex(value, label) {
-    for (const formula of value.matchAll(/\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g)) {
-        const source = formula[1] ?? formula[2] ?? "";
-        try {
-            katex_1.default.renderToString(source, { throwOnError: true, strict: "error" });
-        }
-        catch {
-            throw new Error(`${label}的 LaTeX 结构不合法`);
-        }
-    }
 }
 function compact(value) {
     return value.normalize("NFKC").replace(/[\s，。；：、“”‘’（）()\[\]【】]/g, "").toLowerCase();

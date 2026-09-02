@@ -10,16 +10,16 @@ describe("模型板书结构校验", () => {
   it("拒绝只有四段的 Chat 式摘要冒充新版板书", () => {
     const output = validOutput();
     output.blocks = (output.blocks as Array<Record<string, unknown>>).slice(0, 4);
-    expect(() => parseBoardLesson(output, session(), suggestion)).toThrow("5 到 6 个");
+    expect(() => parseBoardLesson(output, session(), suggestion)).toThrow("5 个");
   });
 
   it("只接受能关联真实区块且附理由的精确重点", () => {
     const lesson = parseBoardLesson(validOutput(), session(), suggestion);
-    expect(lesson.blocks).toHaveLength(6);
+    expect(lesson.blocks).toHaveLength(5);
     expect(lesson.annotations).toHaveLength(3);
     expect(lesson.annotations.every((item) => item.reason.length >= 8)).toBe(true);
     expect(lesson.visual).toBeNull();
-    expect(lesson.plan?.scenes).toHaveLength(6);
+    expect(lesson.plan?.scenes).toHaveLength(5);
   });
 
   it("拒绝新模型继续输出旧版坐标图元", () => {
@@ -181,18 +181,19 @@ describe("模型板书结构校验", () => {
   it("新版板书协议要求完整教学职责、依据、成立原因和自查", () => {
     const current = session();
     const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
-    const plan = parseBoardPlan(nativeTeachingPlan(lesson.blocks, current.problem.text), current, lesson.blocks, []);
+    const evidence = current.problem.text.split("，照")[0];
+    const plan = parseBoardPlan(nativeTeachingPlan(lesson.blocks, evidence), current, lesson.blocks, []);
 
     expect(plan.version).toBe(2);
     expect(plan.subject).toBe("math");
-    expect(plan.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "transfer", "recap"]);
+    expect(plan.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "recap"]);
     expect(plan.scenes.every((scene) => scene.purpose && scene.evidence && scene.why && scene.selfCheck)).toBe(true);
 
-    const missingRole = nativeTeachingPlan(lesson.blocks, current.problem.text);
+    const missingRole = nativeTeachingPlan(lesson.blocks, evidence);
     (missingRole.scenes as Array<Record<string, unknown>>)[2].role = "model";
     expect(() => parseBoardPlan(missingRole, current, lesson.blocks, [])).toThrow("缺少 reason");
 
-    const repeatedWhy = nativeTeachingPlan(lesson.blocks, current.problem.text);
+    const repeatedWhy = nativeTeachingPlan(lesson.blocks, evidence);
     repeatedWhy.scenes[2].why = repeatedWhy.scenes[1].why;
     expect(() => parseBoardPlan(repeatedWhy, current, lesson.blocks, [])).toThrow("成立原因不能重复");
   });
@@ -201,36 +202,38 @@ describe("模型板书结构校验", () => {
     const current = session();
     const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     const context = [{ id: "chat-copy", role: "assistant" as const, text: lesson.blocks[0].content }];
-    expect(() => parseBoardPlan(nativeTeachingPlan(lesson.blocks, current.problem.text), current, lesson.blocks, context)).toThrow("搬运 Chat");
+    expect(() => parseBoardPlan(nativeTeachingPlan(lesson.blocks, current.problem.text.split("，照")[0]), current, lesson.blocks, context)).toThrow("搬运 Chat");
   });
 
-  it("安全板书按学科组织内容，并且无结构收益时不强制配图", () => {
+  it("安全板书按识别学科组织原生内容与辅助", () => {
     const current = session();
     current.problem.subject = "chemistry";
     current.problem.text = "探究温度对化学反应速率的影响，并说明产生这一影响的原因。";
     current.problemGuide = { goal: "分析温度与反应速率的关系", keyClue: "温度对反应速率的影响", approach: "按变量和过程整理", firstQuestion: "研究对象是什么" };
     const science = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(science.plan?.subject).toBe("science");
-    expect(science.blocks.map((block) => block.label)).toContain("对象与过程");
-    expect(science.blocks.map((block) => block.label)).not.toContain("时序因果");
+    expect(science.plan?.discipline).toBe("chemistry");
+    expect(science.blocks.map((block) => block.label)).toContain("守恒账本");
+    expect(science.blocks.map((block) => block.label)).not.toContain("因果链");
 
-    current.problem.subject = "math";
+    current.problem.subject = "chinese";
     current.problem.text = "语文阅读：结合上下文解释“勇敢”这个词的含义，并找出原文证据。";
     current.problemGuide = { goal: "解释词语含义", keyClue: "勇敢", approach: "结合语境说明含义", firstQuestion: "这个词描述什么品质" };
     const language = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(language.plan?.subject).toBe("language");
-    expect(language.blocks.map((block) => block.label)).toContain("篇章结构");
+    expect(language.blocks.map((block) => block.label)).toContain("词句解剖");
 
+    current.problem.subject = "history";
     current.problem.text = "历史材料题：结合材料分析制度形成的原因和影响。";
     current.problemGuide = { goal: "分析制度形成的原因和影响", keyClue: "制度形成", approach: "按时间整理材料", firstQuestion: "材料先写了什么背景" };
     const humanities = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(humanities.plan?.subject).toBe("humanities");
-    expect(humanities.blocks.map((block) => block.label)).toContain("时序因果");
+    expect(humanities.blocks.map((block) => block.label)).toContain("因果链");
 
     current.problem.text = "解释“勇敢”的含义。";
     current.problemGuide = { goal: "解释词语含义", keyClue: "勇敢", approach: "说明含义", firstQuestion: "这个词描述什么品质" };
     const plain = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
-    expect(plain.plan?.scenes.every((scene) => !scene.visual)).toBe(true);
+    expect(plain.plan?.scenes.some((scene) => scene.visual)).toBe(false);
   });
 
   it("安全数学板书保留题干关系和指定值，但不泄露计算答案", () => {
@@ -245,14 +248,14 @@ describe("模型板书结构校验", () => {
     const root = current.nodes.find((node) => node.id === current.rootNodeId);
     if (root?.check) root.check.answer = "11";
 
-    const relation = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks.find((block) => block.label === "关系模型");
+    const relation = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks.find((block) => block.label === "关系结构");
 
-    expect(relation?.content).toContain("$y=2x+3$");
-    expect(relation?.content).toContain("$x=4$");
+    expect(relation?.content).toContain("y=2x+3");
+    expect(relation?.content).toContain("x=4");
     expect(relation?.content).not.toContain("11");
   });
 
-  it("模型上下文含答案时降级为中性安全板书，而不是让整个板书入口失败", () => {
+  it("Chat 引导中混入答案时，安全板书不再使用受污染内容", () => {
     const current = session();
     const answer = current.nodes.find((node) => node.id === current.rootNodeId)?.check.answer ?? "300";
     current.problemGuide.goal = `最终答案是 ${answer}`;
@@ -260,11 +263,24 @@ describe("模型板书结构校验", () => {
 
     const lesson = createSafeBoardLesson(current, { kind: "problem", section: "keyClue" }, suggestion);
 
-    expect(lesson.title).toBe("把当前思路整理清楚");
+    expect(lesson.title).toBe("数学 · 建模与推导");
     expect(lesson.quality?.status).toBe("safe_fallback");
-    expect(lesson.blocks).toHaveLength(6);
+    expect(lesson.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
     expect(lesson.annotations).toHaveLength(3);
     expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain(answer);
+  });
+
+  it("学科正文触发答案保护时，最小兜底仍保留当前学科动作", () => {
+    const current = session();
+    const root = current.nodes.find((node) => node.id === current.rootNodeId)!;
+    root.check.answer = "交换对象";
+
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+
+    expect(lesson.title).toBe("数学 · 建模与推导安全板书");
+    expect(lesson.quality?.status).toBe("safe_fallback");
+    expect(lesson.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
+    expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain("交换对象");
   });
 
   it("明确给出直角三角形时，安全板书也会生成可交互几何模型", () => {
@@ -277,8 +293,7 @@ describe("模型板书结构校验", () => {
     expect(geometry?.kind).toBe("geometry_model");
     expect(geometry && "objects" in geometry ? geometry.objects.some((object) => object.type === "right_angle") : false).toBe(true);
     const visualKinds = lesson.plan?.scenes.map((scene) => scene.visual?.kind).filter(Boolean) ?? [];
-    expect(visualKinds.filter((kind) => kind === "concept_graph")).toHaveLength(1);
-    expect(visualKinds).toEqual(expect.arrayContaining(["geometry_model", "formula_chain"]));
+    expect(visualKinds).toEqual(["geometry_model", "formula_chain"]);
   });
 
   it("纯文字安全降级不再用页面导航冒充知识图", () => {
@@ -422,6 +437,39 @@ describe("模型板书结构校验", () => {
     expect(() => parseBoardPlan(semanticPlan(lesson.blocks, wrongRole), current, lesson.blocks, [])).toThrow("角色");
   });
 
+  it("对比矩阵不接受材料未给出的事实结论", () => {
+    const current = session();
+    current.problem.text = "比较甲方案与乙方案，材料只说明甲方案成本较低。";
+    const blocks = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks;
+    const fabricated = {
+      kind: "comparison_matrix",
+      title: "统一比较维度",
+      evidence: "比较甲方案与乙方案",
+      caption: "按同一维度回到材料逐项取证。",
+      columns: ["甲方案", "乙方案"],
+      rows: [{ id: "cost", aspect: "成本", left: "甲方案成本较低", right: "乙方案成本更高" }],
+    };
+    expect(() => parseBoardPlan(semanticPlan(blocks, fabricated), current, blocks, [])).toThrow("必须逐字来自原题");
+  });
+
+  it("时间线拒绝重复节点标识，避免渲染时事件互相覆盖", () => {
+    const current = session();
+    current.problem.subject = "history";
+    current.problem.text = "1898年改革开始。1900年相关措施停止。";
+    const blocks = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks;
+    const duplicateTimeline = {
+      kind: "timeline",
+      title: "材料时序",
+      evidence: "1898年改革开始。",
+      caption: "只排列材料明确给出的时间与事件。",
+      events: [
+        { id: "event", time: "1898年", event: "1898年改革开始。" },
+        { id: "event", time: "1900年", event: "1900年相关措施停止。" },
+      ],
+    };
+    expect(() => parseBoardPlan(semanticPlan(blocks, duplicateTimeline), current, blocks, [])).toThrow("事件不能重复");
+  });
+
   it("答案带单位或格式变化时也不允许用单字符数值提前给结论", () => {
     const current = session();
     const root = current.nodes.find((node) => node.id === current.rootNodeId)!;
@@ -437,7 +485,7 @@ function semanticPlan(blocks: Array<{ id: string }>, visual: Record<string, unkn
 }
 
 function nativeTeachingPlan(blocks: Array<{ id: string }>, evidence: string) {
-  const roles = ["orient", "model", "reason", "misconception", "transfer", "recap"] as const;
+  const roles = blocks.length === 5 ? ["orient", "model", "reason", "misconception", "recap"] as const : ["orient", "model", "reason", "misconception", "transfer", "recap"] as const;
   return {
     version: 2,
     contentRevision: 1,
@@ -470,8 +518,7 @@ function validOutput(): Record<string, unknown> {
       { label: "核心关系", content: "再把总路程平均分到每个小时，单位量由总量和份数之间的关系决定。", tone: "key" },
       { label: "推理顺序", content: "然后先得到每小时路程，再让同样的速度对应新的时间，前后关系不能颠倒。", tone: "example" },
       { label: "易错自查", content: "动笔后检查单位和乘除顺序，确认每一步都能用题目条件解释，而不是只套数字。", tone: "plain" },
-      { label: "方法迁移", content: "遇到总量、份数和单位量的问题，都先辨认三个量各自扮演的角色，再决定运算方向。", tone: "example" },
-      { label: "一页记忆", content: "最后只记住一条主线：先找任务，再连关系，按依据推进，并用单位和题意完成自查。", tone: "key" },
+      { label: "方法迁移", content: "遇到总量、份数和单位量的问题，都先辨认三个量各自扮演的角色，再决定运算方向。", tone: "key" },
     ],
     annotations: [
       { blockIndex: 0, target: "总路程、总时间和每小时路程", kind: "circle", reason: "这三个量决定后面应该建立什么数量关系。" },

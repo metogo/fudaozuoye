@@ -1,5 +1,7 @@
 "use client";
-import type { BoardConversationMessage, BoardDocument, BoardLesson, BoardScene, BoardTeachingRole, BoardTeachingSubject, BoardWorkspaceState } from "@/lib/learning/types";
+import { useEffect, useRef, useState } from "react";
+import { boardStepDisplayCopy } from "@/lib/learning/board-step-copy";
+import type { BoardConversationMessage, BoardDocument, BoardLesson, BoardScene, BoardWorkspaceState } from "@/lib/learning/types";
 import { boardNodeRecallState } from "@/lib/learning/board-workspace";
 import { AnnotationNotes, BoardSourceTrail, MarkedBoardText } from "./board-learning-content";
 import { BoardSceneVisual } from "./board-scene-visual";
@@ -19,47 +21,48 @@ export function BoardWorkspace({ document, lesson, sourceMessages, state, onChan
     intent: (["extract", "connect", "derive", "verify"] as const)[index] ?? "verify",
     sourceMessageIds: [] as string[], visual: null,
   }));
-  const visualCount = scenes.filter((scene) => scene.visual).length;
+  const discipline = lesson.plan?.discipline;
+  const stepSubject = discipline ?? lesson.plan?.subject;
+  const sceneRoles = scenes.map((scene) => scene.role);
+  const sceneCopies = scenes.map((scene, index) => boardStepDisplayCopy({ subject: stepSubject, role: scene.role, roles: sceneRoles, title: scene.title, index }));
+  const { workspaceRef, routeRef, activeStep, pinned } = useBoardRouteTracking(scenes.map((scene) => scene.id).join("|"));
 
-  return <div className="board-workspace board-course">
-    <section className="board-workspace-hero board-course-hero">
-      <div><p>{subjectLabel(lesson.plan?.subject)}</p><h2>{lesson.plan?.thesis ? "这页板书要讲清什么" : "完整板书"}</h2></div>
-      <span>{scenes.length} 个教学单元{visualCount ? ` · ${visualCount} 处辅助` : ""}</span>
-      <div className="board-course-thesis"><RichLearningText text={lesson.plan?.thesis ?? document.learningGoal}/></div>
-      <div className="board-workspace-goal"><span>学完后你应该能够</span><RichLearningText text={document.learningGoal} compact/></div>
-      {sourceMessages.length > 0 && <BoardSourceTrail label="板书依据" messages={sourceMessages.slice(-3)}/>}
-    </section>
-
-    <ol className="board-course-route" aria-label="本页板书脉络">
-      {scenes.map((scene, index) => <li key={scene.id}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{teachingRoleLabel(scene.role)}</small><strong>{scene.title}</strong></div></li>)}
-    </ol>
+  return <div ref={workspaceRef} className={`board-workspace board-course${discipline ? ` board-course--${discipline}` : ""}`} data-discipline={discipline}>
+    <nav ref={routeRef} className={`board-course-route-nav${pinned ? " board-course-route-nav--pinned" : ""}`} aria-label="本页板书步骤">
+      <ol className="board-course-route">
+        {scenes.map((scene, index) => <li key={scene.id} className={pinned && activeStep === index ? "is-active" : undefined} aria-current={pinned && activeStep === index ? "step" : undefined}>
+          <span>{String(index + 1).padStart(2, "0")}</span><strong>{sceneCopies[index].eyebrow}</strong>
+        </li>)}
+      </ol>
+    </nav>
 
     <div className="board-course-content">
       {scenes.map((scene, index) => {
         const node = document.nodes[index];
         if (!node) return null;
+        const copy = sceneCopies[index];
         const nodeState = boardNodeRecallState(state, node.id);
         const annotations = lesson.annotations.filter((annotation) => annotation.blockId === node.id);
         const sceneSources = sourceMessages.filter((message) => scene.sourceMessageIds.includes(message.id));
         const recalling = state.mode === "recall" && state.activeNodeId === node.id && !nodeState.revealed;
-        return <section key={node.id} className={`board-workspace-node board-course-unit board-workspace-node--${scene.tone}`} aria-labelledby={`board-node-${node.id}`}>
+        return <section key={node.id} data-board-step-index={index} className={`board-workspace-node board-course-unit board-workspace-node--${scene.tone}`} aria-labelledby={`board-node-${node.id}`}>
           <header>
             <span>{String(index + 1).padStart(2, "0")}</span>
-            <div><p>{teachingRoleLabel(scene.role)}</p><h2 id={`board-node-${node.id}`}>{scene.title}</h2></div>
+            <div><p>{copy.eyebrow}</p><h2 id={`board-node-${node.id}`}>{copy.title}</h2>{copy.title !== scene.title && <p className="board-course-unit__topic">本题这一步：{scene.title}</p>}</div>
           </header>
 
-          {scene.purpose && <div className="board-teaching-purpose"><span>这一块帮你</span><RichLearningText text={scene.purpose} compact/></div>}
+          {scene.purpose && <div className="board-teaching-purpose"><span>本步目标</span><RichLearningText text={scene.purpose} compact/></div>}
 
           {recalling ? <div className="board-recall-mask board-recall-mask--inline">
             <span>主动回忆</span><h3>{scene.selfCheck ?? "试着复述这一步的依据和作用"}</h3><p>先不看原文，用自己的话说出关键关系。想好后再核对。</p>
             <button type="button" onClick={() => onChange({ ...state, mode: "overview", nodes: state.nodes.map((item) => item.nodeId === node.id ? { ...item, revealed: true } : item) })}>查看原板书</button>
           </div> : <>
-            <div className="board-workspace-node__content"><MarkedBoardText content={scene.content} annotations={annotations}/></div>
-            {scene.evidence && (index === 0 || scene.evidence !== scenes[index - 1]?.evidence) && <div className="board-teaching-evidence"><span>原题依据</span><RichLearningText text={scene.evidence} compact/></div>}
+            <div className="board-workspace-node__content"><span>怎么做</span><MarkedBoardText content={scene.content} annotations={annotations}/></div>
+            {scene.evidence && <div className="board-teaching-evidence"><span>题目依据</span><RichLearningText text={scene.evidence} compact/></div>}
             {scene.visual && <BoardSceneVisual visual={scene.visual} purpose={scene.purpose}/>}
-            {scene.why && <div className="board-teaching-why"><span>为什么成立</span><RichLearningText text={scene.why}/></div>}
+            {scene.why && <div className="board-teaching-why"><span>为什么</span><RichLearningText text={scene.why}/></div>}
             <AnnotationNotes annotations={annotations}/>
-            {scene.selfCheck && <div className="board-teaching-check"><div><span>停一下，自查</span><RichLearningText text={scene.selfCheck} compact/></div><button type="button" onClick={() => onChange({ ...state, mode: "recall", activeNodeId: node.id, nodes: state.nodes.map((item) => item.nodeId === node.id ? { ...item, revealed: false } : item) })}>遮住这块复述</button></div>}
+            {scene.selfCheck && <div className="board-teaching-check"><div><span>自己检查</span><RichLearningText text={scene.selfCheck} compact/></div><button type="button" onClick={() => onChange({ ...state, mode: "recall", activeNodeId: node.id, nodes: state.nodes.map((item) => item.nodeId === node.id ? { ...item, revealed: false } : item) })}>遮住后复述</button></div>}
           </>}
 
           {sceneSources.length > 0 && <BoardSourceTrail label="这块承接" messages={sceneSources}/>}
@@ -69,20 +72,41 @@ export function BoardWorkspace({ document, lesson, sourceMessages, state, onChan
   </div>;
 }
 
-function teachingRoleLabel(role?: BoardTeachingRole): string {
-  if (role === "orient") return "读懂任务";
-  if (role === "model") return "建立关系";
-  if (role === "reason") return "关键推导";
-  if (role === "misconception") return "易错辨析";
-  if (role === "transfer") return "方法迁移";
-  if (role === "recap") return "一页记忆";
-  return "板书讲解";
-}
+function useBoardRouteTracking(sceneKey: string) {
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const routeRef = useRef<HTMLElement>(null);
+  const [activeStep, setActiveStep] = useState(0);
+  const [pinned, setPinned] = useState(false);
 
-function subjectLabel(subject?: BoardTeachingSubject): string {
-  if (subject === "math") return "数学 · 关系与推导";
-  if (subject === "science") return "理科 · 对象与过程";
-  if (subject === "language") return "语言 · 语境与证据";
-  if (subject === "humanities") return "人文 · 材料与因果";
-  return "独立学习板书";
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    const route = routeRef.current;
+    const scrollArea = workspace?.closest<HTMLElement>(".board-scroll");
+    if (!workspace || !route || !scrollArea) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const rootTop = scrollArea.getBoundingClientRect().top;
+      const routeRect = route.getBoundingClientRect();
+      const nextPinned = routeRect.top <= rootTop + 1 && scrollArea.scrollTop > 0;
+      const focusLine = rootTop + (nextPinned ? routeRect.height : 0) + 16;
+      const steps = Array.from(workspace.querySelectorAll<HTMLElement>("[data-board-step-index]"));
+      let nextStep = 0;
+      for (const step of steps) if (step.getBoundingClientRect().top <= focusLine) nextStep = Number(step.dataset.boardStepIndex ?? 0);
+      if (scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight < 2) nextStep = Math.max(0, steps.length - 1);
+      setPinned((current) => current === nextPinned ? current : nextPinned);
+      setActiveStep((current) => current === nextStep ? current : nextStep);
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    scrollArea.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      scrollArea.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [sceneKey]);
+
+  return { workspaceRef, routeRef, activeStep, pinned };
 }

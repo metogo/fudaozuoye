@@ -35,6 +35,17 @@ export function assertBalancedLearningMarkup(source: string, label: string): voi
   if (hasUnclosedMath(source)) throw new Error(`${label}的公式定界符不完整`);
 }
 
+export function expandLearningMarkupRange(source: string, start: number, end: number): { start: number; end: number } {
+  const overlaps = Array.from(source.matchAll(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$|`[^`\n]*`/g))
+    .map((match) => ({ start: match.index!, end: match.index! + match[0].length }))
+    .filter((range) => start < range.end && end > range.start);
+  if (overlaps.length === 0) return { start, end };
+  return {
+    start: Math.min(start, ...overlaps.map((range) => range.start)),
+    end: Math.max(end, ...overlaps.map((range) => range.end)),
+  };
+}
+
 export function parseLearningPrompt(source: string): ParsedLearningPrompt {
   const cleaned = source.trim().replace(
     /^(?:现在)?(?:请你)?(?:先)?(?:独立)?(?:重新|重做|完成)(?:一下)?(?:这道)?原题\s*[：:]\s*/,

@@ -1,4 +1,5 @@
 import type { CurriculumVersion, GradeBand, Subject } from "./types";
+import { subjectNativeConcepts } from "./curriculum-subject-data";
 
 export interface CurriculumConcept {
   id: string;
@@ -118,4 +119,4 @@ const chemistryConcepts: CurriculumConcept[] = [
   { id: "chemistry.electrochemistry", title: "原电池与电解", subject: "chemistry", gradeBands: ["senior"], version: highSchool, difficulty: 7, atomic: false, aliases: ["原电池", "电极反应"], prerequisites: ["chemistry.redox.valence", "chemistry.particle.molecule-ion"] },
 ];
 
-export const curriculumCatalog: CurriculumConcept[] = [...mathConcepts, ...physicsConcepts, ...chemistryConcepts];
+export const curriculumCatalog: CurriculumConcept[] = [...mathConcepts, ...physicsConcepts, ...chemistryConcepts, ...subjectNativeConcepts];

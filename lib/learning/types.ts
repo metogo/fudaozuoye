@@ -1,6 +1,7 @@
 export type ProviderId = "doubao" | "openai" | "xai";
 export type ReasoningLevel = "light" | "medium" | "high";
-export type Subject = "math" | "physics" | "chemistry";
+export const subjects = ["math", "physics", "chemistry", "biology", "chinese", "english", "history", "geography", "politics"] as const;
+export type Subject = (typeof subjects)[number];
 export type GradeBand = "primary" | "junior" | "senior";
 export type CurriculumVersion = "cn-compulsory-2022" | "cn-highschool-2017-2020";
 export type DiagnosticEvidenceSource = "problem" | "child_work" | "parent";
@@ -141,6 +142,7 @@ export interface BoardGeometryPoint {
 export type BoardGeometryObject =
   | { type: "segment" | "line" | "arrow"; from: string; to: string; label?: string }
   | { type: "circle"; center: string; through?: string; radius?: number; label?: string }
+  | { type: "angle"; vertex: string; from: string; to: string; label?: string }
   | { type: "right_angle"; vertex: string; from: string; to: string };
 
 export interface BoardGeometryVisual {
@@ -182,15 +184,70 @@ export interface BoardFormulaVisual {
   steps: BoardFormulaStep[];
 }
 
-export type BoardSemanticVisual = BoardConceptVisual | BoardGeometryVisual | BoardFunctionVisual | BoardFormulaVisual;
+export interface BoardEvidenceChainVisual {
+  kind: "evidence_chain";
+  title: string;
+  evidence: string;
+  caption: string;
+  links: Array<{ id: string; quote: string; meaning: string }>;
+}
+
+export interface BoardTimelineVisual {
+  kind: "timeline";
+  title: string;
+  evidence: string;
+  caption: string;
+  events: Array<{ id: string; time: string; event: string }>;
+}
+
+export interface BoardProcessVisual {
+  kind: "process_flow";
+  title: string;
+  evidence: string;
+  caption: string;
+  steps: Array<{ id: string; label: string; evidence: string }>;
+}
+
+export interface BoardComparisonVisual {
+  kind: "comparison_matrix";
+  title: string;
+  evidence: string;
+  caption: string;
+  columns: [string, string];
+  rows: Array<{ id: string; aspect: string; left: string; right: string }>;
+}
+
+export type BoardSemanticVisual = BoardConceptVisual | BoardGeometryVisual | BoardFunctionVisual | BoardFormulaVisual | BoardEvidenceChainVisual | BoardTimelineVisual | BoardProcessVisual | BoardComparisonVisual;
 
 export type BoardTeachingSubject = "math" | "science" | "language" | "humanities" | "general";
 export type BoardTeachingRole = "orient" | "model" | "reason" | "misconception" | "transfer" | "recap";
+export type BoardDisciplineMove =
+  | "frame_relation" | "model_objects" | "transform_with_basis" | "verify_invariant" | "transfer_structure"
+  | "define_system" | "inventory_quantities" | "select_law" | "check_direction_unit" | "explain_phenomenon"
+  | "identify_substances" | "track_reaction" | "balance_conservation" | "connect_conditions" | "shift_particle_scale"
+  | "set_classification_target" | "extract_classification_basis" | "apply_classification_rule" | "check_classification_boundary" | "transfer_classification"
+  | "count_reaction_sides" | "model_reaction_structure" | "classify_reaction_pattern" | "separate_reaction_concepts" | "verify_reaction_type"
+  | "locate_structure" | "connect_function" | "trace_life_process" | "control_variables" | "explain_regulation"
+  | "locate_genetic_information" | "model_transcription" | "model_translation" | "connect_protein_trait" | "verify_expression_chain"
+  | "define_research_question" | "identify_variables" | "design_control" | "read_experiment_evidence" | "limit_experiment_conclusion"
+  | "identify_trait" | "represent_genotype" | "build_cross" | "compare_probability" | "verify_genetic_explanation"
+  | "state_linkage_hypothesis" | "design_reciprocal_cross" | "group_offspring_by_sex" | "compare_cross_outcomes" | "infer_linkage_boundary"
+  | "locate_text" | "analyze_language" | "explain_effect" | "connect_structure_theme" | "land_answer"
+  | "locate_evidence" | "parse_sentence" | "trace_discourse" | "infer_in_context" | "frame_english_answer"
+  | "locate_word_evidence" | "inspect_local_grammar" | "combine_context_clues" | "limit_word_meaning" | "answer_word_in_context"
+  | "parse_clause_structure" | "identify_grammar_signal" | "apply_grammar_rule" | "check_grammar_boundary" | "verify_grammar_choice"
+  | "define_optical_system" | "trace_light_path" | "apply_optical_rule" | "check_optical_boundary" | "explain_optical_observation"
+  | "set_pinhole_system" | "trace_straight_rays" | "model_pinhole_ratio" | "distinguish_pinhole_image" | "verify_pinhole_change"
+  | "locate_lens_zones" | "trace_principal_rays" | "judge_ray_intersection" | "classify_lens_image" | "verify_lens_image"
+  | "locate_time_space" | "extract_historical_fact" | "build_cause_effect" | "evaluate_impact" | "compare_history"
+  | "locate_region" | "extract_geo_factors" | "connect_space" | "explain_geo_process" | "evaluate_human_land"
+  | "read_question_direction" | "layer_material" | "match_concept" | "build_argument" | "normalize_expression";
 
 export interface BoardScene {
   id: string;
   intent: BoardSceneIntent;
   role?: BoardTeachingRole;
+  move?: BoardDisciplineMove;
   title: string;
   content: string;
   tone: BoardBlock["tone"];
@@ -204,8 +261,9 @@ export interface BoardScene {
 
 export interface BoardPlan {
   version?: 2;
-  contentRevision?: 1;
+  contentRevision?: 1 | 2;
   subject?: BoardTeachingSubject;
+  discipline?: Subject;
   thesis?: string;
   learningGoal: string;
   sourceMessageIds: string[];

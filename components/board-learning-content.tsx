@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import type { BoardAnnotation, BoardConversationMessage, BoardSceneIntent } from "@/lib/learning/types";
-import { learningTextToPlainText } from "@/lib/learning/presentation";
+import { expandLearningMarkupRange, learningTextToPlainText } from "@/lib/learning/presentation";
 import { RichLearningText } from "./rich-learning-text";
 
 export function BoardSourceTrail({ label, messages }: { label: string; messages: BoardConversationMessage[] }) {
@@ -13,7 +13,7 @@ export function BoardSourceTrail({ label, messages }: { label: string; messages:
 export function MarkedBoardText({ content, annotations }: { content: string; annotations: BoardAnnotation[] }) {
   const marks = annotations.map((annotation) => {
     const index = content.indexOf(annotation.target);
-    const range = index >= 0 ? expandProtectedRange(content, index, index + annotation.target.length) : null;
+    const range = index >= 0 ? expandLearningMarkupRange(content, index, index + annotation.target.length) : null;
     return range ? { annotation, start: range.start, end: range.end } : null;
   }).filter((item): item is { annotation: BoardAnnotation; start: number; end: number } => Boolean(item)).sort((a, b) => a.start - b.start);
   if (marks.length === 0) return <RichLearningText text={content}/>;
@@ -42,9 +42,4 @@ export function sceneIntentLabel(intent: BoardSceneIntent): string {
   if (intent === "derive") return "展开推理";
   if (intent === "compare") return "对照辨析";
   return "回看验证";
-}
-
-function expandProtectedRange(content: string, start: number, end: number): { start: number; end: number } {
-  const protectedRanges = Array.from(content.matchAll(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$|`[^`\n]*`/g)).map((match) => ({ start: match.index!, end: match.index! + match[0].length }));
-  return protectedRanges.find((range) => start >= range.start && end <= range.end) ?? { start, end };
 }

@@ -35,7 +35,8 @@ export function isConceptAllowed(id: string, subject: Subject, gradeBand: GradeB
 }
 
 export function isSupportedSubjectBand(subject: Subject, gradeBand: GradeBand): boolean {
-  return subject === "math" || gradeBand !== "primary";
+  if (gradeBand !== "primary") return true;
+  return subject === "math" || subject === "chinese" || subject === "english";
 }
 
 export function normalizeSubjectBand(subject: Subject, gradeBand: GradeBand): GradeBand {

@@ -10,7 +10,7 @@ exports.blueprintContentSignature = blueprintContentSignature;
 exports.blueprintCheckSignature = blueprintCheckSignature;
 const curriculum_1 = require("../curriculum");
 const presentation_1 = require("../presentation");
-function parseProblemGuide(value, problemText, evidenceQuotes = [], originalAnswer = "", originalExplanation = "") {
+function parseProblemGuide(value, problemText, evidenceQuotes = [], originalAnswer = "", originalExplanation = "", safeFallback) {
     const guide = asObject(value, "原题引导");
     const parsed = {
         goal: cleanUserFacingModelText(requiredString(guide, "goal", 8, 120)),
@@ -33,7 +33,7 @@ function parseProblemGuide(value, problemText, evidenceQuotes = [], originalAnsw
     const answerVariants = [originalAnswer, spokenNumberVariant(originalAnswer)].map(normalize).filter(Boolean);
     const explanation = normalize(originalExplanation);
     if (answerVariants.some((answer) => containsCompleteAnswer(guideText, answer)) || (explanation.length >= 12 && guideText.includes(explanation))) {
-        return {
+        return safeFallback ? { ...safeFallback, keyClue: groundedParsed.keyClue } : {
             ...parsed,
             goal: "先明确题目要求的未知量或结论，暂时不计算最终结果。",
             keyClue: groundedParsed.keyClue,

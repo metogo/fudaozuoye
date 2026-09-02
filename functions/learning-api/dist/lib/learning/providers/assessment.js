@@ -1,14 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deterministicAnswerMatch = deterministicAnswerMatch;
+exports.affirmedAnswerCandidate = affirmedAnswerCandidate;
+exports.explicitlyNegatesExpected = explicitlyNegatesExpected;
 exports.safeAssessmentFeedback = safeAssessmentFeedback;
 function deterministicAnswerMatch(expected, actual) {
+    if (explicitlyNegatesExpected(expected, actual))
+        return false;
+    const assessedActual = affirmedAnswerCandidate(actual) ?? actual;
     const leftEquation = chemicalEquation(expected);
-    const rightEquation = chemicalEquation(actual);
+    const rightEquation = chemicalEquation(assessedActual);
     if (leftEquation && rightEquation)
         return leftEquation === rightEquation;
     const left = canonicalAnswer(expected);
-    const right = canonicalAnswer(actual);
+    const right = canonicalAnswer(assessedActual);
     if (!right)
         return false;
     if (left === right)
@@ -27,6 +32,52 @@ function deterministicAnswerMatch(expected, actual) {
         return leftSequence.every((value, index) => nearlyEqual(value, rightSequence[index]));
     }
     return null;
+}
+function affirmedAnswerCandidate(actual) {
+    if (retractsCurrentAnswer(actual))
+        return null;
+    const corrected = actual.match(/(?:而是|而应为|正确(?:答案|结果)?是|答案是|结果是)\s*([^，,。；;]+)/)?.[1]?.trim();
+    if (corrected)
+        return corrected;
+    const beforeRejectedAlternative = actual.match(/^\s*([^，,。；;]+)[，,]\s*(?:不是|并非|而非|not)/i)?.[1]?.trim();
+    if (!beforeRejectedAlternative || !/(?:=|≈|\d)/.test(beforeRejectedAlternative))
+        return null;
+    return beforeRejectedAlternative.match(/^[a-z][a-z0-9_]*\s*(?:=|≈)\s*(.+)$/i)?.[1]?.trim() ?? beforeRejectedAlternative;
+}
+function explicitlyNegatesExpected(expected, actual) {
+    const target = canonicalAnswer(expected);
+    if (!target)
+        return false;
+    const normalized = actual.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+    if (normalized.includes(target) && retractsCurrentAnswer(normalized))
+        return true;
+    return normalized.split(/[。！？!?；;]+/).some((clause) => targetOccurrences(clause, target).some((index) => targetIsNegated(clause, index, target.length)));
+}
+function retractsCurrentAnswer(value) {
+    const normalized = value.toLowerCase();
+    const referent = "(?:(?:这个|该|此|上述|前述)(?:结论|答案|结果|说法|判断)|这(?:一)?(?:结论|答案|结果|说法|判断))";
+    const rejection = "(?:不成立|不对|错误|有误|不正确|不同意|不认可|否认|收回|撤回)";
+    const chinese = new RegExp(`(?:但|不过|然而|可是|[，,。；;])?.{0,24}(?:${referent}.{0,8}${rejection}|${rejection}.{0,8}${referent}|这(?:显然|明显|其实|本身)?(?:不成立|错误|有误|不正确))`);
+    const englishReferent = "(?:(?:this|that|theabove|previous)(?:answer|result|claim|judgment))";
+    const english = new RegExp(`(?:but|however|[,.])?.{0,32}(?:${englishReferent}.{0,12}(?:is)?(?:wrong|incorrect|invalid|false|notcorrect|doesnothold)|(?:retract|withdraw|reject|disavow|disagreewith|donotaccept).{0,12}${englishReferent})`);
+    return chinese.test(normalized) || english.test(normalized.replace(/\s+/g, ""));
+}
+function targetOccurrences(clause, target) {
+    const indexes = [];
+    for (let index = clause.indexOf(target); index >= 0; index = clause.indexOf(target, index + target.length))
+        indexes.push(index);
+    return indexes;
+}
+function targetIsNegated(clause, index, length) {
+    const before = clause.slice(Math.max(0, index - 100), index);
+    const after = clause.slice(index + length, index + length + 32);
+    if (/^(?:绝不成立|并不成立|不成立|不该是(?:正确)?(?:答案|结果)|不是(?:正确)?(?:答案|结果)|不正确|是错误的|错误|≠)/.test(after))
+        return true;
+    if (/^[^0-9a-z]{0,18}(?:显然不正确|显然不对|不应成立|不能成立)/i.test(after))
+        return true;
+    const negation = Math.max(...["≠", "不是", "并非", "不等于", "不为", "不应为", "不该是", "绝非", "不可能是", "not", "isn't", "isnot", "never", "incorrect", "wrong"].map((token) => before.lastIndexOf(token)));
+    const correction = Math.max(...["而是", "而应为", "答案是", "结果是", "正确的是", "ratherthan", "instead", "but", "="].map((token) => before.lastIndexOf(token)));
+    return negation >= 0 && negation > correction;
 }
 function chemicalEquation(value) {
     let simplified = value.normalize("NFKC")

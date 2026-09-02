@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deterministicAnswerMatch, safeAssessmentFeedback } from "@/lib/learning/providers/assessment";
+import { deterministicAnswerMatch, explicitlyNegatesExpected, safeAssessmentFeedback } from "@/lib/learning/providers/assessment";
 import { MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import type { CheckItem } from "@/lib/learning/types";
 
@@ -28,6 +28,47 @@ describe("学科答案语义等价与安全反馈", () => {
 
   it("不会把数值相同但量纲不同的答案误判为等价", () => {
     expect(deterministicAnswerMatch("1 m", "1 s")).toBe(false);
+  });
+
+  it.each(["x≠8", "8不是正确答案", "结果不应为8", "The answer should never under any reasonable circumstances be 8", "8作为最终计算结果显然不正确"])("不会把明确否定 8 的表达 %s 误判为正确", async (actual) => {
+    expect(deterministicAnswerMatch("8", actual)).toBe(false);
+    const check: CheckItem = { id: "number", prompt: "x 等于多少？", type: "short_text", answer: "8", explanation: "检查等式。" };
+    await expect(new MockProviderAdapter("doubao").verifyAnswer(check, actual)).resolves.toMatchObject({ passed: false });
+  });
+
+  it.each(["答案不是7而是8", "x=8，不是7"])("不会让被否定的干扰项误杀正确答案：%s", (actual) => {
+    expect(explicitlyNegatesExpected("8", actual)).toBe(false);
+    expect(deterministicAnswerMatch("8", actual)).toBe(true);
+  });
+
+  it.each(["8绝不成立", "8不该是正确结果", "8并不成立"])("识别紧跟目标答案的否定：%s", (actual) => {
+    expect(deterministicAnswerMatch("8", actual)).toBe(false);
+  });
+
+  it("英文干扰项否定不会误杀材料中的正确短语", () => {
+    expect(explicitlyNegatesExpected("Tom gets up at seven", "Tom gets up at seven, not eight.")).toBe(false);
+  });
+
+  it.each(["答案不是7而是8，但我认为这个结论不成立", "题目声称答案不是7而是8，但这显然错误"])("纠正后又反驳结论时不能判为正确：%s", (actual) => {
+    expect(explicitlyNegatesExpected("8", actual)).toBe(true);
+    expect(deterministicAnswerMatch("8", actual)).toBe(false);
+  });
+
+  it.each(["答案是8，但我不同意老师的解题方法", "答案不是7而是8，但是另一个同学的结论不成立"])("无关异议不会撤回已经确认的答案：%s", (actual) => {
+    expect(explicitlyNegatesExpected("8", actual)).toBe(false);
+    expect(deterministicAnswerMatch("8", actual)).toBe(true);
+  });
+
+  it.each(["答案是8，但这个方法错误", "答案是8，但这道题的另一个说法错误"])("无关对象的批评不会误杀正确答案：%s", (actual) => {
+    expect(deterministicAnswerMatch("8", actual)).toBe(true);
+  });
+
+  it.each(["答案是8，但此结论不成立", "答案是8，但我不认可这个答案", "答案是8，但我收回这个答案"])("明确撤回当前答案时判为错误：%s", (actual) => {
+    expect(deterministicAnswerMatch("8", actual)).toBe(false);
+  });
+
+  it.each(["答案是8，但这个判断不成立", "答案是8，但该判断有误", "答案是8，但这个答案不对", "答案是8，我收回这个答案", "The answer is 8, but this answer is wrong.", "The answer is 8, but I disagree with this answer.", "The answer is 8, but this answer is false.", "The answer is 8. I do not accept that answer.", "The answer is 8. I retract that answer."])("中英文明确回指并撤回答案时判为错误：%s", (actual) => {
+    expect(deterministicAnswerMatch("8", actual)).toBe(false);
   });
 
   it("不会把未配平的化学方程式误判为等价", () => {

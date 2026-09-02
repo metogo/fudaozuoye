@@ -25,7 +25,7 @@ export interface EvidenceSource {
   text: string;
 }
 
-export function parseProblemGuide(value: unknown, problemText: string, evidenceQuotes: string[] = [], originalAnswer = "", originalExplanation = ""): ProblemGuide {
+export function parseProblemGuide(value: unknown, problemText: string, evidenceQuotes: string[] = [], originalAnswer = "", originalExplanation = "", safeFallback?: ProblemGuide): ProblemGuide {
   const guide = asObject(value, "原题引导");
   const parsed = {
     goal: cleanUserFacingModelText(requiredString(guide, "goal", 8, 120)),
@@ -47,7 +47,7 @@ export function parseProblemGuide(value: unknown, problemText: string, evidenceQ
   const answerVariants = [originalAnswer, spokenNumberVariant(originalAnswer)].map(normalize).filter(Boolean);
   const explanation = normalize(originalExplanation);
   if (answerVariants.some((answer) => containsCompleteAnswer(guideText, answer)) || (explanation.length >= 12 && guideText.includes(explanation))) {
-    return {
+    return safeFallback ? { ...safeFallback, keyClue: groundedParsed.keyClue } : {
       ...parsed,
       goal: "先明确题目要求的未知量或结论，暂时不计算最终结果。",
       keyClue: groundedParsed.keyClue,

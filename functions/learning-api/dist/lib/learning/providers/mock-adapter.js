@@ -2,7 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MockProviderAdapter = void 0;
 const mock_engine_1 = require("../mock-engine");
+const curriculum_1 = require("../curriculum");
 const solution_recall_1 = require("../solution-recall");
+const types_1 = require("../types");
 const assessment_1 = require("./assessment");
 const board_1 = require("./board");
 const provider_validation_1 = require("./provider-validation");
@@ -21,11 +23,19 @@ class MockProviderAdapter {
         return (0, mock_engine_1.recognizeMock)(subject, gradeBand);
     }
     async recognizeTextProblem(text) {
-        const subject = /化学|反应|分子|物质|元素|mol|方程式/.test(text) ? "chemistry" : /物理|速度|质量|力|光|电|压强|功率/.test(text) ? "physics" : "math";
-        const gradeBand = subject === "math" && /小学|年级|加法|减法|乘法|除法/.test(text) ? "primary" : /高中|函数|导数|向量|动量|摩尔/.test(text) ? "senior" : "junior";
-        return { text: text.trim(), childWork: "", subject, gradeBand, confidence: 0.9, userRevised: true };
+        const compact = compactProblemText(text);
+        const bands = ["primary", "junior", "senior"];
+        const sample = types_1.subjects.flatMap((subject) => bands.filter((band) => (0, curriculum_1.isSupportedSubjectBand)(subject, band)).map((band) => (0, mock_engine_1.recognizeMock)(subject, band)))
+            .find((candidate) => compactProblemText(candidate.text) === compact);
+        if (!sample)
+            throw new Error("演示模式只支持内置代表题，自定义题请配置真实 AI 服务后再试");
+        return { ...sample, text: text.trim(), childWork: "", confidence: 0.9, userRevised: true };
     }
-    async prepareChatSession(problem) { return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode); }
+    async prepareChatSession(problem) {
+        if (!(0, mock_engine_1.isBuiltInMockProblem)(problem))
+            throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
+        return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
+    }
     async completeChatSession(session) {
         const root = session.nodes.find((node) => node.id === session.rootNodeId);
         return root?.check.answer === "等待后台核验" ? (0, provider_validation_1.rootOnlySession)((0, mock_engine_1.analyzeMock)(session.problem, this.id, this.reasoningLevel)) : session;
@@ -91,3 +101,4 @@ class MockProviderAdapter {
     cancelPendingRequests() { }
 }
 exports.MockProviderAdapter = MockProviderAdapter;
+function compactProblemText(value) { return value.normalize("NFKC").replace(/[\s，。；：！？?,.!、“”‘’（）()\[\]【】]/g, "").toLowerCase(); }

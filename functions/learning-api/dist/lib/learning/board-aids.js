@@ -4,17 +4,27 @@ exports.enrichBoardPlanWithSafeAids = enrichBoardPlanWithSafeAids;
 exports.enrichBoardLessonWithSafeAids = enrichBoardLessonWithSafeAids;
 exports.isBoardLessonSafeForRestore = isBoardLessonSafeForRestore;
 const answer_protection_1 = require("./providers/answer-protection");
+const board_chronology_1 = require("./board-chronology");
+const board_evidence_1 = require("./board-evidence");
+const board_math_content_1 = require("./board-math-content");
 function enrichBoardPlanWithSafeAids(session, plan, options = {}) {
     const scenes = plan.scenes.map((scene) => ({ ...scene }));
+    let visualCount = scenes.filter((scene) => scene.visual).length;
     const existingKeys = new Set(scenes.flatMap((scene) => scene.visual ? [visualKey(scene.visual)] : []));
-    const candidates = options.contextualAids === false ? [] : safeAidCandidates(session);
+    const candidates = options.contextualAids === false ? [] : safeAidCandidates(session, plan);
     const preferredRoles = {
         concept_graph: ["model", "orient"],
         geometry_model: ["model", "reason"],
         formula_chain: ["reason", "model"],
         function_plot: ["model", "reason"],
+        evidence_chain: ["orient", "model", "reason"],
+        timeline: ["orient", "model"],
+        process_flow: ["model", "reason"],
+        comparison_matrix: ["misconception", "transfer", "reason"],
     };
     for (const visual of candidates) {
+        if (visualCount >= 2)
+            break;
         if (existingKeys.has(visualKey(visual)))
             continue;
         const sameKindCount = scenes.filter((scene) => scene.visual?.kind === visual.kind).length;
@@ -28,6 +38,7 @@ function enrichBoardPlanWithSafeAids(session, plan, options = {}) {
             break;
         scenes[target] = { ...scenes[target], visual };
         existingKeys.add(visualKey(visual));
+        visualCount += 1;
     }
     return { ...plan, scenes };
 }
@@ -45,7 +56,12 @@ function isBoardLessonSafeForRestore(session, lesson) {
     const visibleText = boardLessonVisibleText(lesson);
     const visibleMath = (0, answer_protection_1.normalizedAnswerMath)(visibleText);
     const normalizedAnswer = (0, answer_protection_1.normalizedAnswerMath)(answer);
-    if (normalizedAnswer.length >= 2 && (0, answer_protection_1.protectedAnswerVariants)(answer).some((variant) => visibleMath.includes(variant)))
+    const answerAlreadyInProblem = normalizedAnswer.length >= 2 && (0, answer_protection_1.normalizedAnswerMath)(session.problem.text).includes(normalizedAnswer);
+    if (!answerAlreadyInProblem && !(0, answer_protection_1.isShortTextAnswer)(answer) && normalizedAnswer.length >= 2 && (0, answer_protection_1.protectedAnswerVariants)(answer).some((variant) => visibleMath.includes(variant)))
+        return false;
+    if ((0, answer_protection_1.explicitAnswerClaimLeak)(visibleText, answer))
+        return false;
+    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, answer, session.problem.text))
         return false;
     if ((0, answer_protection_1.protectedShortAnswers)(answer).some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, session.problem.text)))
         return false;
@@ -60,17 +76,91 @@ function safePlanFromLegacyLesson(lesson) {
         scenes: lesson.blocks.map((block, index) => ({ id: block.id, title: block.label, content: block.content, tone: block.tone, intent: intents[index] ?? "verify", sourceMessageIds: [], visual: null })),
     };
 }
-function safeAidCandidates(session) {
+function safeAidCandidates(session, plan) {
+    const mathContent = session.problem.subject === "math" ? (0, board_math_content_1.createMathBoardContent)(session.problem.text) : null;
     const triangle = rightTriangleContext(session.problem.text);
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
-    if (!root?.check.answer.trim() || !triangle)
+    if (!root?.check.answer.trim())
         return [];
-    return [
-        triangleGeometryVisual(triangle),
-        triangleFormulaVisual(triangle),
-        triangleConceptVisual(triangle),
-    ].filter((visual) => !semanticVisualLeaksAnswer(session, visual));
+    const native = subjectNativeAid(session, plan);
+    const candidates = mathContent
+        ? [...(0, board_math_content_1.createMathBoardAids)(mathContent), native]
+        : triangle ? [triangleGeometryVisual(triangle), triangleFormulaVisual(triangle), triangleConceptVisual(triangle), native] : [native];
+    return candidates.filter((visual) => Boolean(visual) && !semanticVisualLeaksAnswer(session, visual));
 }
+function subjectNativeAid(session, plan) {
+    const comparison = comparisonFromProblem(session.problem.text);
+    if (comparison)
+        return comparison;
+    if (session.problem.subject === "history")
+        return timelineFromProblem(session.problem.text) ?? evidenceChainFromPlan(plan);
+    if (session.problem.subject === "chinese" || session.problem.subject === "english" || session.problem.subject === "politics")
+        return evidenceChainFromPlan(plan);
+    return processFlowFromPlan(plan);
+}
+function comparisonFromProblem(problem) {
+    const clause = problem.split(/[。！？!?；;\n]/).map((item) => item.trim()).find((item) => /(?:比较|对比|异同|difference|compare)/i.test(item));
+    if (!clause)
+        return null;
+    const match = clause.match(/(?:比较|对比)\s*([^，。；]{1,18}?)\s*(?:与|和)\s*([^，。；]{1,18}?)(?:的)?(?:异同|区别|共同点|$)/) ?? clause.match(/compare\s+(.{1,18}?)\s+(?:with|and)\s+(.{1,18}?)(?:[.。]|$)/i);
+    if (!match)
+        return null;
+    const left = match[1].trim();
+    const right = match[2].trim();
+    if (!left || !right || left === right)
+        return null;
+    return {
+        kind: "comparison_matrix",
+        title: "先统一比较维度",
+        evidence: clause,
+        caption: "矩阵只规定比较口径，不预填材料没有给出的异同；每个单元格都要回到原文取证。",
+        columns: [left, right],
+        rows: [
+            { id: "compare_basis", aspect: "材料依据", left: `只摘录涉及${left}的原文`, right: `只摘录涉及${right}的原文` },
+            { id: "compare_scope", aspect: "同一尺度", left: "按题目要求的维度判断", right: "按同一维度判断" },
+        ],
+    };
+}
+function evidenceChainFromPlan(plan) {
+    const seen = new Set();
+    const links = plan.scenes.filter((scene) => {
+        const key = compactEvidence(scene.evidence ?? "");
+        if (!scene.evidence || !scene.purpose || (0, board_evidence_1.isTaskInstructionText)(scene.evidence) || !key || seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    }).slice(0, 4).map((scene, index) => ({ id: `evidence_${index + 1}`, quote: scene.evidence, meaning: scene.purpose }));
+    if (links.length < 2)
+        return null;
+    return { kind: "evidence_chain", title: "证据怎样支撑判断", evidence: links[0].quote, caption: "左侧保留原题证据，右侧只写它在当前判断中承担的作用，避免结论脱离材料。", links };
+}
+function processFlowFromPlan(plan) {
+    const seen = new Set();
+    const steps = plan.scenes.filter((scene) => {
+        const key = compactEvidence(scene.evidence ?? "");
+        if (!scene.evidence || (0, board_evidence_1.isTaskInstructionText)(scene.evidence) || !key || seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    }).slice(0, 5).map((scene, index) => ({ id: `process_${index + 1}`, label: scene.title, evidence: scene.evidence }));
+    if (steps.length < 2)
+        return null;
+    return { kind: "process_flow", title: "沿学科动作推进", evidence: steps[0].evidence, caption: "每一步都保留题目依据；箭头表示思考顺序，不代表材料未给出的因果。", steps };
+}
+function timelineFromProblem(problem) {
+    const clauses = problem.split(/(?<=[。！？!?；;])/).map((item) => item.trim()).filter((item) => Boolean(item) && !(0, board_evidence_1.isTaskInstructionText)(item));
+    const events = clauses.flatMap((clause, index) => {
+        const time = clause.match(/(?:公元前\s*)?\d{2,4}\s*(?:年|世纪)|(?:春秋|战国)(?:时期)?|(?:秦|汉|唐|宋|元|明|清)(?:朝|代)/)?.[0];
+        return time ? [{ id: `event_${index + 1}`, time, event: clause }] : [];
+    });
+    if (events.length < 2)
+        return null;
+    const ordered = (0, board_chronology_1.sortChronology)(events)?.slice(0, 6);
+    if (!ordered)
+        return null;
+    return { kind: "timeline", title: "先把史料放回时序", evidence: ordered[0].event, caption: "时间线只排列材料明确给出的事件；先后关系本身不等于因果关系。", events: ordered };
+}
+function compactEvidence(value) { return value.normalize("NFKC").replace(/[\s，。；：、“”‘’（）()\[\]【】]/g, "").toLowerCase(); }
 function semanticVisualLeaksAnswer(session, visual) {
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
     const answer = root?.check.answer ?? "";
@@ -187,6 +277,8 @@ function boardLessonVisibleText(lesson) {
     return [
         lesson.title,
         lesson.subtitle,
+        lesson.returnLabel,
+        lesson.quality?.reason ?? "",
         ...lesson.blocks.flatMap((block) => [block.label, block.content]),
         ...lesson.annotations.flatMap((annotation) => [annotation.target, annotation.reason]),
         ...(lesson.visual ? [lesson.visual.title, lesson.visual.evidence, lesson.visual.caption, ...lesson.visual.elements.map((element) => element.label ?? "")] : []),
@@ -203,7 +295,15 @@ function semanticVisualText(visual) {
         return common.concat(visual.steps.flatMap((step) => [step.expression, step.explanation]));
     if (visual.kind === "geometry_model")
         return common.concat(visual.points.map((point) => point.label), visual.objects.map((object) => "label" in object ? object.label ?? "" : ""));
-    return common.concat(visual.series.map((series) => series.label));
+    if (visual.kind === "function_plot")
+        return common.concat(visual.series.map((series) => series.label));
+    if (visual.kind === "evidence_chain")
+        return common.concat(visual.links.flatMap((link) => [link.quote, link.meaning]));
+    if (visual.kind === "timeline")
+        return common.concat(visual.events.flatMap((event) => [event.time, event.event]));
+    if (visual.kind === "process_flow")
+        return common.concat(visual.steps.flatMap((step) => [step.label, step.evidence]));
+    return common.concat(visual.columns, visual.rows.flatMap((row) => [row.aspect, row.left, row.right]));
 }
 function sideValue(problem, side) {
     const reversed = `${side[1]}${side[0]}`;

@@ -3,7 +3,7 @@ import { isStoredBoardCache, isStoredBoardLesson, restoreBoardLesson } from "@/l
 import { enrichBoardLessonWithSafeAids, isBoardLessonSafeForRestore } from "@/lib/learning/board-aids";
 import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "@/lib/learning/board-native-fallback";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
-import { createSafeBoardLesson } from "@/lib/learning/providers/board";
+import { createInstantBoardLesson, createSafeBoardLesson } from "@/lib/learning/providers/board";
 import type { BoardLesson } from "@/lib/learning/types";
 
 const contents = ["先看清题目给出的条件。", "再连接条件之间的关系。", "最后核对每一步的依据。"];
@@ -22,6 +22,14 @@ const lesson = {
 };
 
 describe("板书缓存恢复", () => {
+  it("没有外部材料的合法概念板书也能恢复，不强造证据", () => {
+    const session = analyzeMock(recognizeMock("biology", "junior"), "doubao");
+    session.problem.text = "说明光合作用的意义。";
+    session.problemGuide.goal = "解释光合作用的意义。";
+    const current = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "解释生命过程。", layout: "steps" });
+    expect(current.plan?.scenes.every((scene) => scene.evidence === undefined)).toBe(true);
+    expect(restoreBoardLesson(session, current)?.plan?.discipline).toBe("biology");
+  });
   it("不会恢复旧版本留下的降级板书", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const fallback = createSafeBoardLesson(session, session.flow.focus, {
@@ -40,6 +48,16 @@ describe("板书缓存恢复", () => {
     const broken = structuredClone(lesson) as unknown as { plan: { scenes: Array<Record<string, unknown>> } };
     broken.plan.scenes[0].visual = { kind: "formula_chain", title: "公式", evidence: "原题", caption: "说明" };
     expect(isStoredBoardLesson(broken)).toBe(false);
+
+    const duplicate = structuredClone(lesson) as unknown as { plan: { scenes: Array<Record<string, unknown>> } };
+    duplicate.plan.scenes[0].visual = {
+      kind: "evidence_chain", title: "证据", evidence: "先看清题目给出的条件。", caption: "只使用当前板书原文。",
+      links: [
+        { id: "same", quote: "先看清题目给出的条件。", meaning: "确定题目条件" },
+        { id: "same", quote: "再连接条件之间的关系。", meaning: "建立条件关系" },
+      ],
+    };
+    expect(isStoredBoardLesson(duplicate)).toBe(false);
   });
 
   it("拒绝场景与正文错位的陈旧缓存", () => {
@@ -75,8 +93,9 @@ describe("板书缓存恢复", () => {
     const restored = restoreBoardLesson(session, legacy);
 
     expect(restored?.plan?.version).toBe(2);
-    expect(restored?.blocks).toHaveLength(6);
-    expect(restored?.plan?.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "transfer", "recap"]);
+    expect(restored?.blocks).toHaveLength(5);
+    expect(restored?.plan?.contentRevision).toBe(2);
+    expect(restored?.plan?.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "recap"]);
     expect(restored?.blocks.some((block) => block.content.includes("直接复制的一整段聊天解释"))).toBe(false);
     expect(restored?.blocks.some((block) => block.content.includes("这是 Chat 讲解"))).toBe(false);
     expect(restored?.blocks.every((block) => block.content.length < 260)).toBe(true);
@@ -128,7 +147,7 @@ describe("板书缓存恢复", () => {
     expect(isStoredBoardCache({ version: 2, requestId: "problem-1", lesson: { ...lesson, blocks: [] } }, "problem-1")).toBe(false);
   });
 
-  it("新版缓存结构合法也必须经过服务端答案复检", () => {
+  it("新版缓存正文即使被改写，恢复时也只重建当前学科可信内容", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const root = session.nodes.find((node) => node.id === session.rootNodeId)!;
     root.check.answer = "8";
@@ -142,10 +161,13 @@ describe("板书缓存恢复", () => {
     leaked.plan!.learningGoal = "最终答案是8";
 
     expect(isStoredBoardCache({ version: 2, requestId: session.requestId, lesson: leaked }, session.requestId)).toBe(true);
-    expect(restoreBoardLesson(session, leaked)).toBeNull();
+    const restored = restoreBoardLesson(session, leaked);
+    expect(restored).not.toBeNull();
+    expect(restored?.plan?.learningGoal).not.toContain("最终答案是8");
+    expect(restored?.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
   });
 
-  it("新版缓存中的配图也必须重新核对原题依据", () => {
+  it("新版缓存中的虚构配图不会重新展示", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const blocks = createNativeBoardBlocks(session, session.flow.focus);
     const tampered = {
@@ -165,7 +187,23 @@ describe("板书缓存恢复", () => {
     };
 
     expect(isStoredBoardLesson(tampered)).toBe(true);
-    expect(restoreBoardLesson(session, tampered)).toBeNull();
+    const restored = restoreBoardLesson(session, tampered);
+    expect(restored).not.toBeNull();
+    expect(restored?.plan?.scenes.some((scene) => scene.visual?.title === "虚构关系")).toBe(false);
+  });
+
+  it("缓存恢复不复用可能被污染的旧副标题", () => {
+    const session = analyzeMock(recognizeMock("chemistry", "junior"), "doubao");
+    session.problem.text = "下列物质中属于化合物的是：A. 氧气 B. 二氧化碳 C. 空气 D. 铁。";
+    const root = session.nodes.find((node) => node.id === session.rootNodeId)!;
+    root.check.answer = "二氧化碳";
+    const current = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "核对分类依据。", layout: "comparison" });
+    const polluted = { ...current, subtitle: "由此锁定二氧化碳" };
+
+    const restored = restoreBoardLesson(session, polluted);
+
+    expect(restored).not.toBeNull();
+    expect(restored?.subtitle).not.toContain("二氧化碳");
   });
 
   it("识别 KaTeX 包装中的单字符答案泄露", () => {

@@ -1,4 +1,6 @@
-import { getConcept } from "./curriculum";
+import { getConcept, normalizeSubjectBand } from "./curriculum";
+import { openAnswerRubric, originalCheckContent, solutionForSample } from "./mock-sample-content";
+import { affirmedAnswerCandidate, explicitlyNegatesExpected } from "./providers/assessment";
 import { assertGraphInvariants } from "./graph";
 import { createInitialFlow } from "./flow";
 import type {
@@ -29,6 +31,36 @@ const samples: Record<Subject, Record<GradeBand, Pick<ProblemSnapshot, "text" | 
     primary: { text: "写出水由哪些元素组成。", childWork: "不认识元素符号" },
     junior: { text: "配平化学方程式：H₂ + O₂ → H₂O。", childWork: "H₂ + O₂ → 2H₂O" },
     senior: { text: "1 mol O₂ 含有多少个氧分子？", childWork: "不知道物质的量和粒子数关系" },
+  },
+  biology: {
+    primary: { text: "探究光照是否影响植物生长，应怎样设置对照？", childWork: "不知道要控制什么" },
+    junior: { text: "探究光照是否影响植物生长，应怎样设置对照实验？", childWork: "没有区分变量" },
+    senior: { text: "分析血糖升高后机体如何通过反馈调节恢复稳态。", childWork: "只记住激素名称" },
+  },
+  chinese: {
+    primary: { text: "阅读短文：‘线团滚进门后，小猫立刻绕到门后，轻轻一跃叼住了线团。’找出表现小猫机灵的一句话，并说明理由。", childWork: "只写了‘很可爱’" },
+    junior: { text: "阅读材料，赏析‘风把树叶一页页翻过’的表达效果。", childWork: "只写了用了拟人" },
+    senior: { text: "原文前文写‘我虽然害怕，还是迈出了第一步’，结尾写‘我终于懂得，真正的勇敢是带着害怕仍向前走。’分析结尾段在内容和结构上的作用。", childWork: "没有引用原文" },
+  },
+  english: {
+    primary: { text: "Read: Tom gets up at seven. What time does Tom get up?", childWork: "I chose ten." },
+    junior: { text: "Read: Lucy planned to walk home. The rain became heavier, so she decided to take the bus. Find the sentence showing why Lucy changed her plan.", childWork: "I guessed without evidence." },
+    senior: { text: "Analyze the clause relationship in: Although it rained, the match continued.", childWork: "I cannot identify the connector." },
+  },
+  history: {
+    primary: { text: "材料：1898年改革措施开始推行，此后新式学堂开始设立。指出改革发生的时间并概括一项影响。", childWork: "没有引用材料" },
+    junior: { text: "材料：改革前旧赋税征收标准不一、重复负担严重；改革后统一征收标准。概括改革背景并分析影响。", childWork: "把背景和影响混在一起" },
+    senior: { text: "史料甲：旧教育制度难适应新形势，改革后新式学堂增多。史料乙：旧赋税制度负担重复，改革后征收标准统一。比较两次改革的共同背景与不同影响。", childWork: "只复述材料" },
+  },
+  geography: {
+    primary: { text: "地图图例显示该地位于秦岭—淮河以南、年降水量800毫米以上。判断该地位于我国哪个区域。", childWork: "没有看图例" },
+    junior: { text: "某地夏季高温多雨、冬季寒冷干燥，分析影响其气候的主要因素。", childWork: "只抄气候特点" },
+    senior: { text: "材料：湿润气流自东向西越过山地，东坡为迎风坡，西坡为背风坡。解释该区域降水的空间差异。", childWork: "没有建立过程关系" },
+  },
+  politics: {
+    primary: { text: "材料：同学们按顺序排队进入图书馆，不追逐打闹。说明遵守公共规则的意义。", childWork: "只写了应该遵守" },
+    junior: { text: "材料：学校无故拒绝学生入学，学生依法申诉并恢复入学。说明这体现了什么观点。", childWork: "只抄了材料" },
+    senior: { text: "材料：某地保留传统工艺的核心技法，同时用新材料改进产品。运用矛盾分析法说明如何看待传统与创新。", childWork: "观点没有对应材料" },
   },
 };
 
@@ -68,6 +100,26 @@ const checkBank: Record<string, Omit<CheckItem, "id">> = {
   "chemistry.equation.conservation": { prompt: "反应前后，哪一项一定不变？", type: "choice", choices: ["原子种类和数目", "分子种类", "物质颜色"], answer: "原子种类和数目", explanation: "化学反应重新组合原子，不创造或消灭原子。" },
   "chemistry.equation.balance": { prompt: "H₂ + O₂ → H₂O 中，H₂O 前的正确系数是？", type: "choice", choices: ["1", "2", "3"], answer: "2", explanation: "先令产物含 2 个氧原子，再平衡氢原子。" },
   "chemistry.mole.amount": { prompt: "1 mol 任意微粒包含的微粒数约为？", type: "choice", choices: ["6.02×10²³", "100", "22.4"], answer: "6.02×10²³", explanation: "1 mol 对应阿伏加德罗常数个微粒。" },
+  "biology.experiment.variable": { prompt: "对照实验中除研究因素外，其他条件应怎样？", type: "choice", choices: ["保持一致", "全部改变", "任意设置"], answer: "保持一致", explanation: "单一变量才能把结果变化归因于研究因素。" },
+  "biology.structure.function": { prompt: "分析生物结构时应进一步追问什么？", type: "choice", choices: ["它怎样支持功能", "它是什么颜色", "名称有几个字"], answer: "它怎样支持功能", explanation: "结构和功能需要建立可解释的对应关系。" },
+  "biology.homeostasis.regulation": { prompt: "稳态受到扰动后，分析调节过程应优先寻找什么？", type: "choice", choices: ["反馈环节", "器官颜色", "题目字数"], answer: "反馈环节", explanation: "稳态调节要追踪变化、检测、调节与结果之间的反馈。" },
+  "chinese.reading.evidence": { prompt: "阅读题下结论前最先做什么？", type: "choice", choices: ["定位原文依据", "凭印象概括", "抄写题目"], answer: "定位原文依据", explanation: "解释必须由原文信息支撑。" },
+  "chinese.language.expression": { prompt: "赏析词句时只写修辞名称够吗？", type: "choice", choices: ["不够，还要结合语境说明作用", "够", "只需翻译"], answer: "不够，还要结合语境说明作用", explanation: "表达效果来自具体语境、对象和作用。" },
+  "chinese.structure.purpose": { prompt: "分析结尾段作用时，哪种做法更完整？", type: "choice", choices: ["同时联系内容、前文和主旨", "只写总结全文", "只数段落"], answer: "同时联系内容、前文和主旨", explanation: "结构作用必须落到具体位置、照应关系和内容作用。" },
+  "english.reading.evidence": { prompt: "A reading answer should first be supported by what?", type: "choice", choices: ["Textual evidence", "A random guess", "The title only"], answer: "Textual evidence", explanation: "The claim must be grounded in the passage." },
+  "english.sentence.roles": { prompt: "In ‘Birds fly’, what is the subject?", type: "choice", choices: ["Birds", "fly", "Both"], answer: "Birds", explanation: "Birds performs the action and is the subject." },
+  "english.grammar.relation": { prompt: "What relation does ‘although’ usually introduce?", type: "choice", choices: ["Concession", "Addition", "Sequence"], answer: "Concession", explanation: "Although marks a concessive relation between clauses." },
+  "history.material.fact": { prompt: "材料题分析前应先区分什么？", type: "choice", choices: ["材料事实与自己的判断", "字体大小", "段落长短"], answer: "材料事实与自己的判断", explanation: "史料事实是因果与评价的证据起点。" },
+  "history.time.space": { prompt: "理解历史事件首先要放入什么坐标？", type: "choice", choices: ["时间与空间", "答案序号", "字数"], answer: "时间与空间", explanation: "时空定位决定背景和联系。" },
+  "history.cause.effect": { prompt: "判断历史因果时，哪项要求最重要？", type: "choice", choices: ["每条因果都有史料事实支撑", "只按时间先后", "只看结论长短"], answer: "每条因果都有史料事实支撑", explanation: "先后关系不自动等于因果，必须有材料依据。" },
+  "history.comparison": { prompt: "比较两次改革时应怎样设置比较项？", type: "choice", choices: ["使用同一维度", "各写各的", "只比名称"], answer: "使用同一维度", explanation: "同口径比较才能形成有效异同判断。" },
+  "geography.region.location": { prompt: "区域分析的第一步通常是什么？", type: "choice", choices: ["定位区域", "直接背结论", "忽略图例"], answer: "定位区域", explanation: "位置决定后续可讨论的自然与人文条件。" },
+  "geography.factor.extract": { prompt: "解释区域差异时应提取哪些要素？", type: "choice", choices: ["自然与人文要素", "题号", "字体"], answer: "自然与人文要素", explanation: "地理结论由区域要素及其联系支撑。" },
+  "geography.process.mechanism": { prompt: "解释地理现象时，哪种表达更完整？", type: "choice", choices: ["条件—作用过程—结果", "只写相关", "只报地名"], answer: "条件—作用过程—结果", explanation: "形成机制需要中间作用过程，不能把相关直接写成因果。" },
+  "politics.question.direction": { prompt: "材料题动笔前先判断什么？", type: "choice", choices: ["设问要求", "材料字数", "答案行数"], answer: "设问要求", explanation: "设问限定知识范围和作答动作。" },
+  "politics.material.layer": { prompt: "材料很长时应怎样处理？", type: "choice", choices: ["按意思分层并提关键词", "全文照抄", "只看最后一句"], answer: "按意思分层并提关键词", explanation: "分层后才能把材料信息和概念逐一对应。" },
+  "politics.concept.match": { prompt: "材料与概念匹配时应满足什么？", type: "choice", choices: ["每个观点对应具体材料信息", "堆砌术语", "只写观点"], answer: "每个观点对应具体材料信息", explanation: "概念必须能够解释材料中的具体行为或结果。" },
+  "politics.argument.expression": { prompt: "规范论证的一点通常包含什么？", type: "choice", choices: ["材料事实、观点和结论", "口号", "只有材料摘抄"], answer: "材料事实、观点和结论", explanation: "三者形成可检查的论证链。" },
 };
 
 const directConcepts: Record<Subject, Record<GradeBand, string[]>> = {
@@ -86,6 +138,12 @@ const directConcepts: Record<Subject, Record<GradeBand, string[]>> = {
     junior: ["chemistry.equation.balance", "chemistry.equation.conservation"],
     senior: ["chemistry.mole.amount", "chemistry.symbol.element"],
   },
+  biology: { primary: ["biology.experiment.variable"], junior: ["biology.experiment.variable", "biology.structure.function"], senior: ["biology.homeostasis.regulation", "biology.structure.function"] },
+  chinese: { primary: ["chinese.reading.evidence"], junior: ["chinese.reading.evidence", "chinese.language.expression"], senior: ["chinese.structure.purpose", "chinese.reading.evidence"] },
+  english: { primary: ["english.reading.evidence"], junior: ["english.reading.evidence", "english.sentence.roles"], senior: ["english.grammar.relation", "english.sentence.roles"] },
+  history: { primary: ["history.material.fact"], junior: ["history.cause.effect", "history.material.fact"], senior: ["history.comparison", "history.cause.effect"] },
+  geography: { primary: ["geography.region.location"], junior: ["geography.process.mechanism", "geography.factor.extract"], senior: ["geography.process.mechanism", "geography.factor.extract"] },
+  politics: { primary: ["politics.question.direction"], junior: ["politics.concept.match", "politics.material.layer"], senior: ["politics.argument.expression", "politics.concept.match"] },
 };
 
 function uid(prefix: string): string {
@@ -116,12 +174,7 @@ export function nodeFromConcept(conceptId: string): KnowledgeNode {
 }
 
 function originalCheck(problem: ProblemSnapshot): CheckItem {
-  const bySubject: Record<Subject, Pick<CheckItem, "prompt" | "answer" | "explanation">> = {
-    math: { prompt: `现在请你独立重做原题：\n\n${problem.text}`, answer: problem.gradeBand === "primary" ? "300" : problem.gradeBand === "junior" ? "8" : "(2,-1)", explanation: "请独立完成，并解释关键步骤。" },
-    physics: { prompt: `现在请你独立重做原题：\n\n${problem.text}`, answer: problem.gradeBand === "senior" ? "5" : "10", explanation: "写出关系式、代入数值并保留正确单位。" },
-    chemistry: { prompt: `现在请你独立重做原题：\n\n${problem.text}`, answer: problem.gradeBand === "senior" ? "6.02×10²³" : "2,1,2", explanation: "结果正确且能说明守恒关系。" },
-  };
-  return { id: uid("original"), type: "short_text", ...bySubject[problem.subject] };
+  return { id: uid("original"), conceptId: `problem.${problem.subject}.${problem.gradeBand}`, type: "short_text", ...originalCheckContent(problem) };
 }
 
 function problemGuideMock(problem: ProblemSnapshot): ProblemGuide {
@@ -144,13 +197,25 @@ function problemGuideMock(problem: ProblemSnapshot): ProblemGuide {
       approach: "先用守恒关系把变化前后连起来，再决定是否需要配平或换算。",
       firstQuestion: "变化前后，哪一种粒子或元素的数量必须保持对应？",
     },
+    biology: { goal: "从生命现象中建立结构、功能、过程和变量之间的联系。", keyClue: "圈出研究对象、条件变化和观察结果。", approach: "先明确层次和变量，再沿生命过程解释结果。", firstQuestion: "题目研究的是哪个对象，改变了什么条件？" },
+    chinese: { goal: "用原文证据解释词句、结构或主旨，而不是凭印象作答。", keyClue: "先定位题目所指的原句和上下文。", approach: "原文证据—语言现象—具体作用—回扣设问。", firstQuestion: "哪一句原文能直接支撑你的判断？" },
+    english: { goal: "Ground the answer in the text and clarify sentence or discourse relations.", keyClue: "Locate the exact sentence, connector, subject and predicate.", approach: "Evidence—language feature—meaning in context—answer.", firstQuestion: "Which exact words in the text support the answer?" },
+    history: { goal: "把材料放入时空坐标，用史实建立背景、过程和影响的因果链。", keyClue: "标出时间、地点、人物和材料中的变化。", approach: "材料事实与评价分开，再建立因果联系。", firstQuestion: "材料明确给出了哪些可核对的历史事实？" },
+    geography: { goal: "从区域位置出发，连接自然与人文要素，解释空间差异和过程。", keyClue: "先读图例、方位、尺度和题干中的区域要素。", approach: "定位—要素—联系—过程—影响。", firstQuestion: "这个区域在哪里，题目给了哪些要素？" },
+    politics: { goal: "根据设问把材料分层，让每个观点都有材料和概念依据。", keyClue: "圈出设问动词、材料主体、行为和结果。", approach: "设问方向—材料信息—概念匹配—规范论证。", firstQuestion: "设问要求回答原因、体现、意义还是措施？" },
   };
   return guides[problem.subject];
 }
 
 export function recognizeMock(subject: Subject, gradeBand: GradeBand): ProblemSnapshot {
-  const normalizedBand = subject !== "math" && gradeBand === "primary" ? "junior" : gradeBand;
+  const normalizedBand = normalizeSubjectBand(subject, gradeBand);
   return { ...samples[subject][normalizedBand], subject, gradeBand: normalizedBand, confidence: 0.94, userRevised: false };
+}
+
+export function isBuiltInMockProblem(problem: ProblemSnapshot): boolean {
+  const sample = recognizeMock(problem.subject, problem.gradeBand);
+  const compact = (value: string) => value.normalize("NFKC").replace(/[\s，。；：！？?,.!、“”‘’（）()\[\]【】]/g, "").toLowerCase();
+  return compact(problem.text) === compact(sample.text);
 }
 
 export function analyzeMock(problem: ProblemSnapshot, provider: ProviderId, reasoningLevel: ReasoningLevel = "light"): LearningSession {
@@ -188,14 +253,32 @@ function normalize(value: string): string {
 }
 
 export function verifyMock(check: CheckItem, answer: string): { passed: boolean; explanation: string } {
-  const actual = normalize(answer);
+  const actual = normalize(affirmedAnswerCandidate(answer) ?? answer);
   const expected = normalize(check.answer);
+  const negatedExpected = explicitlyNegatesExpected(check.answer, answer);
   const actualNumbers = actual.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
   const expectedNumbers = expected.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
   const numericEquivalent = actualNumbers.length > 0 && actualNumbers.length === expectedNumbers.length &&
     actualNumbers.every((value, index) => Math.abs(value - expectedNumbers[index]) <= Math.max(1e-9, Math.abs(expectedNumbers[index]) * 1e-6));
-  const passed = actual.length > 0 && (actual === expected || numericEquivalent);
+  const semantic = semanticOpenAnswer(check, actual);
+  const shortExpectedIncluded = /^[a-z\u4e00-\u9fff]{1,12}$/i.test(expected) && actual.includes(expected);
+  const passed = actual.length > 0 && !negatedExpected && (actual === expected || numericEquivalent || shortExpectedIncluded || semantic);
   return { passed, explanation: passed ? `回答正确。${check.explanation}` : `这一步还没有稳定掌握。${check.explanation}` };
+}
+
+function semanticOpenAnswer(check: CheckItem, actual: string): boolean {
+  if (check.type !== "short_text" || actual.length < 6) return false;
+  const rubric = openAnswerRubric(check);
+  if (!rubric || explicitContradiction(actual) || rubric.forbidden?.some((pattern) => pattern.test(actual))) return false;
+  return rubric.required.every((pattern) => pattern.test(actual));
+}
+
+function explicitContradiction(actual: string): boolean {
+  const concept = "关系|作用|影响|证据|背景|变化|意义|观点|反馈|对照|一致|联系|差异|让步|机制|解释|结论|保障|保护|抬升|胰岛素|concession|evidence|control|relation|mechanism|explanation";
+  const contradiction = new RegExp(`(?:不是|并非|不属于|不体现|不支持|没有|毫无|并未|未产生|不会|不能|无需|不需要|hardly|never|not|isn't|doesn't|no).*(?:${concept})|(?:${concept}).*(?:无关|不存在|没有|毫无|并未|不能|不支持|hardly|never|not)`, "i");
+  const reversed = new RegExp(`(?:${concept}).*(?:错误|纯属虚构|虚构|不成立|只是巧合|fails?to|incorrect|wrong)`, "i");
+  const rejectedClaim = /(?:fails?\s*to|说法有误|解释.{0,8}站不住脚|这种(?:说法|解释|机制|观点).{0,8}(?:错误|有误|不成立)|纯属虚构)/i;
+  return actual.split(/[。！？!?；;]+/).some((clause) => contradiction.test(clause) || reversed.test(clause) || rejectedClaim.test(clause));
 }
 
 export function transferCheckMock(subject: Subject, gradeBand: GradeBand): CheckItem {
@@ -205,6 +288,12 @@ export function transferCheckMock(subject: Subject, gradeBand: GradeBand): Check
       : { id: uid("transfer"), conceptId: gradeBand === "primary" ? "math.rate.unit-rate" : "math.algebra.linear-equation", prompt: gradeBand === "primary" ? "每小时行驶 70 千米，4 小时行驶多少千米？" : "把刚才的方法迁移到：2(x+1)=10。求 x。", type: "short_text", answer: gradeBand === "primary" ? "280" : "4", explanation: "数字和表述变化后仍能独立使用同一知识关系，才算真正掌握。" },
     physics: { id: uid("transfer"), conceptId: gradeBand === "senior" ? "physics.newton.second-law" : "physics.motion.speed", prompt: gradeBand === "senior" ? "质量 4 kg 的物体受 12 N 合力，加速度是多少？" : "自行车 6 秒行驶 72 米，速度是多少？", type: "short_text", answer: gradeBand === "senior" ? "3" : "12", explanation: "关系式不变，只替换新的情境与数值。" },
     chemistry: { id: uid("transfer"), conceptId: gradeBand === "senior" ? "chemistry.mole.amount" : "chemistry.equation.balance", prompt: gradeBand === "senior" ? "2 mol O₂ 含多少个氧分子？" : "配平：N₂ + H₂ → NH₃，请写三个系数。", type: "short_text", answer: gradeBand === "senior" ? "1.204×10²⁴" : "1,3,2", explanation: "新的反应或数量仍要遵循相同的守恒与计量关系。" },
+    biology: { id: uid("transfer"), conceptId: "biology.experiment.variable", prompt: "探究温度对种子萌发的影响，应如何设置两组实验？", type: "short_text", answer: "只改变温度，其他条件相同", explanation: "研究对象变化后仍需坚持单一变量和对照。" },
+    chinese: { id: uid("transfer"), conceptId: "chinese.reading.evidence", prompt: "材料：‘他把信封拿起又放下，走到门口又退了回来。’摘录能表现人物犹豫的原文，并说明依据。", type: "short_text", answer: "拿起又放下、走到门口又退回+反复动作表现犹豫", explanation: "材料变化后仍要从原文证据出发。" },
+    english: { id: uid("transfer"), conceptId: "english.reading.evidence", prompt: "Read: ‘I was ready to leave, but after hearing her reason, I stayed.’ Find the phrase that shows the speaker changed his mind and explain it.", type: "short_text", answer: "I stayed+shows the decision changed", explanation: "A new passage still requires exact evidence and interpretation." },
+    history: { id: uid("transfer"), conceptId: "history.material.fact", prompt: "材料：1898年改革措施开始推行，1900年相关措施停止。列出一项材料事实，并判断它属于过程还是结果。", type: "short_text", answer: "1898年改革措施开始推行+过程", explanation: "新材料中仍需分开事实提取与历史解释。" },
+    geography: { id: uid("transfer"), conceptId: "geography.region.location", prompt: "材料：该地位于山脉迎风坡，夏季盛行湿润海风。说明区域位置特征，并列出一个影响降水的要素。", type: "short_text", answer: "山脉迎风坡+湿润海风", explanation: "更换区域后仍应从定位和要素开始。" },
+    politics: { id: uid("transfer"), conceptId: "politics.question.direction", prompt: "材料：社区增设无障碍通道，方便老年人和残障人士出行。设问为‘说明这一措施的意义’，写出一条材料与观点结合的回答。", type: "short_text", answer: "增设无障碍通道+保障平等参与社会生活", explanation: "材料变化后仍需由设问控制论证结构。" },
   };
   return bank[subject];
 }
@@ -225,65 +314,5 @@ export function similarCheckMock(node: KnowledgeNode): CheckItem {
 }
 
 export function solutionMock(problem: ProblemSnapshot): string {
-  const solutions: Record<Subject, string> = {
-    math: [
-      "### 解题思路",
-      "先求每小时行驶多少千米，再用单位时间内的路程乘以总时间。这样把总量问题拆成了“单位量 × 份数”，每个数字的作用都清楚。",
-      "### 分步推导",
-      "1. 已知 3 小时行驶 180 千米，所以每小时行驶 $180\\div3=60$ 千米。这里除以 3，是把 180 千米平均分到 3 个小时里。",
-      "2. 5 小时包含 5 个这样的单位时间，因此总路程为 $60\\times5=300$ 千米。",
-      "3. 验算：5 小时比 3 小时更长，按相同速度行驶的路程应大于 180 千米，300 千米符合题意。",
-      "### 结论",
-      "5 小时一共行驶 $300$ 千米。",
-      "### 易错提醒",
-      "不要直接把 180 与 5 相乘；180 是 3 小时的总路程，必须先求出 1 小时的单位量。",
-    ].join("\n\n"),
-    physics: problem.gradeBand === "senior" ? [
-      "### 解题思路",
-      "题目给出物体所受合力和质量，要求加速度，直接使用牛顿第二定律 $F=ma$。先变形得到待求量，再代入数值和单位。",
-      "### 分步推导",
-      "1. 由 $F=ma$，两边同时除以质量 $m$，得到 $a=\\frac{F}{m}$。",
-      "2. 代入 $F=10\\,\\mathrm{N}$、$m=2\\,\\mathrm{kg}$：$$a=\\frac{10}{2}=5\\,\\mathrm{m/s^2}$$",
-      "3. 合力方向就是加速度方向；单位 $\\mathrm{N/kg}$ 与 $\\mathrm{m/s^2}$ 等价。",
-      "### 结论",
-      "物体的加速度为 $5\\,\\mathrm{m/s^2}$，方向与合力方向一致。",
-      "### 易错提醒",
-      "代入的必须是合力而不是某一个分力，并且不能把公式误写成 $a=Fm$。",
-    ].join("\n\n") : [
-      "### 解题思路",
-      "速度表示单位时间通过的路程。题目已给路程和时间，因此用 $v=\\frac{s}{t}$，再检查单位是否统一。",
-      "### 分步推导",
-      "1. 读出路程 $s=50\\,\\mathrm{m}$，时间 $t=5\\,\\mathrm{s}$，两个量的单位可以直接配合使用。",
-      "2. 代入速度公式：$$v=\\frac{s}{t}=\\frac{50}{5}=10\\,\\mathrm{m/s}$$",
-      "3. 验算：每秒走 10 米，5 秒正好走 $10\\times5=50$ 米，与题目一致。",
-      "### 结论",
-      "物体的速度为 $10\\,\\mathrm{m/s}$。",
-      "### 易错提醒",
-      "不要把路程除以速度，也不要漏写 $\\mathrm{m/s}$；若题目使用千米和小时，需要先统一单位。",
-    ].join("\n\n"),
-    chemistry: problem.gradeBand === "senior" ? [
-      "### 解题思路",
-      "先确定 1 摩尔物质所含的微粒数，再根据物质的量按比例计算。这里统计的是氧分子，不是氧原子。",
-      "### 分步推导",
-      "1. 阿伏伽德罗常数为 $N_A=6.02\\times10^{23}\\,\\mathrm{mol^{-1}}$，表示 1 mol 物质含有这么多个指定微粒。",
-      "2. 对 $2\\,\\mathrm{mol}$ 的 $\\mathrm{O_2}$，分子数为 $$N=nN_A=2\\times6.02\\times10^{23}=1.204\\times10^{24}$$",
-      "3. 结果数量级大于 $10^{23}$，且是 1 mol 时的两倍，符合比例关系。",
-      "### 结论",
-      "$2\\,\\mathrm{mol}$ $\\mathrm{O_2}$ 含 $1.204\\times10^{24}$ 个氧分子。",
-      "### 易错提醒",
-      "若题目问氧原子个数，还要再乘 2；本题问的是 $\\mathrm{O_2}$ 分子数，不能多乘一次。",
-    ].join("\n\n") : [
-      "### 解题思路",
-      "配平方程式的依据是反应前后每种元素的原子数守恒。先配结构较复杂的物质，再检查所有元素，最后化成最简整数比。",
-      "### 分步推导",
-      "1. 生成物 $\\mathrm{H_2O}$ 同时含氢和氧。先在水前写 2，使右侧有 2 个氧原子和 4 个氢原子。",
-      "2. 为使左侧氧原子数也是 2，在 $\\mathrm{O_2}$ 前写 1；为使氢原子数是 4，在 $\\mathrm{H_2}$ 前写 2。",
-      "3. 得到 $$2\\mathrm{H_2}+\\mathrm{O_2}\\rightarrow2\\mathrm{H_2O}$$ 检查两侧氢原子均为 4 个、氧原子均为 2 个。",
-      "### 结论",
-      "最简整数系数依次为 2、1、2。",
-      "### 易错提醒",
-      "只能修改化学式前的系数，不能改动 $\\mathrm{H_2}$ 或 $\\mathrm{H_2O}$ 中的下标。",
-    ].join("\n\n"),
-  };
-  return solutions[problem.subject];
+  return solutionForSample(problem);
 }

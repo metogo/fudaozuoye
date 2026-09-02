@@ -1,6 +1,7 @@
-import { analyzeMock, expandMock, recognizeMock, similarCheckMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
+import { analyzeMock, expandMock, isBuiltInMockProblem, recognizeMock, similarCheckMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
+import { isSupportedSubjectBand } from "../curriculum";
 import { isConcreteRecallAnswer } from "../solution-recall";
-import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
+import { subjects, type BoardConversationMessage, type BoardLesson, type BoardSuggestion, type CheckItem, type GradeBand, type LearningSession, type ProblemSnapshot, type ProviderId, type ReasoningLevel, type SuggestedQuestion, type TutorScope } from "../types";
 import type { AnalysisPhaseReporter, ProviderAdapter } from "./adapter";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
 import { createSafeBoardLesson } from "./board";
@@ -20,12 +21,18 @@ export class MockProviderAdapter implements ProviderAdapter {
   }
 
   async recognizeTextProblem(text: string) {
-    const subject = /化学|反应|分子|物质|元素|mol|方程式/.test(text) ? "chemistry" : /物理|速度|质量|力|光|电|压强|功率/.test(text) ? "physics" : "math";
-    const gradeBand = subject === "math" && /小学|年级|加法|减法|乘法|除法/.test(text) ? "primary" : /高中|函数|导数|向量|动量|摩尔/.test(text) ? "senior" : "junior";
-    return { text: text.trim(), childWork: "", subject, gradeBand, confidence: 0.9, userRevised: true } as ProblemSnapshot;
+    const compact = compactProblemText(text);
+    const bands: GradeBand[] = ["primary", "junior", "senior"];
+    const sample = subjects.flatMap((subject) => bands.filter((band) => isSupportedSubjectBand(subject, band)).map((band) => recognizeMock(subject, band)))
+      .find((candidate) => compactProblemText(candidate.text) === compact);
+    if (!sample) throw new Error("演示模式只支持内置代表题，自定义题请配置真实 AI 服务后再试");
+    return { ...sample, text: text.trim(), childWork: "", confidence: 0.9, userRevised: true } as ProblemSnapshot;
   }
 
-  async prepareChatSession(problem: ProblemSnapshot) { return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode); }
+  async prepareChatSession(problem: ProblemSnapshot) {
+    if (!isBuiltInMockProblem(problem)) throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
+    return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
+  }
   async completeChatSession(session: LearningSession) {
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
     return root?.check.answer === "等待后台核验" ? rootOnlySession(analyzeMock(session.problem, this.id, this.reasoningLevel)) : session;
@@ -80,3 +87,5 @@ export class MockProviderAdapter implements ProviderAdapter {
   }
   cancelPendingRequests() {}
 }
+
+function compactProblemText(value: string): string { return value.normalize("NFKC").replace(/[\s，。；：！？?,.!、“”‘’（）()\[\]【】]/g, "").toLowerCase(); }

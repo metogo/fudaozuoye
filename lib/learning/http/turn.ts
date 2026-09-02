@@ -182,16 +182,10 @@ async function handleChoice(session: LearningSession, gateId: string, choice: Le
   }
   if (choice === "view_board") {
     requireGate(session, gateId);
+    void boardContext;
     const suggestion = requestedBoardSuggestion(session);
     send("board.lesson", createInstantBoardLesson(session, session.flow.focus, suggestion));
-    send("flow.progress", { key: "board", label: "板书已经打开，正在补充更贴合这道题的内容" });
-    try {
-      const enhanced = await awaitOptional(adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext), signal, 30_000, () => adapter.cancelPendingRequests());
-      if (enhanced.quality?.status !== "safe_fallback") send("board.lesson", enhanced);
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      console.warn("完整板书增强未完成，继续使用已展示的即时板书", error instanceof Error ? error.message : "未知错误");
-    }
+    send("flow.progress", { key: "board", label: "学科原生板书已整理完成" });
     emitState(touch(session), send);
     return;
   }

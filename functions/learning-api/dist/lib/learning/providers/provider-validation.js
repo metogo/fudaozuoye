@@ -20,6 +20,8 @@ exports.evidenceCandidates = evidenceCandidates;
 const curriculum_1 = require("../curriculum");
 const graph_1 = require("../graph");
 const flow_1 = require("../flow");
+const subject_learning_guide_1 = require("../subject-learning-guide");
+const types_1 = require("../types");
 const blueprint_1 = require("./blueprint");
 exports.PENDING_ORIGINAL_ANSWER = "等待后台核验";
 class NonRepairableValidationError extends Error {
@@ -62,7 +64,7 @@ function parseInitialAnalysisSelection(value, problem, allowed) {
         throw new Error("缺少原题标准答案或解题依据");
     return {
         selections, originalAnswer: value.originalAnswer, originalExplanation: value.originalExplanation,
-        problemGuide: (0, blueprint_1.parseProblemGuide)(value.problemGuide, problem.text, selections.filter((item) => item.evidenceSource === "problem").map((item) => item.evidence), value.originalAnswer, value.originalExplanation),
+        problemGuide: (0, blueprint_1.parseProblemGuide)(value.problemGuide, problem.text, selections.filter((item) => item.evidenceSource === "problem").map((item) => item.evidence), value.originalAnswer, value.originalExplanation, (0, subject_learning_guide_1.subjectPendingGuide)(problem)),
     };
 }
 function expansionSelectionOptions(problem, target, allowedConceptIds) {
@@ -78,28 +80,43 @@ function parseProblem(result) {
     }
     if (typeof result.text !== "string" || result.text.trim().length < 3)
         throw new Error("没有识别到完整题干");
-    if (typeof result.childWork !== "string" || !["math", "physics", "chemistry"].includes(String(result.subject)) || !["primary", "junior", "senior"].includes(String(result.gradeBand)) || typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1)
+    const subject = normalizedSubject(result.subject);
+    const gradeBand = normalizedGradeBand(result.gradeBand);
+    const confidence = normalizedConfidence(result.confidence);
+    if (typeof result.childWork !== "string" || !subject || !gradeBand || confidence === null)
         throw new Error("模型识别结果结构不合法");
-    if (result.confidence < 0.55)
+    if (confidence < 0.55)
         throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
-    const subject = result.subject;
-    const gradeBand = result.gradeBand;
     if (!(0, curriculum_1.isSupportedSubjectBand)(subject, gradeBand))
         throw new Error("识别到不支持的学科学段组合");
-    return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence: result.confidence, userRevised: false };
+    return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false };
 }
 function parseTextProblem(result, originalText) {
     if (result.recognized !== true) {
         const reason = typeof result.failureReason === "string" && result.failureReason.trim() ? `：${result.failureReason.trim()}` : "";
         throw new NonRepairableValidationError(`没有识别到一道完整的题目${reason}`);
     }
-    if (!['math', 'physics', 'chemistry'].includes(String(result.subject)) || !['primary', 'junior', 'senior'].includes(String(result.gradeBand)) || typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1)
+    const subject = normalizedSubject(result.subject);
+    const gradeBand = normalizedGradeBand(result.gradeBand);
+    const confidence = normalizedConfidence(result.confidence);
+    if (!subject || !gradeBand || confidence === null)
         throw new Error("模型分类结果结构不合法");
-    const subject = result.subject;
-    const gradeBand = result.gradeBand;
     if (!(0, curriculum_1.isSupportedSubjectBand)(subject, gradeBand))
         throw new Error("识别到不支持的学科学段组合");
-    return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence: result.confidence, userRevised: true };
+    return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence, userRevised: true };
+}
+function normalizedSubject(value) {
+    const aliases = { math: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
+    const normalized = aliases[String(value ?? "").trim().toLowerCase()];
+    return normalized && types_1.subjects.includes(normalized) ? normalized : null;
+}
+function normalizedGradeBand(value) {
+    const aliases = { primary: "primary", 小学: "primary", junior: "junior", 初中: "junior", senior: "senior", 高中: "senior" };
+    return aliases[String(value ?? "").trim().toLowerCase()] ?? null;
+}
+function normalizedConfidence(value) {
+    const confidence = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+    return Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 ? confidence : null;
 }
 function parseBoardSuggestion(result) {
     if (typeof result.recommended !== "boolean" || typeof result.reason !== "string" || result.reason.trim().length < 6 || result.reason.trim().length > 100 || !["relation", "steps", "comparison", "formula"].includes(String(result.layout)))
@@ -127,13 +144,7 @@ function rootOnlySession(session) {
     return { ...session, nodes: [root], edges: [], currentNodeId: null };
 }
 function pendingChatSession(problem, provider, reasoningLevel, modelId, mode) {
-    const clue = problem.text.replace(/\s+/g, " ").trim().slice(0, 80);
-    return { ...buildSession(problem, provider, reasoningLevel, modelId, [], exports.PENDING_ORIGINAL_ANSWER, "标准解正在与首讲并行准备。", {
-            goal: "先明确题目要求的未知量，再把它和已知条件连起来。",
-            keyClue: `先看题干中的“${clue}”，找出决定第一步的条件。`,
-            approach: "先整理已知量、待求量和它们之间的关系，不急着计算最终结果。",
-            firstQuestion: "这道题最终要你求出什么量？",
-        }), mode };
+    return { ...buildSession(problem, provider, reasoningLevel, modelId, [], exports.PENDING_ORIGINAL_ANSWER, "标准解正在与首讲并行准备。", (0, subject_learning_guide_1.subjectPendingGuide)(problem)), mode };
 }
 function edgeReason(node, blueprint, targetTitle) {
     const evidence = blueprint?.evidence ?? node.diagnosticEvidence ?? node.title;

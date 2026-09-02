@@ -38,7 +38,9 @@ function isConceptAllowed(id, subject, gradeBand) {
     return Boolean(concept && concept.subject === subject && isBandAtOrBelow(concept.gradeBands, gradeBand));
 }
 function isSupportedSubjectBand(subject, gradeBand) {
-    return subject === "math" || gradeBand !== "primary";
+    if (gradeBand !== "primary")
+        return true;
+    return subject === "math" || subject === "chinese" || subject === "english";
 }
 function normalizeSubjectBand(subject, gradeBand) {
     return isSupportedSubjectBand(subject, gradeBand) ? gradeBand : "junior";

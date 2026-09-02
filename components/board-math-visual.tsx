@@ -47,10 +47,32 @@ function drawGeometry(board: { create: (type: string, parents: unknown[], attrib
   for (const object of visual.objects) {
     if (object.type === "circle") {
       board.create("circle", object.through ? [points.get(object.center), points.get(object.through)] : [points.get(object.center), object.radius], { name: object.label ?? "", strokeColor: "#d97706", strokeWidth: 2, fixed: true, highlight: false });
-    } else if (object.type === "right_angle") {
-      board.create("angle", [points.get(object.from), points.get(object.vertex), points.get(object.to)], { name: "", radius: 0.45, orthoType: "square", type: "square", fillColor: "#fef3c7", strokeColor: "#d97706", fixed: true, highlight: false });
+    } else if (object.type === "right_angle" || object.type === "angle") {
+      const rightAngleStyle = object.type === "right_angle" ? { orthoType: "square", type: "square" } : {};
+      board.create("angle", [points.get(object.from), points.get(object.vertex), points.get(object.to)], { name: "", radius: object.type === "right_angle" ? .45 : .62, ...rightAngleStyle, fillColor: "#fef3c7", fillOpacity: .45, strokeColor: "#d97706", fixed: true, highlight: false });
+      if (object.type === "angle" && object.label) {
+        const vertex = positions[object.vertex];
+        board.create("text", [vertex.x + .48, vertex.y + .4, object.label], { fixed: true, highlight: false, fontSize: 14, strokeColor: "#92400e", cssClass: "board-jxg-angle-label" });
+      }
     } else {
-      board.create(object.type === "arrow" ? "arrow" : object.type, [points.get(object.from), points.get(object.to)], { name: object.label ?? "", strokeColor: "#064e3b", strokeWidth: 2, fixed: true, highlight: false });
+      board.create(object.type === "arrow" ? "arrow" : object.type, [points.get(object.from), points.get(object.to)], { name: "", strokeColor: "#064e3b", strokeWidth: 2, fixed: true, highlight: false });
+      if (object.label) drawGeometryLabel(board, positions[object.from], positions[object.to], object.label);
     }
   }
+}
+
+function drawGeometryLabel(
+  board: { create: (type: string, parents: unknown[], attributes?: Record<string, unknown>) => unknown },
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  label: string,
+) {
+  const length = Math.max(.001, Math.hypot(to.x - from.x, to.y - from.y));
+  const offset = .28;
+  const x = (from.x + to.x) / 2 - (to.y - from.y) / length * offset;
+  const y = (from.y + to.y) / 2 + (to.x - from.x) / length * offset;
+  board.create("text", [x, y, label], {
+    anchorX: "middle", anchorY: "middle", fixed: true, highlight: false,
+    fontSize: 15, strokeColor: "#92400e", cssClass: "board-jxg-side-label",
+  });
 }

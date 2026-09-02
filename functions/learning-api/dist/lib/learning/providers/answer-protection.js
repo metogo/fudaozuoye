@@ -3,6 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizedAnswerMath = normalizedAnswerMath;
 exports.protectedAnswerVariants = protectedAnswerVariants;
 exports.protectedShortAnswers = protectedShortAnswers;
+exports.isShortTextAnswer = isShortTextAnswer;
+exports.shortTextAnswerLeak = shortTextAnswerLeak;
+exports.explicitAnswerClaimLeak = explicitAnswerClaimLeak;
+exports.generatedTextContainsAnswer = generatedTextContainsAnswer;
 exports.shortProtectedAnswerLeak = shortProtectedAnswerLeak;
 const unitSuffix = /(?:毫米|厘米|分米|千米|平方米|平方厘米|立方米|立方厘米|米|秒|分钟|小时|千克|克|元|度|牛|帕|焦|瓦|伏|安|欧|摩尔|mm|cm|km|m|ms|s|min|h|kg|g|pa|j|w|v|a|mol)$/iu;
 function normalizedAnswerMath(value) {
@@ -46,7 +50,28 @@ function protectedAnswerVariants(answer) {
 function protectedShortAnswers(answer) {
     const normalized = normalizedAnswerMath(answer);
     const withoutUnit = normalized.replace(unitSuffix, "");
-    return Array.from(new Set([normalized, withoutUnit])).filter((value) => value.length === 1);
+    return Array.from(new Set([normalized, withoutUnit])).filter((value) => value.length === 1 || isShortTextAnswer(value));
+}
+function isShortTextAnswer(answer) {
+    return /^[\p{Script=Han}]{2,3}$/u.test(normalizedAnswerMath(answer));
+}
+function shortTextAnswerLeak(visibleText, answer, sourceText) {
+    if (!isShortTextAnswer(answer))
+        return false;
+    const term = answer.normalize("NFKC").trim();
+    return visibleText.normalize("NFKC").includes(term) && !sourceText.normalize("NFKC").includes(term);
+}
+function explicitAnswerClaimLeak(visibleText, answer) {
+    const variants = protectedAnswerVariants(answer).concat(protectedShortAnswers(answer));
+    const visible = normalizedAnswerMath(visibleText);
+    const resultClaim = "(?:最终答案|答案|最终结果|计算结果|结论|故选|应选|正确选项|正确的|正确答案)(?:应当|应该|应)?(?:是|为|等于|选择|选)?";
+    const selectionClaim = "(?:应当|应该|所以|因此|故而)?(?:应当|应该|应)?选择";
+    return variants.some((variant) => new RegExp(`(?:${resultClaim}|${selectionClaim})${escapeRegExp(variant)}(?![a-z0-9.])`, "u").test(visible));
+}
+function generatedTextContainsAnswer(visibleText, answer) {
+    const visible = normalizedAnswerMath(visibleText);
+    return protectedAnswerVariants(answer).concat(protectedShortAnswers(answer))
+        .some((variant) => visible.includes(variant));
 }
 function shortProtectedAnswerLeak(visibleText, answer, sourceText) {
     if (/\\(?:char|verb|def|gdef|edef|xdef|let|futurelet|global|newcommand|renewcommand|providecommand|declaremathoperator)\b/i.test(visibleText))

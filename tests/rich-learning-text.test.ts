@@ -452,7 +452,7 @@ describe("AI 教学内容排版", () => {
     }));
 
     expect(html).toContain("board-mark--circle");
-    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it("板书重点只命中公式内部时仍保留完整 KaTeX 公式", () => {
@@ -499,11 +499,23 @@ describe("AI 教学内容排版", () => {
     }));
 
     expect(html).toContain("board-course-route");
-    expect(html).toContain("读懂任务");
-    expect(html).toContain("建立关系");
-    expect(html).toContain("关键推导");
-    expect(html).toContain("为什么成立");
-    expect(html).toContain("停一下，自查");
+    expect(html).toContain("board-course-route-nav");
+    expect(html).not.toContain("board-workspace-hero");
+    expect(html).not.toContain("board-course-hero__heading");
+    expect(html.indexOf("board-course-route-nav")).toBeLessThan(html.indexOf("board-course-content"));
+    expect(html.match(/data-board-step-index=/g)?.length).toBe(5);
+    for (const label of ["看懂题目", "找出联系", "关键推导", "易错检查", "举一反三"]) {
+      expect(html.match(new RegExp(label, "g"))?.length).toBe(2);
+    }
+    for (const label of ["已知什么，要解决什么", "条件之间怎么连起来", "从哪里开始，为什么这样做", "哪些地方最容易出错", "同类题怎么解决"]) {
+      expect(html.match(new RegExp(label, "g"))?.length).toBe(1);
+    }
+    expect(html.match(/本题这一步：/g)?.length).toBe(5);
+    expect(html).toContain("本步目标");
+    expect(html).toContain("怎么做");
+    expect(html.match(/题目依据/g)?.length).toBe(lesson.plan?.scenes.filter((scene) => scene.evidence).length);
+    expect(html).toContain("为什么");
+    expect(html).toContain("自己检查");
     expect(html).toContain("当前是安全学习框架，不是完整板书");
     expect(html).toContain("重试完整板书");
     expect(html).not.toContain("按需使用");

@@ -37,11 +37,11 @@ class LiveProviderAdapter {
     async recognizeProblem(imageDataUrl, subject, gradeBand) {
         void subject;
         void gradeBand;
-        return this.validatedJsonRequest("你是严格的作业照片门禁与识别器。先判断图片里是否真实、清晰、完整地出现至少一道数学、物理或化学题。只看到天花板、墙面、人物、空白纸、无关物体、严重模糊、题干被裁断或多题无法分离时，绝对禁止猜测、补全或套用示例，必须返回 recognized=false。只有能逐字依据图片提取完整题干时才返回 recognized=true。只识别一道题及学生已有作答，不求解。输出严格 JSON。", "请根据题干中的术语、公式与难度自行判断学科和学段；没有足够依据时，选择更保守的学段并降低 confidence。学科为 physics 或 chemistry 时 gradeBand 不得为 primary。输出字段：recognized(boolean), failureReason(string；成功时为空), text(string；失败时为空), childWork(string；失败时为空), subject(math|physics|chemistry), gradeBand(primary|junior|senior), confidence(0到1；失败时为0)。", provider_validation_1.parseProblem, imageDataUrl);
+        return this.validatedJsonRequest("你是严格的 K12 作业照片门禁与识别器。先判断图片里是否真实、清晰、完整地出现至少一道数学、物理、化学、生物、语文、英语、历史、地理或政治题。只看到天花板、墙面、人物、空白纸、无关物体、严重模糊、题干被裁断或多题无法分离时，绝对禁止猜测、补全或套用示例，必须返回 recognized=false。只有能逐字依据图片提取完整题干时才返回 recognized=true。只识别一道题及学生已有作答，不求解。输出严格 JSON。", "请根据题干中的术语、材料、公式、设问与难度判断学科和学段；没有足够依据时降低 confidence。physics、chemistry、biology、history、geography、politics 不支持 primary。输出字段：recognized(boolean), failureReason(string；成功时为空), text(string；失败时为空), childWork(string；失败时为空), subject(math|physics|chemistry|biology|chinese|english|history|geography|politics), gradeBand(primary|junior|senior), confidence(0到1；失败时为0)。", provider_validation_1.parseProblem, imageDataUrl);
     }
     async recognizeTextProblem(text) {
-        return this.validatedJsonRequest("你是严格的 K12 数理化题目门禁与分类器。判断用户文字是否包含一道可以学习的数学、物理或化学题。不得求解、不得改写或复述原题。只输出严格 JSON。", JSON.stringify({
-            task: "只判断原文是否为一道完整的数理化题，并判断学科和学段；不是数理化题、信息不足或混入多道题时返回 recognized=false",
+        return this.validatedJsonRequest("你是严格的 K12 作业题门禁与分类器。判断用户文字是否包含一道可以学习的数学、物理、化学、生物、语文、英语、历史、地理或政治题。不得求解、不得改写或复述原题。只输出严格 JSON。", JSON.stringify({
+            task: "只判断原文是否为一道完整的 K12 单题，并判断九学科之一及学段；信息不足或混入多道题时返回 recognized=false",
             text,
             output: { recognized: true, failureReason: "", subject: "math", gradeBand: "junior", confidence: 0.9 },
         }), (value) => (0, provider_validation_1.parseTextProblem)(value, text));
@@ -76,7 +76,7 @@ class LiveProviderAdapter {
     async completeChatSession(session) {
         const problem = session.problem;
         const system = [
-            "你是中国 K12 数理化原题求解器。只处理当前原题，不生成知识卡、板书、首讲或迁移题。输出严格 JSON。",
+            "你是中国 K12 九学科原题求解器。只处理当前原题，不生成知识卡、板书、首讲或迁移题。输出严格 JSON。",
             "originalAnswer 与 originalExplanation 是服务端保存的核验依据，必须准确、完整、可复核。",
             "如果题目要求说明理由、解释原因或写出依据，originalAnswer 必须同时包含结论和不可缺少的理由，不能只写结论。",
             "解题依据出现数学或物理公式时，必须使用 KaTeX 兼容的 LaTeX：行内写成 $...$，独立公式写成 $$...$$。所有字段不得包含 HTML。",
@@ -355,47 +355,8 @@ class LiveProviderAdapter {
     async generateBoardLesson(session, scope, suggestion, context = []) {
         if (!suggestion.recommended)
             throw new Error("当前步骤不需要切换板书讲解");
-        try {
-            const lesson = await this.generateBoardCandidate(session, scope, suggestion, context);
-            const auditPrompt = (0, board_1.boardAuditPrompt)(session, scope, lesson, context);
-            const auditRaw = this.config.protocol === "chat-completions"
-                ? await this.toolRequest((0, board_1.boardAuditSystemPrompt)(), auditPrompt, (0, board_1.boardAuditTool)(), 320, 8_000)
-                : await this.textRequest((0, board_1.boardAuditSystemPrompt)(), auditPrompt, undefined, true, 8_000);
-            const audit = (0, board_1.parseBoardAudit)((0, model_support_1.parseJsonObject)(auditRaw));
-            if (audit.passed)
-                return lesson;
-            console.warn("板书候选未通过事实审校，已使用可验证的安全板书", audit.reason);
-            return (0, board_1.createSafeBoardLesson)(session, scope, suggestion, `完整板书未通过内容验收：${audit.reason}`);
-        }
-        catch (error) {
-            const reason = error instanceof Error ? error.message : "未知错误";
-            console.warn("板书生成未通过结构校验，已使用可验证的安全板书", reason);
-            const fallbackReason = /超时|timeout/i.test(reason)
-                ? "完整板书生成超时，当前内容已降级。"
-                : "完整板书的结构或事实校验未通过，当前内容已降级。";
-            return (0, board_1.createSafeBoardLesson)(session, scope, suggestion, fallbackReason);
-        }
-    }
-    async generateBoardCandidate(session, scope, suggestion, context) {
-        const system = (0, board_1.boardLessonSystemPrompt)();
-        const prompt = (0, board_1.boardLessonPrompt)(session, scope, suggestion, context);
-        if (this.config.protocol === "chat-completions") {
-            const value = (0, model_support_1.parseJsonObject)(await this.toolRequest((0, board_1.boardCoreContentSystemPrompt)(), `${prompt}\n优先使用 5 个教学单元，直接调用指定函数。`, (0, board_1.boardContentTool)(), 1400, 18_000));
-            return (0, board_1.addSafeBoardAnnotations)((0, board_1.recoverBoardContentPlan)(value, session, suggestion), session);
-        }
-        const parseContent = (value) => (0, board_1.parseBoardContent)(value, session, suggestion, context);
-        const contentSystem = `${system}\n先只输出板书正文与可选配图，不输出重点标记。`;
-        const contentPrompt = `${prompt}\nvisual 不需要时返回 kind=none，其余文字留空、elements 为空数组。`;
-        const content = await this.validatedJsonRequest(`${contentSystem}\n只输出严格 JSON。`, `${contentPrompt}\n输出字段：title、blocks、visual、plan。`, parseContent);
-        const annotationSystem = "你是 K12 板书重点标记老师。只能从已完成板书的原文中选重点，不能改写正文、补充答案或添加推理。重点必须由教学作用决定，禁止机械选择每段开头。";
-        const annotationPrompt = (0, board_1.boardAnnotationsPrompt)(content);
-        const parseAnnotations = (value) => (0, board_1.parseBoardAnnotations)(value, content, session);
-        try {
-            return await this.validatedJsonRequest(`${annotationSystem}\n只输出严格 JSON。`, annotationPrompt, parseAnnotations);
-        }
-        catch {
-            return (0, board_1.addSafeBoardAnnotations)(content, session);
-        }
+        void context;
+        return (0, board_1.createInstantBoardLesson)(session, scope, suggestion);
     }
     async validatedJsonRequest(system, prompt, parse, imageDataUrl, recover) {
         const first = await this.textRequest(system, prompt, imageDataUrl, true);

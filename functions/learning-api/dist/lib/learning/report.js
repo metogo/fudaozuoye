@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createReportFile = createReportFile;
-const subjects = { math: "数学", physics: "物理", chemistry: "化学" };
+const subjects = { math: "数学", physics: "物理", chemistry: "化学", biology: "生物", chinese: "语文", english: "英语", history: "历史", geography: "地理", politics: "政治" };
 const bands = { primary: "小学", junior: "初中", senior: "高中" };
 const states = { unchecked: "待确认", known: "已掌握", unknown: "未掌握", learning: "学习中", mastered: "验收通过", parent_confirmed: "人工确认", needs_help: "需真人介入" };
 async function createReportFile(session) {

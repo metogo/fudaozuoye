@@ -42,7 +42,7 @@ export function compileBoardDocument(lesson: BoardLesson): BoardDocument {
   const learningGoal = lesson.plan?.learningGoal ?? lesson.subtitle;
   return {
     version: WORKSPACE_VERSION,
-    key: `board-${stableHash([lesson.title, lesson.plan?.contentRevision ?? 0, lesson.plan?.subject ?? "", lesson.plan?.thesis ?? "", learningGoal, ...scenes.flatMap((scene) => [scene.id, scene.title, scene.content, scene.role ?? "", scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? ""])].join("\u241f"))}`,
+    key: `board-${stableHash([lesson.title, lesson.plan?.contentRevision ?? 0, lesson.plan?.discipline ?? lesson.plan?.subject ?? "", lesson.plan?.thesis ?? "", learningGoal, ...scenes.flatMap((scene) => [scene.id, scene.title, scene.content, scene.role ?? "", scene.move ?? "", scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? ""])].join("\u241f"))}`,
     title: lesson.title,
     learningGoal,
     nodes,

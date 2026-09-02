@@ -1,7 +1,8 @@
 import { isSupportedSubjectBand } from "../curriculum";
 import { assertGraphInvariants } from "../graph";
 import { createInitialFlow } from "../flow";
-import type { BoardSuggestion, KnowledgeNode, LearningSession, ProblemGuide, ProblemSnapshot, ProviderId, ReasoningLevel } from "../types";
+import { subjectPendingGuide } from "../subject-learning-guide";
+import { subjects, type BoardSuggestion, type KnowledgeNode, type LearningSession, type ProblemGuide, type ProblemSnapshot, type ProviderId, type ReasoningLevel } from "../types";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
@@ -54,7 +55,7 @@ export function parseInitialAnalysisSelection(value: JsonObject, problem: Proble
   if (typeof value.originalAnswer !== "string" || !value.originalAnswer.trim() || typeof value.originalExplanation !== "string" || !value.originalExplanation.trim()) throw new Error("缺少原题标准答案或解题依据");
   return {
     selections, originalAnswer: value.originalAnswer, originalExplanation: value.originalExplanation,
-    problemGuide: parseProblemGuide(value.problemGuide, problem.text, selections.filter((item) => item.evidenceSource === "problem").map((item) => item.evidence), value.originalAnswer, value.originalExplanation),
+    problemGuide: parseProblemGuide(value.problemGuide, problem.text, selections.filter((item) => item.evidenceSource === "problem").map((item) => item.evidence), value.originalAnswer, value.originalExplanation, subjectPendingGuide(problem)),
   };
 }
 
@@ -72,12 +73,13 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
     throw new NonRepairableValidationError(`照片中没有识别到清晰完整的一道题${reason}，请重新拍摄并只保留题目区域`);
   }
   if (typeof result.text !== "string" || result.text.trim().length < 3) throw new Error("没有识别到完整题干");
-  if (typeof result.childWork !== "string" || !["math", "physics", "chemistry"].includes(String(result.subject)) || !["primary", "junior", "senior"].includes(String(result.gradeBand)) || typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1) throw new Error("模型识别结果结构不合法");
-  if (result.confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
-  const subject = result.subject as ProblemSnapshot["subject"];
-  const gradeBand = result.gradeBand as ProblemSnapshot["gradeBand"];
+  const subject = normalizedSubject(result.subject);
+  const gradeBand = normalizedGradeBand(result.gradeBand);
+  const confidence = normalizedConfidence(result.confidence);
+  if (typeof result.childWork !== "string" || !subject || !gradeBand || confidence === null) throw new Error("模型识别结果结构不合法");
+  if (confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
   if (!isSupportedSubjectBand(subject, gradeBand)) throw new Error("识别到不支持的学科学段组合");
-  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence: result.confidence, userRevised: false };
+  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false };
 }
 
 export function parseTextProblem(result: JsonObject, originalText: string): ProblemSnapshot {
@@ -85,11 +87,28 @@ export function parseTextProblem(result: JsonObject, originalText: string): Prob
     const reason = typeof result.failureReason === "string" && result.failureReason.trim() ? `：${result.failureReason.trim()}` : "";
     throw new NonRepairableValidationError(`没有识别到一道完整的题目${reason}`);
   }
-  if (!['math', 'physics', 'chemistry'].includes(String(result.subject)) || !['primary', 'junior', 'senior'].includes(String(result.gradeBand)) || typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1) throw new Error("模型分类结果结构不合法");
-  const subject = result.subject as ProblemSnapshot["subject"];
-  const gradeBand = result.gradeBand as ProblemSnapshot["gradeBand"];
+  const subject = normalizedSubject(result.subject);
+  const gradeBand = normalizedGradeBand(result.gradeBand);
+  const confidence = normalizedConfidence(result.confidence);
+  if (!subject || !gradeBand || confidence === null) throw new Error("模型分类结果结构不合法");
   if (!isSupportedSubjectBand(subject, gradeBand)) throw new Error("识别到不支持的学科学段组合");
-  return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence: result.confidence, userRevised: true };
+  return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence, userRevised: true };
+}
+
+function normalizedSubject(value: unknown): ProblemSnapshot["subject"] | null {
+  const aliases: Record<string, ProblemSnapshot["subject"]> = { math: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
+  const normalized = aliases[String(value ?? "").trim().toLowerCase()];
+  return normalized && subjects.includes(normalized) ? normalized : null;
+}
+
+function normalizedGradeBand(value: unknown): ProblemSnapshot["gradeBand"] | null {
+  const aliases: Record<string, ProblemSnapshot["gradeBand"]> = { primary: "primary", 小学: "primary", junior: "junior", 初中: "junior", senior: "senior", 高中: "senior" };
+  return aliases[String(value ?? "").trim().toLowerCase()] ?? null;
+}
+
+function normalizedConfidence(value: unknown): number | null {
+  const confidence = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 ? confidence : null;
 }
 
 export function parseBoardSuggestion(result: JsonObject): BoardSuggestion {
@@ -119,13 +138,7 @@ export function rootOnlySession(session: LearningSession): LearningSession {
 }
 
 export function pendingChatSession(problem: ProblemSnapshot, provider: ProviderId, reasoningLevel: ReasoningLevel, modelId: string, mode: LearningSession["mode"]): LearningSession {
-  const clue = problem.text.replace(/\s+/g, " ").trim().slice(0, 80);
-  return { ...buildSession(problem, provider, reasoningLevel, modelId, [], PENDING_ORIGINAL_ANSWER, "标准解正在与首讲并行准备。", {
-    goal: "先明确题目要求的未知量，再把它和已知条件连起来。",
-    keyClue: `先看题干中的“${clue}”，找出决定第一步的条件。`,
-    approach: "先整理已知量、待求量和它们之间的关系，不急着计算最终结果。",
-    firstQuestion: "这道题最终要你求出什么量？",
-  }), mode };
+  return { ...buildSession(problem, provider, reasoningLevel, modelId, [], PENDING_ORIGINAL_ANSWER, "标准解正在与首讲并行准备。", subjectPendingGuide(problem)), mode };
 }
 
 export function edgeReason(node: KnowledgeNode, blueprint: KnowledgeBlueprint | undefined, targetTitle: string): string {

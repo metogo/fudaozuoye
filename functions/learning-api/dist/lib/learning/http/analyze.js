@@ -3,10 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.postAnalyze = postAnalyze;
 const curriculum_1 = require("../curriculum");
 const providers_1 = require("../providers");
+const mock_engine_1 = require("../mock-engine");
 const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
+const types_1 = require("../types");
 const sse_1 = require("./sse");
-const subjects = new Set(["math", "physics", "chemistry"]);
+const subjects = new Set(types_1.subjects);
 const bands = new Set(["primary", "junior", "senior"]);
 const reasoningLevels = new Set(["light", "medium", "high"]);
 async function postAnalyze(request) {
@@ -33,6 +35,8 @@ async function postAnalyze(request) {
         if (typeof raw !== "string" || raw.length > 24_000)
             return new Response("缺少已确认的题目", { status: 400 });
         const problem = parseProblemSnapshot(JSON.parse(raw));
+        if (adapter.mode === "demo" && !(0, mock_engine_1.isBuiltInMockProblem)(problem))
+            return new Response("演示模式只支持内置代表题，请返回重新识别题目", { status: 400 });
         return (0, sse_1.sse)(async (send) => {
             const startedAt = Date.now();
             send("phase", { key: "mapping", label: "正在理解题目要解决什么" });
