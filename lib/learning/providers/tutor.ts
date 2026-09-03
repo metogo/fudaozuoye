@@ -1,5 +1,6 @@
 import { flowScopeLabel } from "../flow";
-import type { LearningSession, ProblemGuideSection, SuggestedQuestion, TutorScope } from "../types";
+import { gradeTeachingInstruction, inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
+import type { GradeBand, LearningSession, ProblemGuideSection, SuggestedQuestion, TutorScope } from "../types";
 import type { JsonObject } from "./model-support";
 
 const guideSectionLabels: Record<ProblemGuideSection, string> = {
@@ -8,17 +9,18 @@ const guideSectionLabels: Record<ProblemGuideSection, string> = {
   approach: "解题方向",
 };
 
-export function tutorSystemPrompt(): string {
+export function tutorSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
     "你是正在带学生自主完成一道具体作业题的 K12 全学科老师。",
     "只回答给定原题或当前知识节点内的问题，不扩展无关知识，不评价学生能力。",
-    "直接对学生说话。先准确回应卡点，再解释“为什么”和“怎样做”；涉及关系或方法时必须给一个与当前题结构相同、数字更简单的具体例子，最后只问一个能继续思考的问题。",
+    "直接对学生说话。先准确回应卡点，再解释“为什么”和“怎样做”；是否举例、怎样表示关系以及最后追问什么，严格按当前学段教学结构执行。",
     "简洁不等于省略：不能只返回结论、单句提示或空泛建议。通常用 2 到 4 个短段落；按内容需要使用“这一步在做什么”“为什么这样做”“看个小例子”等短标题，或用加粗、列表、引用建立层次。",
     "默认不公布最终答案或完整解题过程。即使用户索要答案，也只给当前下一步提示，并告知完整答案有单独入口。",
     "上下文含 focusSection 时，只解释该段与学生问题的关系；先明确正在回应哪一段，不得含糊地退回整道原题泛讲。",
     "不得声称学生已经掌握，不得修改学习状态。",
     "使用简洁 Markdown 组织内容：按内容需要使用短标题、加粗、列表或引用，不要输出一整块无层次纯文本，不要把每句话都做成标题，也不要使用表格、HTML 或分隔线。",
     "所有数学与物理公式必须使用 KaTeX 兼容的 LaTeX：行内公式写在 $...$ 中，独立推导写在 $$...$$ 中；不要用代码块包裹公式。化学式使用 $\\mathrm{H_2O}$ 这类标准 LaTeX。",
+    gradeTeachingInstruction(learnerBand, "chat"),
   ].join("\n");
 }
 
@@ -47,12 +49,13 @@ export function tutorPrompt(session: LearningSession, scope: TutorScope, questio
           checkPrompt: node?.check.prompt,
         },
       };
+  const learnerBand = teachingBandOf(session.problem);
   return JSON.stringify({
     context,
     parentQuestion: question,
     outputRequirements: {
       structure: "系统会在正文前显示当前讲解范围，不要重复总标题；正文使用 2 到 4 个短段落，并至少使用一个加粗的局部标签，不能输出一整块纯文本",
-      teachingDepth: "先直接回应当前问题，再解释为什么这样做；涉及关系或方法时必须给一个更简单的具体例子",
+      teachingDepth: gradeTeachingInstruction(learnerBand, "chat"),
       boundary: "只讲当前一步，不公布最终答案；结尾只问一个能让学生继续思考的问题",
     },
   });
@@ -78,6 +81,7 @@ export function questionSuggestionsPrompt(session: LearningSession, scope: Tutor
       : { label: flowScopeLabel(session, scope), title: node?.title, evidence: node?.diagnosticEvidence, teaching: node?.teaching.explanation },
     completedExplanation: sourceText,
     currentRequiredTask: session.flow.activeGate?.title ?? "继续当前学习",
+    learnerLanguage: gradeTeachingInstruction(teachingBandOf(session.problem), "suggestion"),
     rules: [
       "问题必须能帮助理解当前题目或当前讲解中的关系",
       "问题不能索要最终答案、完整解法或代做",
@@ -103,6 +107,7 @@ export function parseQuestionSuggestions(value: JsonObject, session: LearningSes
     if (text.length < 4 || text.length > 60 || !normalized || seen.has(normalized)) return [];
     if (/(?:最终|标准)?答案|完整(?:解法|步骤|讲解)|直接告诉|帮我(?:做完|算完)|最后结果/.test(text)) return [];
     if (gateTitle && (normalized === gateTitle || normalized.includes(gateTitle) || gateTitle.includes(normalized))) return [];
+    if (inspectGradeLanguage(text, teachingBandOf(session.problem), session.problem.text).length) return [];
     seen.add(normalized);
     return [{ id: `suggest-${crypto.randomUUID().slice(0, 8)}`, text, scopeLabel, sourceSummary }];
   });

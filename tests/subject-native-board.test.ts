@@ -512,6 +512,15 @@ describe("第二阶段学科原生板书", () => {
     expect(instructionBoard.plan?.scenes.every((scene) => scene.evidence !== "根据材料：分析改革背景并说明影响")).toBe(true);
   });
 
+  it("带上标字符的公式题能提取等式已知，而不会把问题当证据", () => {
+    const session = representativeSession("math");
+    session.problem.text = "椭圆x²/4+y²=1的右焦点坐标是什么？";
+    const board = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "整理椭圆条件。", layout: "steps" });
+    const evidence = board.plan?.scenes.map((scene) => scene.evidence).filter((item): item is string => Boolean(item)) ?? [];
+    expect(evidence).toContain("椭圆x²/4+y²=1");
+    expect(evidence.some((item) => item.includes("坐标是什么"))).toBe(false);
+  });
+
   it("多段史料不会被压成同一条证据，板书能保留事件脉络", () => {
     const session = representativeSession("history");
     session.problem.text = "公元前221年秦完成统一。公元前202年西汉建立。比较两个事件的时序与影响。";

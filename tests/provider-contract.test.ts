@@ -7,7 +7,7 @@ import { parseProblemSolution } from "@/lib/learning/providers/provider-validati
 import type { ProviderId } from "@/lib/learning/types";
 
 describe("三模型统一适配器契约", () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it("三档推理强度使用各自的豆包模型 ID", () => {
     vi.stubEnv("AI_MOCK_MODE", "false");
@@ -443,7 +443,7 @@ describe("真实供应商协议契约", () => {
       () => { output = ""; },
     );
     expect(requestedStream).toBe(true);
-    expect(protocol === "responses" ? requestBody.max_output_tokens : requestBody.max_tokens).toBe(5000);
+    expect(protocol === "responses" ? requestBody.max_output_tokens : requestBody.max_tokens).toBe(3200);
     expect(JSON.stringify(protocol === "responses" ? requestBody.instructions : requestBody.messages)).toContain("分步推导");
     expect(output).toContain("### 分步推导");
   });
@@ -525,7 +525,8 @@ describe("真实供应商协议契约", () => {
     const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
     await new LiveProviderAdapter(liveConfig(), fetcher).streamTutorReply(session, { kind: "problem", section: "approach" }, "下一步为什么这样做？", () => undefined);
     expect(requestBody).toContain("系统会在正文前显示当前讲解范围");
-    expect(requestBody).toContain("必须给一个更简单的具体例子");
+    expect(requestBody).toContain("本轮只推进一个动作和一个理由");
+    expect(requestBody).toContain("需要举例时，直接换用本题对象和更小的数字");
     expect(requestBody).toContain("只讲当前一步，不公布最终答案");
   });
 
@@ -630,21 +631,96 @@ describe("真实供应商协议契约", () => {
     expect(board.blocks.map((block) => block.content).join(" ")).not.toContain(session.nodes.find((node) => node.id === session.rootNodeId)?.check.answer);
   });
 
-  it("豆包板书正文由学科原生引擎直接生成，不再等待模型改写", async () => {
+  it("豆包板书正文使用当前对话和学生学段生成", async () => {
     const mock = new MockProviderAdapter("doubao");
     const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "junior"));
-    let calls = 0;
-    const fetcher: typeof fetch = async () => {
-      calls += 1;
-      throw new Error("板书正文不应调用模型");
+    session.problem.learnerBand = "primary";
+    const bodies: string[] = [];
+    const fetcher: typeof fetch = async (_input, init) => {
+      bodies.push(String(init?.body));
+      return new Response("unavailable", { status: 503, headers: { "Retry-After": "0" } });
     };
-    const board = await new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem", section: "keyClue" }, { recommended: true, reason: "数量关系适合用示意图呈现。", layout: "relation" });
-    expect(calls).toBe(0);
+    const context = [{ id: "assistant-current", role: "assistant" as const, text: "学生卡在总量与每天工作量的联系。" }];
+    const board = await new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem", section: "keyClue" }, { recommended: true, reason: "数量关系适合用示意图呈现。", layout: "relation" }, context);
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies[0]).toContain("学生卡在总量与每天工作量的联系");
+    expect(bodies[0]).toContain("当前学生学段：小学");
+    const request = JSON.parse(bodies[0]) as { tools: Array<{ function: { parameters: { properties: { blocks: { items: { properties: Record<string, unknown>; required: string[] } } } } } }> };
+    expect(request.tools[0].function.parameters.properties.blocks.items.properties).toHaveProperty("sourceMessageIds");
+    expect(request.tools[0].function.parameters.properties.blocks.items.required).toContain("sourceMessageIds");
+    expect(board.quality?.status).toBe("safe_fallback");
     expect(board.plan?.discipline).toBe("math");
     expect(board.plan?.scenes.length).toBe(board.blocks.length);
   });
 
+  it("板书模型超时会在前端空闲时限前返回安全内容", async () => {
+    vi.useFakeTimers();
+    const fetcher: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const pending = new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "整理关系。", layout: "steps" });
+    const assertion = expect(pending).resolves.toMatchObject({ quality: { status: "safe_fallback" } });
+    await vi.advanceTimersByTimeAsync(30_001);
+    await assertion;
+  });
+
+  it("用户取消板书请求时直接中止，不伪装成安全降级", async () => {
+    const request = new AbortController();
+    const fetcher: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const pending = new LiveProviderAdapter(liveConfig(), fetcher, "light", request.signal).generateBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "整理关系。", layout: "steps" });
+    request.abort();
+    await expect(pending).rejects.toThrow(/Aborted/);
+  });
+
+  it("小学实时辅导已经完整流出后，不再把文案问题伪装成请求失败", async () => {
+    const abstract = "先确认定义域，再做等价变换。";
+    const fetcher: typeof fetch = async () => new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: abstract } }] })}\n\ndata: [DONE]\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    let visible = "";
+    await expect(new LiveProviderAdapter(liveConfig(), fetcher).streamTutorReply(session, { kind: "problem" }, "怎么做？", (text) => { visible += text; })).resolves.toBeUndefined();
+    expect(visible).toBe(abstract);
+  });
+
+  it("持续发送小片段也不能让流式请求无限占用连接", async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const fetcher: typeof fetch = async (_input, init) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const push = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "继续说明。" } }] })}\n\n`));
+          push();
+          interval = setInterval(push, 20_000);
+          init?.signal?.addEventListener("abort", () => { if (interval) clearInterval(interval); controller.error(new DOMException("Aborted", "AbortError")); }, { once: true });
+        },
+      });
+      return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
+    };
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const pending = new LiveProviderAdapter(liveConfig(), fetcher).streamTutorReply(session, { kind: "problem" }, "怎么做？", () => undefined);
+    const assertion = expect(pending).rejects.toThrow("总时长超限");
+    await vi.advanceTimersByTimeAsync(180_001);
+    await assertion;
+  });
+
+  it("异常超长的流式正文达到上限时会中止", async () => {
+    const huge = "字".repeat(60_001);
+    const fetcher: typeof fetch = async () => new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: huge } }] })}\n\ndata: [DONE]\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    await expect(new LiveProviderAdapter(liveConfig(), fetcher).streamTutorReply(session, { kind: "problem" }, "怎么做？", () => undefined)).rejects.toThrow("超过安全长度");
+  });
+
   it("上游短暂限流时原样重试一次", async () => {
+    vi.useRealTimers();
     let attempts = 0;
     const fetcher: typeof fetch = async () => {
       attempts += 1;
@@ -746,7 +822,7 @@ function liveConfig(): ProviderConfig {
   return { id: "doubao", label: "豆包", apiKey: "test-key", modelId: "test-model", baseUrl: "https://provider.invalid", protocol: "chat-completions", mock: false };
 }
 
-const validSolution = "### 解题思路\n\n先看题目要求的量与已知条件之间的关系，再选择能直接连接它们的方法。这里需要说明为什么这样列式，而不是只写最终答案。\n\n### 分步推导\n\n1. 先整理已知条件，写出它们与待求量之间的关系，并确认每个量的意义和单位。\n2. 再把已知值代入关系式逐步计算，同时检查中间结果是否符合题目条件。\n3. 最后用得到的结果反向代回原关系，确认等式成立且数量级合理。\n\n### 结论\n\n由完整推导可以得到题目要求的结果，并且反向检查与所有已知条件一致。\n\n### 易错提醒\n\n不要跳过决定答案的中间关系；代入前要检查单位和符号，完成后还要反向验算。";
+const validSolution = "### 解题思路\n\n先看题目要求的量与已知条件之间的关系。选择能直接连接它们的方法。这里需要说明为什么这样列式，而不是只写最终答案。\n\n### 分步推导\n\n1. 先整理已知条件，写出它们与待求量之间的关系，并确认每个量的意义和单位。\n2. 再把已知值代入关系式逐步计算，同时检查中间结果是否符合题目条件。\n3. 最后用得到的结果反向代回原关系，确认等式成立且数量级合理。\n\n### 结论\n\n由完整推导可以得到题目要求的结果，并且反向检查与所有已知条件一致。\n\n### 易错提醒\n\n不要跳过决定答案的中间关系；代入前要检查单位和符号，完成后还要反向验算。";
 
 function chatSolutionStream(): string {
   return `data: ${JSON.stringify({ choices: [{ delta: { content: validSolution } }] })}\n\ndata: [DONE]\n\n`;

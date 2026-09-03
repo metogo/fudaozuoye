@@ -75,5 +75,6 @@ function parseProblemSnapshot(value: unknown): ProblemSnapshot {
   if (!value || typeof value !== "object") throw new Error("题目确认信息不完整");
   const item = value as Partial<ProblemSnapshot>;
   if (typeof item.text !== "string" || item.text.trim().length < 3 || item.text.length > 8_000 || typeof item.childWork !== "string" || item.childWork.length > 8_000 || !subjects.has(item.subject as Subject) || !bands.has(item.gradeBand as GradeBand) || !isSupportedSubjectBand(item.subject as Subject, item.gradeBand as GradeBand)) throw new Error("题目确认信息不合法");
-  return { text: item.text.trim(), childWork: item.childWork.trim(), subject: item.subject as Subject, gradeBand: item.gradeBand as GradeBand, confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0, userRevised: item.userRevised === true };
+  const gradeBand = item.gradeBand as GradeBand;
+  return { text: item.text.trim(), childWork: item.childWork.trim(), subject: item.subject as Subject, gradeBand, learnerBand: gradeBand, confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0, userRevised: item.userRevised === true };
 }

@@ -1,4 +1,5 @@
-import type { CheckItem } from "../types";
+import { adaptTeachingCopy } from "../grade-pedagogy";
+import type { CheckItem, GradeBand } from "../types";
 
 export type AnswerAssessment = { passed: boolean; explanation: string };
 
@@ -115,25 +116,29 @@ function chemicalSide(value: string): string | null {
   return (terms as string[]).sort().join("+");
 }
 
-export function safeAssessmentFeedback(check: CheckItem, answer: string, result: AnswerAssessment): AnswerAssessment {
-  if (result.passed) return result;
+export function safeAssessmentFeedback(check: CheckItem, answer: string, result: AnswerAssessment, learnerBand: GradeBand = "junior"): AnswerAssessment {
+  if (result.passed) return learnerBand === "primary"
+    ? { passed: true, explanation: "答对了。你已经抓住题目要点。" }
+    : learnerBand === "senior"
+      ? { passed: true, explanation: result.explanation.trim() || "结论正确，且满足题设条件。" }
+      : { ...result, explanation: adaptTeachingCopy(result.explanation, learnerBand) };
   const expected = canonicalAnswer(check.answer);
   const actual = canonicalAnswer(answer);
   const expectedQuantity = quantity(expected);
   const actualQuantity = quantity(actual);
   if ((expectedQuantity || actualQuantity) && (!expectedQuantity || !actualQuantity || expectedQuantity.dimension !== actualQuantity.dimension)) {
-    return { passed: false, explanation: "数值和单位需要一起核对；先检查单位是否与题目所求一致。" };
+    return { passed: false, explanation: learnerBand === "primary" ? "数字和单位要一起看。先检查单位是不是题目要的。" : learnerBand === "senior" ? "数值与单位需同时满足量纲要求；请核对单位维度是否对应题目所求。" : "数值和单位需要一起核对；先检查单位是否与题目所求一致。" };
   }
   if (expectedQuantity && actualQuantity) {
-    return { passed: false, explanation: "数值还不对；重新检查关系式、代入顺序和运算，再试一次。" };
+    return { passed: false, explanation: learnerBand === "primary" ? "数字还不对。先看看算式有没有列对，再按顺序算一次。" : learnerBand === "senior" ? "数值不成立；请从关系式、代入顺序与运算精度逐项复核。" : "数值还不对；重新检查关系式、代入顺序和运算，再试一次。" };
   }
   if (check.type === "choice") {
-    return { passed: false, explanation: "这个选项与题干中的关键关系还不一致，请重新对照条件再判断。" };
+    return { passed: false, explanation: learnerBand === "primary" ? "这个选项和题目给的条件对不上。先检查题目条件，再比一比。" : learnerBand === "senior" ? "该选项与题设约束不一致；请定位发生冲突的条件。" : "这个选项与题干中的关键关系还不一致，请重新对照条件再判断。" };
   }
   if (numericSequence(actual)) {
-    return { passed: false, explanation: "结果还不对。先检查关系式、代入顺序和运算，再试一次。" };
+    return { passed: false, explanation: learnerBand === "primary" ? "结果还不对。先检查算式，再按顺序算一次。" : learnerBand === "senior" ? "结果不满足题设；请复核关系式、代入过程和计算。" : "结果还不对。先检查关系式、代入顺序和运算，再试一次。" };
   }
-  return { passed: false, explanation: "当前表达还没有完整回应题目要求；先检查关键关系，再补上结论。" };
+  return { passed: false, explanation: learnerBand === "primary" ? "还没有答完整。先说清题目里的联系，再补上答案。" : learnerBand === "senior" ? "当前作答尚未完整覆盖设问；请补足论证依据与结论边界。" : "当前表达还没有完整回应题目要求；先检查关键关系，再补上结论。" };
 }
 
 function canonicalAnswer(value: string): string {

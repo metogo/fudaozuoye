@@ -60,6 +60,7 @@ if (fullSolutionOnly ? (
   summary.functionalCompletionRate < 0.95
   || summary.analysisSuccessRate < 0.95
   || summary.detailedFullSolutions < summary.fullSolutionJourneys
+  || summary.fullSolutionStreamRestarts > 0
   || summary.printerLikeSseRate < 1
 ) : (
   summary.functionalCompletionRate < 0.95
@@ -73,6 +74,7 @@ if (fullSolutionOnly ? (
   || (summary.fullSolutionJourneys > 0 && summary.recallRejectedFinalAnswer < summary.fullSolutionJourneys)
   || (summary.fullSolutionJourneys > 0 && summary.detailedFullSolutions < summary.fullSolutionJourneys)
   || (summary.fullSolutionJourneys > 0 && summary.alignedFullSolutions < summary.fullSolutionJourneys)
+  || summary.fullSolutionStreamRestarts > 0
   || summary.structuredTutorOutputs < summary.tutorOutputs
   || (summary.fullSolutionJourneys >= 3 && Object.values(summary.postSolutionPaths).some((count) => count < 1))
   || summary.reviewedResume < summary.postSolutionPaths.finish_review
@@ -111,6 +113,7 @@ async function runJourney({ user, problem, level, route, cookie }) {
     fullSolutionPreview: "",
     fullSolutionStructured: false,
     fullSolutionAnswerAligned: false,
+    fullSolutionStreamRestarted: false,
     tutorOutputs: 0,
     structuredTutorOutputs: 0,
     tutorOutputDiagnostics: [],
@@ -173,6 +176,7 @@ async function runJourney({ user, problem, level, route, cookie }) {
   }
   if (["full_solution", "solution_board"].includes(route) && offered(state, "full_solution")) {
     turn = await postTurn(state.stateToken, { type: "choose", gateId: state.session.flow.activeGate.id, choice: "full_solution" }, cookie);
+    observations.fullSolutionStreamRestarted = hasStreamedReplay(turn.events);
     const fullSolutionText = collectText(turn.events);
     observations.fullSolutionChars = [...fullSolutionText].length;
     observations.fullSolutionPreview = fullSolutionText.slice(0, 2_000);
@@ -458,6 +462,7 @@ function wrongAnswerForOriginalGate(stateToken) {
 }
 
 function validateBoard(board) {
+  if (board?.quality?.status === "safe_fallback") return false;
   if (!board || !Array.isArray(board.blocks) || board.blocks.length < 4 || !Array.isArray(board.annotations) || board.annotations.length < 2) return false;
   const blocks = new Map(board.blocks.map((block) => [block.id, block.content]));
   const annotationsValid = new Set(board.annotations.map((item) => item.blockId)).size >= 2 && board.annotations.every((item) => blocks.get(item.blockId)?.includes(item.target) && item.reason?.length >= 8);
@@ -477,6 +482,7 @@ function boardFailure(events, board) {
   const unavailable = events.find((event) => event.name === "presentation.unavailable")?.data?.message;
   if (unavailable) return unavailable;
   if (!board) return "没有返回 board.lesson";
+  if (board.quality?.status === "safe_fallback") return `板书进入安全降级：${board.quality.reason || "未返回原因"}`;
   if (!Array.isArray(board.blocks) || board.blocks.length < 4) return "板书区块少于 4 个";
   if (!Array.isArray(board.annotations) || board.annotations.length < 2) return "板书重点少于 2 个";
   const blocks = new Map(board.blocks.map((block) => [block.id, block.content]));
@@ -488,7 +494,16 @@ function boardFailure(events, board) {
 }
 
 function collectText(events) {
-  return events.filter((event) => event.name === "message.delta").map((event) => event.data?.text ?? "").join("");
+  return events.reduce((text, event) => {
+    if (event.name === "message.reset") return "";
+    return event.name === "message.delta" ? text + (event.data?.text ?? "") : text;
+  }, "");
+}
+
+function hasStreamedReplay(events) {
+  const resetIndex = events.findLastIndex((event) => event.name === "message.reset");
+  if (resetIndex < 0) return false;
+  return events.slice(resetIndex + 1).filter((event) => event.name === "message.delta" && event.data?.text).length > 1;
 }
 
 function isDetailedFullSolution(text, problemText) {
@@ -641,6 +656,7 @@ function buildSummary(items) {
     recallRejectedFinalAnswer: passed.filter((item) => item.recallRejectedFinalAnswer).length,
     detailedFullSolutions: fullSolutions.filter((item) => item.status === "passed" && item.fullSolutionStructured && item.fullSolutionChars >= 180).length,
     alignedFullSolutions: fullSolutions.filter((item) => item.status === "passed" && item.fullSolutionAnswerAligned).length,
+    fullSolutionStreamRestarts: fullSolutions.filter((item) => item.fullSolutionStreamRestarted).length,
     tutorOutputs: passed.reduce((sum, item) => sum + (item.tutorOutputs ?? 0), 0),
     structuredTutorOutputs: passed.reduce((sum, item) => sum + (item.structuredTutorOutputs ?? 0), 0),
     coverage: {

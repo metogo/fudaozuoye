@@ -41,7 +41,7 @@ describe("AI 教学内容排版", () => {
     expect(complete).not.toContain("streaming-indicator");
   });
 
-  it("首页同时提供拍照、相册和白板写题入口", () => {
+  it("首页不要求选择学段，直接开放拍照、相册、白板和文字发题入口", () => {
     const html = renderToStaticMarkup(createElement(LearningChat, {
       messages: [], session: null, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
       loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
@@ -49,11 +49,17 @@ describe("AI 教学内容排版", () => {
       onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
     }));
 
+    expect(html).not.toContain("孩子学段");
+    expect(html).not.toContain("先选择孩子所在学段");
     expect(html).toContain('aria-label="拍照发题"');
     expect(html).toContain('aria-label="从相册选择题目"');
     expect(html).toContain('aria-label="白板写题"');
     expect(html).toContain('placeholder="输入一道题目…"');
+    expect(html).not.toMatch(/<textarea[^>]*\sdisabled=/);
+    expect(html).not.toMatch(/aria-label="白板写题"[^>]*\sdisabled=/);
+    expect(html).toContain("home-reasoning-picker mt-1");
     expect(html).not.toContain("数理化");
+
   });
 
   it("当前回合正文结束后显示下一步装填，不重复旧等待卡片", () => {
@@ -71,9 +77,25 @@ describe("AI 教学内容排版", () => {
 
     expect(html).not.toContain("loading-whisper");
     expect(html).not.toContain("正在继续讲解");
+    expect(html).toContain("模型识别为初中题");
     expect(html).toContain("next-turn-placeholder");
     expect(html).toContain("接下来会轮到你");
     expect(html).toContain("正在把刚才的内容整理成下一步互动");
+  });
+
+  it("学习页显示模型自动识别出的题目学段", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    session.problem.learnerBand = "senior";
+    const html = renderToStaticMarkup(createElement(LearningChat, {
+      messages: [], session, reasoningLevels: [], reasoningLevel: "light", ready: true, busy: false,
+      loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null,
+      onReasoningLevel: () => {}, onFile: () => {}, onResponsePhoto: () => {}, onWhiteboard: () => {}, onSend: () => {}, onQuestion: () => {}, onChoice: () => {}, onSuggestion: () => {},
+      onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
+    }));
+
+    expect(html).toContain("模型识别为小学题");
+    expect(html).not.toContain("按高中方式讲");
+    expect(html).not.toContain("课程内容：小学");
   });
 
   it("正文仍在流式书写时不提前显示下一步装填", () => {
@@ -214,6 +236,30 @@ describe("AI 教学内容排版", () => {
     expect(prepared).toContain("$x+2=5$");
     expect(prepared).not.toContain("$$x+2=5$$");
     expect(prepared).toContain("$b = 3$");
+  });
+
+  it("把标准 LaTeX 定界符归一化后交给 KaTeX", () => {
+    const text = "行内 \\(x+2=5\\)，独立公式 \\[y=3\\]。`\\(code\\)`";
+    const prepared = prepareLearningMarkdown(text);
+    const html = renderToStaticMarkup(createElement(RichLearningText, { text }));
+    expect(prepared).toContain("$x+2=5$");
+    expect(prepared).toContain("$$\ny=3\n$$");
+    expect(prepared).toContain("`\\(code\\)`");
+    expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("混合定界符只转换普通正文，保留已有公式与代码", () => {
+    const source = "已有 $x=1$ 与 $$y=2$$，新增 \\(z=3\\)。`\\(inline code\\)`\n```js\n\\[block code\\]\n```";
+    const prepared = prepareLearningMarkdown(source);
+    expect(prepared).toContain("已有 $x=1$ 与 $$y=2$$");
+    expect(prepared).toContain("$z=3$");
+    expect(prepared).toContain("`\\(inline code\\)`");
+    expect(prepared).toContain("\\[block code\\]");
+  });
+
+  it("流式代码围栏未闭合时不转换其中的标准公式定界符", () => {
+    const source = "说明\n```text\n\\(还在输出";
+    expect(prepareLearningMarkdown(source, true)).toBe(source);
   });
 
   it("把带编号标签的行内公式提升为 KaTeX 展示公式", () => {

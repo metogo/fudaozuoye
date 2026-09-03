@@ -1,5 +1,6 @@
 import { getConcept, listConcepts } from "../curriculum";
 import { providerError, ServiceError } from "../errors";
+import { assertGradeLanguage, gradeTeachingInstruction, inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
 import { isConcreteRecallAnswer, matchesTrustedRecallReference } from "../solution-recall";
 import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
 import {
@@ -14,7 +15,7 @@ import {
   type EvidenceSource,
 } from "./blueprint";
 import type { ProviderConfig } from "./config";
-import { createInstantBoardLesson } from "./board";
+import { generateContextualBoardLesson } from "./board-generation";
 import {
   boardSuggestionTool,
   chatBody,
@@ -112,7 +113,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       atomic: item.atomic,
     }));
     const result = await this.validatedJsonRequest(
-      selectionSystemPrompt(1, 4),
+      selectionSystemPrompt(1, 4, teachingBandOf(problem)),
       JSON.stringify({
         task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
         problem,
@@ -120,11 +121,17 @@ export class LiveProviderAdapter implements ProviderAdapter {
         output: selectionOutputExample(true),
         allowedConcepts: allowed,
       }),
-      (value) => parseInitialAnalysisSelection(value, problem, allowed),
+      (value) => {
+        const analysis = parseInitialAnalysisSelection(value, problem, allowed);
+        assertGradeLanguage(Object.values(analysis.problemGuide).join("。"), teachingBandOf(problem), "题目引导", problem.text, "diagnosis");
+        return analysis;
+      },
       undefined,
       (value, error) => {
         if (!isRecoverableReasonGroundingError(error)) throw error;
-        return parseInitialAnalysisSelection(repairSelectionReasonGrounding(value), problem, allowed);
+        const analysis = parseInitialAnalysisSelection(repairSelectionReasonGrounding(value), problem, allowed);
+        assertGradeLanguage(Object.values(analysis.problemGuide).join("。"), teachingBandOf(problem), "题目引导", problem.text, "diagnosis");
+        return analysis;
       },
     );
     onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
@@ -187,7 +194,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       atomic: item.atomic,
     }));
     const selections = await this.validatedJsonRequest(
-      selectionSystemPrompt(1, 4),
+      selectionSystemPrompt(1, 4, teachingBandOf(problem)),
       JSON.stringify({
         task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
         problem,
@@ -243,7 +250,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       return { id, title: prerequisite?.title, aliases: prerequisite?.aliases, difficulty: prerequisite?.difficulty };
     });
     const selections = await this.validatedJsonRequest(
-      selectionSystemPrompt(1, concept.prerequisites.length),
+      selectionSystemPrompt(1, concept.prerequisites.length, teachingBandOf(session.problem)),
       JSON.stringify({
         task: "只选择理解当前 target 真正缺失的直接前置",
         problem: session.problem,
@@ -312,7 +319,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const concept = getConcept(selection.conceptId);
     if (!concept) throw new Error(`课程目录中不存在知识点：${selection.conceptId}`);
     return this.validatedJsonRequest(
-      diagnosticSystemPrompt(),
+      diagnosticSystemPrompt(teachingBandOf(problem)),
       JSON.stringify({
         task: "为已确认的课标概念生成当前题专属的学生讲解与理解检查；不得更换概念、证据或简化理由",
         problem,
@@ -324,7 +331,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       }),
       (value) => {
         const detail = normalizeBlueprintDetail(value, selection.conceptId);
-        return parseKnowledgeBlueprints({ nodes: [{ ...detail, ...selection }] }, {
+        const blueprint = parseKnowledgeBlueprints({ nodes: [{ ...detail, ...selection }] }, {
         allowedConceptIds: [selection.conceptId],
         evidenceSources,
         min: 1,
@@ -332,6 +339,19 @@ export class LiveProviderAdapter implements ProviderAdapter {
         existingCheckPrompts,
         existingContentSignatures,
         })[0];
+        assertGradeLanguage([
+          blueprint.simplification,
+          blueprint.teaching.explanation,
+          blueprint.teaching.example,
+          blueprint.teaching.parentPrompt,
+          blueprint.teaching.alternateExplanation,
+          blueprint.teaching.expectedSignal,
+          blueprint.teaching.misconception,
+          blueprint.check.prompt,
+          ...(blueprint.check.choices ?? []),
+          blueprint.check.explanation,
+        ].join("。"), teachingBandOf(problem), "知识讲解", problem.text, "diagnosis");
+        return blueprint;
       },
     );
   }
@@ -406,6 +426,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       "不得复述当前题，不得改变知识点，不得泄露答案到题干。",
       "不得声称题目是高频题、真题、某年中考题、名校题，也不得编造任何来源标签。",
       "prompt、choices 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX，行内写在 $...$ 中；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。",
+      gradeTeachingInstruction(teachingBandOf(session.problem), "exercise"),
     ].join("\n");
     const prompt = JSON.stringify({
       problem: session.problem,
@@ -414,7 +435,11 @@ export class LiveProviderAdapter implements ProviderAdapter {
       currentCheck: { prompt: target.check.prompt, type: target.check.type, choices: target.check.choices },
       requiredType: target.check.type,
     });
-    const parse = (value: JsonObject) => parseSimilarCheck(value, target);
+    const parse = (value: JsonObject) => {
+      const check = parseSimilarCheck(value, target);
+      assertGradeLanguage([check.prompt, ...(check.choices ?? []), check.explanation].join("。"), teachingBandOf(session.problem), "同知识点练习", session.problem.text, "exercise");
+      return check;
+    };
     const check = this.config.protocol === "chat-completions"
       ? await this.validatedStructuredRequest(system, prompt, similarCheckTool(target.check.type), parse)
       : await this.validatedJsonRequest(`${system}\n输出严格 JSON，字段为 prompt、type、choices、answer、explanation。`, prompt, parse);
@@ -438,11 +463,16 @@ export class LiveProviderAdapter implements ProviderAdapter {
     if (!target || !root) throw new Error("找不到迁移题对应的核心知识点");
     const original = { problem: session.problem.text, check: root.check.prompt, solutionBasis: root.check.explanation };
     const targets = concepts.map((node) => ({ id: node.conceptId, title: node.title, reason: node.simplification }));
-    const system = "你是 K12 迁移题生成器。生成一道与原题考查相同核心知识和解题方法、难度相近，但情境、数据和表述明显不同的短题。不能只挑一个局部前置知识另出一道过于简单的题；候选题必须能检验学生是否会迁移原题的核心方法。不得复述或换皮原题，不得泄露答案，不得声称是真题、高频题或编造来源。prompt 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。";
+    const system = [
+      "你是 K12 迁移题生成器。生成一道与原题考查相同核心知识和解题方法、难度相近，但情境、数据和表述明显不同的短题。不能只挑一个局部前置知识另出一道过于简单的题；候选题必须能检验学生是否会迁移原题的核心方法。不得复述或换皮原题，不得泄露答案，不得声称是真题、高频题或编造来源。prompt 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。",
+      gradeTeachingInstruction(teachingBandOf(session.problem), "exercise"),
+    ].join("\n");
     const prompt = JSON.stringify({ original, targetConcepts: targets });
     const parse = (value: JsonObject) => {
       if (typeof value.prompt !== "string" || !value.prompt.trim() || typeof value.answer !== "string" || !value.answer.trim() || typeof value.explanation !== "string" || !value.explanation.trim()) throw new Error("迁移题缺少 prompt、answer 或 explanation");
-      return { id: `transfer-${crypto.randomUUID().slice(0, 8)}`, conceptId: target.conceptId, type: "short_text" as const, prompt: value.prompt.trim(), answer: value.answer.trim(), explanation: value.explanation.trim() };
+      const check = { id: `transfer-${crypto.randomUUID().slice(0, 8)}`, conceptId: target.conceptId, type: "short_text" as const, prompt: value.prompt.trim(), answer: value.answer.trim(), explanation: value.explanation.trim() };
+      assertGradeLanguage(`${check.prompt}。${check.explanation}`, teachingBandOf(session.problem), "同类练习", session.problem.text, "exercise");
+      return check;
     };
     const check = this.config.protocol === "chat-completions"
       ? await this.validatedStructuredRequest(system, prompt, transferCheckTool(), parse)
@@ -459,11 +489,9 @@ export class LiveProviderAdapter implements ProviderAdapter {
     if (!audit.sameKnowledgeAndMethod || !audit.distinct || !audit.comparableDifficulty || !audit.grounded) throw new Error(`同知识点题未通过独立审校：${audit.reason}`);
     return check;
   }
-
   async solveProblem(problem: ProblemSnapshot): Promise<string> {
     return this.generateSolution(problem);
   }
-
   async streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void, onReset: () => void, signal?: AbortSignal): Promise<void> {
     await streamValidatedSolution(
       problem,
@@ -472,26 +500,26 @@ export class LiveProviderAdapter implements ProviderAdapter {
       onReset,
     );
   }
-
   private generateSolution(problem: ProblemSnapshot, signal?: AbortSignal): Promise<string> {
     return generateValidatedSolution(problem, (system, prompt, onDelta, maxTokens) => this.streamTextRequest(system, prompt, onDelta, signal, undefined, maxTokens));
   }
-
   async streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string): Promise<void> {
     const imageInstruction = imageDataUrl ? "\n学生还附上了一张当前作答或草图。必须结合图片回应，但不要把它误认为一道新题。" : "";
-    await this.streamTextRequest(tutorSystemPrompt(), `${tutorPrompt(session, scope, question)}${imageInstruction}`, onDelta, signal, imageDataUrl);
+    let output = "";
+    await this.streamTextRequest(tutorSystemPrompt(teachingBandOf(session.problem)), `${tutorPrompt(session, scope, question)}${imageInstruction}`, (text) => { output += text; onDelta(text); }, signal, imageDataUrl);
+    const gradeIssues = inspectGradeLanguage(output, teachingBandOf(session.problem), session.problem.text, "chat");
+    if (gradeIssues.length) console.warn("对话讲解已完成，但学段表达仍需优化", gradeIssues.join(","));
   }
-
   async suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]> {
     const system = [
       "你是 K12 学习流程中的追问推荐决策器，不是答题器。",
       "只判断刚完成的讲解之后，是否有 1 到 3 个能帮助学生理解当前题目、且适合此刻顺手追问的问题。",
       "推荐是可忽略的辅助入口，不能代替或重复当前必做任务，不能索要答案、完整解法或代做。",
       "无必要时必须返回 recommended=false 和空 questions。只输出严格 JSON。",
+      gradeTeachingInstruction(teachingBandOf(session.problem), "suggestion"),
     ].join("\n");
     return this.validatedJsonRequest(system, questionSuggestionsPrompt(session, scope, sourceText), (value) => parseQuestionSuggestions(value, session, scope, sourceText));
   }
-
   async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {
     return transcribeStudentResponse(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
   }
@@ -509,10 +537,12 @@ export class LiveProviderAdapter implements ProviderAdapter {
 
   async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[] = []): Promise<BoardLesson> {
     if (!suggestion.recommended) throw new Error("当前步骤不需要切换板书讲解");
-    void context;
-    return createInstantBoardLesson(session, scope, suggestion);
+    return generateContextualBoardLesson({
+      protocol: this.config.protocol,
+      toolRequest: (system, prompt, tool, maxTokens, timeoutMs) => this.toolRequest(system, prompt, tool, maxTokens, timeoutMs),
+      textRequest: (system, prompt, imageDataUrl, jsonMode, timeoutMs) => this.textRequest(system, prompt, imageDataUrl, jsonMode, timeoutMs),
+    }, session, scope, suggestion, context);
   }
-
   private async validatedJsonRequest<T>(system: string, prompt: string, parse: (value: JsonObject) => T, imageDataUrl?: string, recover?: (value: JsonObject, error: unknown) => T): Promise<T> {
     const first = await this.textRequest(system, prompt, imageDataUrl, true);
     try { return parse(parseJsonObject(first)); } catch (error) {
@@ -530,11 +560,11 @@ export class LiveProviderAdapter implements ProviderAdapter {
       }
     }
   }
-
   private async validatedStructuredRequest<T>(system: string, prompt: string, tool: JsonObject, parse: (value: JsonObject) => T): Promise<T> {
     try {
       return await this.validatedToolRequest(system, prompt, tool, parse);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       if (error instanceof ServiceError && error.code === "PROVIDER_TIMEOUT") throw error;
       if (error instanceof NonRepairableValidationError) throw error;
       const reason = error instanceof Error ? error.message : "结构函数输出无效";
@@ -568,7 +598,8 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const abort = () => controller.abort();
     this.requestSignal?.addEventListener("abort", abort, { once: true });
     if (this.requestSignal?.aborted) controller.abort();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
@@ -579,7 +610,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       if (!response.ok) throw providerError(`模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
       return extractToolArguments(await response.json() as JsonObject);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
+      if (error instanceof DOMException && error.name === "AbortError" && timedOut) throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
     } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); release(); }
   }
@@ -590,7 +621,8 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const abort = () => controller.abort();
     this.requestSignal?.addEventListener("abort", abort, { once: true });
     if (this.requestSignal?.aborted) controller.abort();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
@@ -604,7 +636,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
       const payload = await response.json() as JsonObject;
       return extractText(payload, this.config.protocol);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
+      if (error instanceof DOMException && error.name === "AbortError" && timedOut) throw providerError("模型响应超时，请稍后重试同一模型", 504);
       throw error;
     } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); release(); }
   }
@@ -616,7 +648,14 @@ export class LiveProviderAdapter implements ProviderAdapter {
     externalSignal?.addEventListener("abort", abort, { once: true });
     this.requestSignal?.addEventListener("abort", abort, { once: true });
     if (externalSignal?.aborted || this.requestSignal?.aborted) controller.abort();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let timeoutKind: "idle" | "total" | undefined;
+    const armTimeout = (delay: number) => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => { timeoutKind = "idle"; controller.abort(); }, delay);
+    };
+    armTimeout(30_000);
+    const totalTimeout = setTimeout(() => { timeoutKind = "total"; controller.abort(); }, 180_000);
     try {
       const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
         method: "POST",
@@ -634,7 +673,9 @@ export class LiveProviderAdapter implements ProviderAdapter {
       let sawTerminalEvent = false;
       const emitDelta = (delta: string) => {
         if (!delta) return;
+        armTimeout(30_000);
         outputLength += delta.length;
+        if (outputLength > 60_000) { controller.abort(); throw providerError("模型流式输出超过安全长度，请缩短问题后重试", 502); }
         onDelta(delta);
       };
       while (true) {
@@ -648,9 +689,9 @@ export class LiveProviderAdapter implements ProviderAdapter {
       if (outputLength === 0) throw providerError("模型没有返回讲解内容，请重试同一模型", 502);
       if (!sawTerminalEvent) throw providerError("模型讲解传输未完整结束，请重试同一模型", 502);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw providerError("模型响应超时，请稍后重试同一模型", 504);
+      if (error instanceof DOMException && error.name === "AbortError" && timeoutKind) throw providerError(timeoutKind === "total" ? "模型流式输出总时长超限，请稍后重试同一模型" : "模型流式输出等待超时，请稍后重试同一模型", 504);
       throw error;
-    } finally { externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); clearTimeout(timeout); release(); }
+    } finally { externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); if (timeout) clearTimeout(timeout); clearTimeout(totalTimeout); release(); }
   }
 }
 

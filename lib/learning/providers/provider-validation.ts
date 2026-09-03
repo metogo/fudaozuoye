@@ -1,4 +1,4 @@
-import { isSupportedSubjectBand } from "../curriculum";
+import { normalizeSubjectBand } from "../curriculum";
 import { assertGraphInvariants } from "../graph";
 import { createInitialFlow } from "../flow";
 import { subjectPendingGuide } from "../subject-learning-guide";
@@ -74,11 +74,11 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
   }
   if (typeof result.text !== "string" || result.text.trim().length < 3) throw new Error("没有识别到完整题干");
   const subject = normalizedSubject(result.subject);
-  const gradeBand = normalizedGradeBand(result.gradeBand);
+  const recognizedBand = normalizedGradeBand(result.gradeBand);
   const confidence = normalizedConfidence(result.confidence);
-  if (typeof result.childWork !== "string" || !subject || !gradeBand || confidence === null) throw new Error("模型识别结果结构不合法");
+  if (typeof result.childWork !== "string" || !subject || !recognizedBand || confidence === null) throw new Error("模型识别结果结构不合法");
   if (confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
-  if (!isSupportedSubjectBand(subject, gradeBand)) throw new Error("识别到不支持的学科学段组合");
+  const gradeBand = normalizeSubjectBand(subject, recognizedBand);
   return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false };
 }
 
@@ -88,10 +88,10 @@ export function parseTextProblem(result: JsonObject, originalText: string): Prob
     throw new NonRepairableValidationError(`没有识别到一道完整的题目${reason}`);
   }
   const subject = normalizedSubject(result.subject);
-  const gradeBand = normalizedGradeBand(result.gradeBand);
+  const recognizedBand = normalizedGradeBand(result.gradeBand);
   const confidence = normalizedConfidence(result.confidence);
-  if (!subject || !gradeBand || confidence === null) throw new Error("模型分类结果结构不合法");
-  if (!isSupportedSubjectBand(subject, gradeBand)) throw new Error("识别到不支持的学科学段组合");
+  if (!subject || !recognizedBand || confidence === null) throw new Error("模型分类结果结构不合法");
+  const gradeBand = normalizeSubjectBand(subject, recognizedBand);
   return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence, userRevised: true };
 }
 

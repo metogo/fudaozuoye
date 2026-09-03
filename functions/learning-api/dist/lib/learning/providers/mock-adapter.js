@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MockProviderAdapter = void 0;
 const mock_engine_1 = require("../mock-engine");
 const curriculum_1 = require("../curriculum");
+const grade_pedagogy_1 = require("../grade-pedagogy");
 const solution_recall_1 = require("../solution-recall");
 const types_1 = require("../types");
 const assessment_1 = require("./assessment");
@@ -63,14 +64,14 @@ class MockProviderAdapter {
         const node = session.nodes.find((item) => item.id === nodeId);
         if (!node || node.kind !== "concept")
             throw new Error("找不到要换题的知识点");
-        return (0, mock_engine_1.similarCheckMock)(node);
+        return adaptMockCheck((0, mock_engine_1.similarCheckMock)(node), (0, grade_pedagogy_1.teachingBandOf)(session.problem));
     }
-    async generateTransferCheck(session) { return (0, mock_engine_1.transferCheckMock)(session.problem.subject, session.problem.gradeBand); }
-    async solveProblem(problem) { return (0, mock_engine_1.solutionMock)(problem); }
+    async generateTransferCheck(session) { return adaptMockCheck((0, mock_engine_1.transferCheckMock)(session.problem.subject, session.problem.gradeBand), (0, grade_pedagogy_1.teachingBandOf)(session.problem)); }
+    async solveProblem(problem) { return (0, grade_pedagogy_1.adaptTeachingCopy)((0, mock_engine_1.solutionMock)(problem), (0, grade_pedagogy_1.teachingBandOf)(problem)); }
     async streamSolution(problem, onDelta, _onReset, signal) {
         if (signal?.aborted)
             throw new DOMException("Aborted", "AbortError");
-        const solution = (0, mock_engine_1.solutionMock)(problem);
+        const solution = (0, grade_pedagogy_1.adaptTeachingCopy)((0, mock_engine_1.solutionMock)(problem), (0, grade_pedagogy_1.teachingBandOf)(problem));
         for (const part of solution.match(/.{1,12}/gs) ?? [solution]) {
             if (signal?.aborted)
                 throw new DOMException("Aborted", "AbortError");
@@ -81,7 +82,7 @@ class MockProviderAdapter {
         void imageDataUrl;
         if (signal?.aborted)
             throw new DOMException("Aborted", "AbortError");
-        const reply = (0, tutor_1.tutorReplyMock)(session, scope, question);
+        const reply = (0, grade_pedagogy_1.adaptTeachingCopy)((0, tutor_1.tutorReplyMock)(session, scope, question), (0, grade_pedagogy_1.teachingBandOf)(session.problem));
         for (const part of reply.match(/.{1,10}/gs) ?? [reply])
             onDelta(part);
     }
@@ -95,10 +96,39 @@ class MockProviderAdapter {
         return { recommended: relation, reason: relation ? "这一步包含图形、关系或多步变化，用板书拆开更容易看清。" : "当前关系用短文字已经可以讲清楚。", layout: /对比|区别|变化/.test(text) ? "comparison" : /公式|方程|函数|化学式/.test(text) ? "formula" : /图|角|三角|四边|光路|电路|受力/.test(text) ? "relation" : "steps" };
     }
     async generateBoardLesson(session, scope, suggestion, context = []) {
-        void context;
-        return (0, board_1.createSafeBoardLesson)(session, scope, suggestion);
+        return contextualizeMockBoard((0, board_1.createSafeBoardLesson)(session, scope, suggestion), session, context);
     }
     cancelPendingRequests() { }
 }
 exports.MockProviderAdapter = MockProviderAdapter;
+function contextualizeMockBoard(lesson, session, context) {
+    const match = context.slice().reverse().find((message) => mockContextNote(message.text));
+    const note = match ? mockContextNote(match.text) : "";
+    if (!match || !note || !lesson.plan || !lesson.blocks[0] || !lesson.plan.scenes[0])
+        return lesson;
+    const content = `${lesson.blocks[0].content} ${note}`;
+    return (0, board_1.finalizeBoardLesson)({
+        ...lesson,
+        blocks: lesson.blocks.map((block, index) => index === 0 ? { ...block, content } : block),
+        plan: {
+            ...lesson.plan,
+            sourceMessageIds: [match.id],
+            scenes: lesson.plan.scenes.map((scene, index) => index === 0 ? { ...scene, content, sourceMessageIds: [match.id] } : scene),
+        },
+    }, session);
+}
+function mockContextNote(text) {
+    if (/单位/.test(text))
+        return "结合刚才提到的单位，这里把每个数的单位放回对应位置。";
+    if (/总量|每天|工作量/.test(text))
+        return "结合刚才卡住的总量关系，这里先看总量怎样由每天的量合起来。";
+    if (/为什么|理由|依据/.test(text))
+        return "结合刚才追问的理由，这里会把这一步为什么成立单独说清楚。";
+    if (/看不懂|没懂|不会|卡住/.test(text))
+        return "结合刚才没看懂的地方，这里只拆开当前最关键的一步。";
+    return "";
+}
+function adaptMockCheck(check, band) {
+    return { ...check, prompt: (0, grade_pedagogy_1.adaptTeachingCopy)(check.prompt, band), explanation: (0, grade_pedagogy_1.adaptTeachingCopy)(check.explanation, band) };
+}
 function compactProblemText(value) { return value.normalize("NFKC").replace(/[\s，。；：！？?,.!、“”‘’（）()\[\]【】]/g, "").toLowerCase(); }

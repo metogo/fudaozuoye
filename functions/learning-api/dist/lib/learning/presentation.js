@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stripLearningChoiceLabel = stripLearningChoiceLabel;
 exports.prepareLearningMarkdown = prepareLearningMarkdown;
+exports.normalizeStandardLatexDelimiters = normalizeStandardLatexDelimiters;
 exports.assertBalancedLearningMarkup = assertBalancedLearningMarkup;
 exports.expandLearningMarkupRange = expandLearningMarkupRange;
 exports.parseLearningPrompt = parseLearningPrompt;
@@ -18,12 +19,27 @@ const optionPattern = /(?<![A-Za-z0-9])(?:[（(]\s*)?([A-H])\s*[.．、:：)）]
  * are never rewritten.
  */
 function prepareLearningMarkdown(source, streaming = false) {
-    if (streaming && hasUnclosedMath(source))
-        return source;
-    return promoteDisplayOnlyMath(source)
+    const normalized = normalizeStandardLatexDelimiters(source, streaming);
+    if (streaming && hasUnclosedMath(normalized))
+        return normalized;
+    return promoteDisplayOnlyMath(normalized)
         .split(protectedMarkdownPattern)
         .map((part, index) => index % 2 === 1 ? part : preparePlainSegment(part))
         .join("");
+}
+function normalizeStandardLatexDelimiters(source, streaming = false) {
+    if (streaming && hasUnclosedCodeFence(source))
+        return source;
+    return source.split(protectedMarkdownPattern)
+        .map((part, index) => index % 2 === 1 ? part : part
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `\n\n$$\n${latex.trim()}\n$$\n\n`)
+        .replace(/\\\(([^\n]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`))
+        .join("");
+}
+function hasUnclosedCodeFence(source) {
+    const backticks = source.match(/^\s{0,3}```/gm)?.length ?? 0;
+    const tildes = source.match(/^\s{0,3}~~~/gm)?.length ?? 0;
+    return backticks % 2 === 1 || tildes % 2 === 1;
 }
 function promoteDisplayOnlyMath(source) {
     return source.replace(/(?<!\$)\$([^$\n]*\\tag\*?\{[^{}\n]+\}[^$\n]*)\$(?!\$)/g, (_, latex) => `\n\n$$\n${latex}\n$$\n\n`);

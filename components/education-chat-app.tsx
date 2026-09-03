@@ -328,7 +328,11 @@ export function EducationChatApp() {
     abortRef.current = controller;
     let streamId: string | null = null;
     let receivedState = false;
-    const timeout = window.setTimeout(() => controller.abort(), 90_000);
+    let timeout = window.setTimeout(() => controller.abort(), 45_000);
+    const keepAlive = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => controller.abort(), 45_000);
+    };
     try {
       const multipart = Boolean(image);
       const form = multipart ? new FormData() : null;
@@ -345,6 +349,7 @@ export function EducationChatApp() {
         signal: controller.signal,
       });
       await readSseResponse(response, async (event, data) => {
+        keepAlive();
         if (event === "message.delta") {
           const text = String((data as { text?: string }).text ?? "");
           if (!text) return;

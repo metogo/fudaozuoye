@@ -1,8 +1,8 @@
 import { advanceAfterMastery, fail } from "../api";
 import { answerGate, flowScopeLabel, needsHelpGate, postSolutionGate, removeRepeatedSolutionAction, solutionReviewGate, understandingGate } from "../flow";
 import { mergeDirectKnowledge, mergeExpansion, nextReadyNode } from "../graph";
+import { teachingBandOf } from "../grade-pedagogy";
 import { getSessionProviderAdapter } from "../providers";
-import { createInstantBoardLesson } from "../providers/board";
 import { PENDING_ORIGINAL_ANSWER } from "../providers/provider-validation";
 import { safeAssessmentFeedback } from "../providers/assessment";
 import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
@@ -182,9 +182,9 @@ async function handleChoice(session: LearningSession, gateId: string, choice: Le
   }
   if (choice === "view_board") {
     requireGate(session, gateId);
-    void boardContext;
     const suggestion = requestedBoardSuggestion(session);
-    send("board.lesson", createInstantBoardLesson(session, session.flow.focus, suggestion));
+    const lesson = await adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext);
+    send("board.lesson", lesson);
     send("flow.progress", { key: "board", label: "学科原生板书已整理完成" });
     emitState(touch(session), send);
     return;
@@ -379,7 +379,7 @@ async function verifyNodeAnswer(session: LearningSession, nodeId: string | undef
   if (!node) throw new Error("当前知识点不存在");
   const result = await verifySafely(node.check, answer, adapter, send);
   if (!result) return emitState(touch(session), send);
-  const feedback = safeAssessmentFeedback(node.check, answer, result);
+  const feedback = safeAssessmentFeedback(node.check, answer, result, teachingBandOf(session.problem));
   send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "node" });
   const attempts = node.attempts + 1;
   const evidence: AssessmentEvidence = { nodeId: node.id, source: "system", answer, passed: result.passed, createdAt: new Date().toISOString() };
@@ -415,7 +415,7 @@ async function verifySolutionRecallAnswer(session: LearningSession, answer: stri
   const check = solutionRecallCheck(session);
   const result = await verifySafely(check, answer, adapter, send);
   if (!result) return emitState(touch(session), send);
-  const feedback = safeAssessmentFeedback(check, answer, result);
+  const feedback = safeAssessmentFeedback(check, answer, result, teachingBandOf(session.problem));
   send("answer.result", {
     passed: feedback.passed,
     text: feedback.passed ? "这个关键关系已经说清楚了。" : feedback.explanation,
@@ -442,7 +442,7 @@ async function verifyOriginalAnswer(session: LearningSession, answer: string, ad
   if (!root) throw new Error("原题不存在");
   const result = await verifySafely(root.check, answer, adapter, send);
   if (!result) return emitState(touch(session), send);
-  const feedback = safeAssessmentFeedback(root.check, answer, result);
+  const feedback = safeAssessmentFeedback(root.check, answer, result, teachingBandOf(session.problem));
   send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "original" });
   const attempts = root.attempts + 1;
   const evidence: AssessmentEvidence = { nodeId: root.id, source: "system", answer, passed: result.passed, createdAt: new Date().toISOString() };
@@ -494,7 +494,7 @@ async function verifyTransferAnswer(session: LearningSession, answer: string, ad
   if (!session.transferCheck) throw new Error("同类题不存在");
   const result = await verifySafely(session.transferCheck, answer, adapter, send);
   if (!result) return emitState(touch(session), send);
-  const feedback = safeAssessmentFeedback(session.transferCheck, answer, result);
+  const feedback = safeAssessmentFeedback(session.transferCheck, answer, result, teachingBandOf(session.problem));
   send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "transfer" });
   const root = session.nodes.find((item) => item.id === session.rootNodeId);
   if (!root) throw new Error("原题不存在");

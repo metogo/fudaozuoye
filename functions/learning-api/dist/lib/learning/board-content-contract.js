@@ -4,7 +4,7 @@ exports.assertEnhancedBoardContent = assertEnhancedBoardContent;
 exports.enhancedBoardInstructionSignature = enhancedBoardInstructionSignature;
 exports.assertNativeMathBoardContent = assertNativeMathBoardContent;
 const subjectSignals = {
-    math: /对象|已知|待求|条件|关系|式子|方程|函数|图形|变形|等价|不变量|定义域|单位/g,
+    math: /对象|已知|待求|条件|关系|式子|方程|函数|图形|变形|等价|不变量|定义域|单位|坐标|坐标轴|横轴|纵轴|分母|代入|椭圆|圆|焦点|长轴|短轴|半轴|顶点|斜率|根|角|边|面积|周长|概率|数列/g,
     physics: /系统|对象|过程|物理量|数值|单位|方向|规律|状态|量纲|现象/g,
     chemistry: /物质|组成|元素|粒子|反应|现象|守恒|系数|数量|条件|类别|标准/g,
     biology: /生命|结构|功能|过程|变量|对照|对象|条件|观察|反馈|稳态|层次/g,
@@ -27,16 +27,16 @@ function assertEnhancedBoardContent(subject, content, purpose, evidence, evidenc
     for (const claim of remainder.match(assertedOutcome) ?? [])
         if (!evidenceUniverse.includes(claim))
             throw new Error("增强板书正文不能补充原题证据未支持的结果性陈述");
-    for (const number of remainder.match(/-?\d+(?:\.\d+)?/g) ?? []) {
-        if (!new RegExp(`(?<!\\d)${escapePattern(number)}(?!\\d)`).test(evidenceUniverse))
+    const evidenceNumbers = new Set(numericTokens(evidenceUniverse));
+    for (const number of numericTokens(remainder))
+        if (!evidenceNumbers.has(number))
             throw new Error("增强板书正文不能补充原题没有给出的数字事实");
-    }
     const sentences = remainder.split(/[。！？!?；;]+/).map((item) => item.trim()).filter(Boolean);
     const unsupportedSentence = sentences.find((sentence) => !evidenceUniverse.includes(sentence.replace(/[“”"']/g, "")) && !teachingLead.test(sentence) && !(sentence.match(subjectSignals[subject]) ?? []).length);
     if (unsupportedSentence)
         throw new Error(`增强板书正文只能组织学习动作，事实内容必须保留在逐字证据中：${unsupportedSentence}`);
     const signals = new Set(remainder.match(subjectSignals[subject]) ?? []);
-    if (signals.size < 2)
+    if (signals.size < 1)
         throw new Error("增强板书正文没有落实当前学科的证据与推理动作");
 }
 function enhancedBoardInstructionSignature(content, purpose, evidence) {
@@ -68,6 +68,7 @@ function withoutCanonical(content, purpose, evidence) {
 function compactMathContent(value) {
     return value.normalize("NFKC").replace(/\$[^$]+\$/g, "公式").replace(/[\s，。！？!?；;：:]/g, "").toLowerCase();
 }
-function escapePattern(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function numericTokens(value) {
+    return value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (digit) => "0123456789"["⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(digit)])
+        .match(/-?\d+(?:\.\d+)?/g) ?? [];
 }

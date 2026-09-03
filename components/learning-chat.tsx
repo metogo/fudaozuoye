@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/presentation";
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
+import { gradeBandLabels } from "@/lib/learning/grade-pedagogy";
 import type { ChatMessage, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
 import { ArrowIcon, CameraIcon, CheckIcon, ImageIcon, InfoIcon, NetworkIcon, PencilIcon, RefreshIcon, SparkIcon } from "./icons";
 import { RichLearningText } from "./rich-learning-text";
@@ -165,7 +166,7 @@ export function LearningChat(props: LearningChatProps) {
     <header className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <span className={`flex shrink-0 items-center justify-center bg-stone-950 text-white ${isHome ? "h-8 w-8 rounded-xl shadow-[0_8px_24px_rgba(28,25,23,.16)]" : "h-10 w-10 rounded-2xl shadow-lg shadow-stone-300"}`}><NetworkIcon className={isHome ? "h-3.5 w-3.5" : "h-4 w-4"}/></span>
-        {!isHome && <time dateTime={currentTime.toISOString()} className="block min-w-0 truncate text-xs tabular-nums text-stone-500">{formatCurrentTime(currentTime)}</time>}
+        {!isHome && <div className="min-w-0"><time dateTime={currentTime.toISOString()} className="block truncate text-xs tabular-nums text-stone-500">{formatCurrentTime(currentTime)}</time>{props.session && <span className="mt-0.5 block text-[9px] font-medium text-stone-400">模型识别为{gradeBandLabels[props.session.problem.gradeBand]}题</span>}</div>}
       </div>
       {props.session && <button type="button" onClick={props.onNewProblem} className="min-h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 transition hover:bg-white hover:text-stone-900">开始新题</button>}
     </header>
@@ -190,7 +191,7 @@ export function LearningChat(props: LearningChatProps) {
     <form onSubmit={submit} className={`chat-composer relative z-20 shrink-0 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 ${isHome ? "home-chat-composer" : "border-t border-stone-200/80 bg-[#f7f6f2]/95"}`}>
       {currentTask && <div className="mx-auto mb-2 flex max-w-2xl items-center gap-2 px-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><div className="min-w-0 flex-1"><span className="mr-1.5 text-[9px] font-semibold tracking-[.08em] text-stone-400">当前环节</span><span className="text-[11px] font-semibold text-stone-600">{currentTask.intent}</span></div>{answerMode && <button type="button" disabled={props.busy} onClick={() => { setQuestionGateId(questionMode ? null : gate?.id ?? null); setInput(""); textareaRef.current?.focus(); }} className="min-h-11 shrink-0 rounded-xl px-2 text-[10px] font-semibold text-stone-500 transition hover:text-stone-900 disabled:opacity-40">{questionMode ? "返回作答" : "改为提问"}</button>}</div>}
       <div className={`mx-auto flex max-w-2xl flex-col gap-2 rounded-[22px] border border-stone-200 bg-white p-2 shadow-[0_10px_30px_rgba(41,37,36,.1)] focus-within:border-stone-400 ${isHome ? "home-input-panel" : ""}`}>
-        {isHome && <ReasoningLevelPicker levels={props.reasoningLevels} level={props.reasoningLevel} onLevel={props.onReasoningLevel}/>}
+        {isHome && <div className="home-reasoning-picker mt-1"><ReasoningLevelPicker levels={props.reasoningLevels} level={props.reasoningLevel} onLevel={props.onReasoningLevel}/></div>}
         <div className={`chat-composer__input-row flex w-full items-end gap-1 ${isHome ? "border-t border-stone-100 pt-1" : ""}`}>
           {canAttach && <div className="flex shrink-0 items-center">
             <label aria-label="拍照发题" className={`flex h-11 w-11 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-100 ${props.ready ? "cursor-pointer" : "cursor-not-allowed opacity-35"}`}><CameraIcon className="h-5 w-5"/><input disabled={!props.ready} type="file" accept="image/*" capture="environment" className="sr-only" onChange={fileChange}/></label>

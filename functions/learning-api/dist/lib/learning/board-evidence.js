@@ -57,6 +57,9 @@ function extractSentenceEvidence(sentence) {
     return [cleanEvidence(normalized)];
 }
 function factualPremisesBeforeQuestion(value) {
+    const equationPremise = value.match(/^(.{2,100}?=[^，,。！？!?]{1,50}?)(?=(?:的|，|,)[^。！？!?]{0,40}(?:什么|多少|怎样|如何)|(?:求|问))/)?.[1];
+    if (equationPremise)
+        return [cleanEvidence(equationPremise)];
     const parts = value.split(/[，,]/);
     for (let index = 1; index < parts.length; index += 1) {
         const suffix = parts.slice(index).join("，");

@@ -164,7 +164,7 @@ describe("板书缓存恢复", () => {
     const restored = restoreBoardLesson(session, leaked);
     expect(restored).not.toBeNull();
     expect(restored?.plan?.learningGoal).not.toContain("最终答案是8");
-    expect(restored?.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
+    expect(restored?.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
   });
 
   it("新版缓存中的虚构配图不会重新展示", () => {

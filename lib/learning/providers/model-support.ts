@@ -1,4 +1,5 @@
-import type { CheckItem, KnowledgeNode } from "../types";
+import { gradeTeachingInstruction } from "../grade-pedagogy";
+import type { CheckItem, GradeBand, KnowledgeNode } from "../types";
 import type { ProviderConfig } from "./config";
 
 export type JsonObject = Record<string, unknown>;
@@ -303,16 +304,18 @@ function escapeInvalidJsonStringBackslashes(value: string): string {
   return output;
 }
 
-export function solutionSystemPrompt(): string {
+export function solutionSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
     "你是面向学生的 K12 解题老师。学生明确要求查看完整讲解，因此必须给出足够详细、可以从头跟做的完整过程，不能只给结论或压缩成几句关系式。使用中性、非羞辱性语言，不评价学生能力，也不扩展无关知识。",
     "使用清晰 Markdown 组织讲解，并严格依次使用四个三级标题：“### 解题思路”“### 分步推导”“### 结论”“### 易错提醒”。不得改名、合并或省略标题。分步推导使用有序列表完整展开每一步，并解释关键等式、定理或条件如何得到；题目有多个小问时必须逐问作答，并用“第1问”“第2问”等小标题明确分开。不使用表格、HTML 或分隔线。",
     "推导不得跳过决定答案的中间步骤。几何题交代对应关系和判定依据；物理题写公式、代入、单位和物理含义；化学题说明组成、反应或计量依据；生物题写清结构功能、实验变量或反馈过程；语文、英语、历史、地理、政治题必须逐字引用材料证据，并解释证据怎样支持结论。",
     "所有数学与物理公式必须使用 KaTeX 兼容的 LaTeX：行内公式写在 $...$ 中，独立推导写在 $$...$$ 中；不要用代码块包裹公式。化学式使用 $\\mathrm{H_2O}$ 这类标准 LaTeX。",
+    "控制篇幅：单问题通常写 600 到 1000 个汉字；多小问按实际需要展开，但删除重复复述和无关背景。完整不等于冗长。",
+    gradeTeachingInstruction(learnerBand, "solution"),
   ].join("\n");
 }
 
-export function diagnosticSystemPrompt(): string {
+export function diagnosticSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
     "你是中国 K12 九学科知识诊断与学生自主学习引导器。输出严格 JSON。",
     "课程概念只能从给定 ID 选择，标题、难度和前置关系不得自创。",
@@ -323,10 +326,11 @@ export function diagnosticSystemPrompt(): string {
     "微型检查必须比父题简单，只检查一个概念；选择题 answer 必须与某个 choices 选项逐字一致。",
     "simplification、teaching 各字段、check.prompt、check.choices 与 check.explanation 中出现数学或物理公式时，使用 KaTeX 兼容的 LaTeX：行内写成 $...$，独立公式写成 $$...$$；check.answer 保持便于学生直接输入的纯答案。不得输出 HTML。",
     "手机页面需要简洁：explanation 不超过140字，example不超过110字，parentPrompt不超过70字，expectedSignal不超过90字，misconception不超过100字，alternateExplanation不超过140字，check.prompt不超过120字。",
+    gradeTeachingInstruction(learnerBand, "diagnosis"),
   ].join("\n");
 }
 
-export function selectionSystemPrompt(min: number, max: number): string {
+export function selectionSystemPrompt(min: number, max: number, learnerBand: GradeBand = "junior"): string {
   return [
     "你是中国 K12 九学科知识诊断器。输出严格 JSON，回答保持简短。",
     `只能从给定课程目录 ID 选择 ${min} 到 ${max} 个完成当前任务真正需要的直接前置；只需一个时绝不凑数。`,
@@ -335,6 +339,7 @@ export function selectionSystemPrompt(min: number, max: number): string {
     "evidence 必须逐字复制 evidenceQuotes 中某一项的 text，禁止自行摘写、概括、增删字或替换单位/数字；simplification 必须以“题目中的「对应 evidence 原文」……”开头，完整粘贴同一项 evidence，再说明这一步缺少什么能力。例如 evidence 为“AC = BC”，simplification 必须包含完整的“AC = BC”。",
     "若多个概念表达同一层关系，只保留更贴近当前卡点的一个；不要输出教学正文或检查题。",
     "如果输出结构要求 problemGuide：goal 说清题目要做什么；keyClue 用自然语言引用题干条件并说明作用；approach 只给方向不泄露答案；firstQuestion 只问一个帮助学生说出第一步的问题。四个字段直接对学生说话，禁止出现“逐字引用、字段、输出结构、生成要求、题干关键条件、真实条件、真实原文”等模型工作术语。",
+    gradeTeachingInstruction(learnerBand, "diagnosis"),
   ].join("\n");
 }
 

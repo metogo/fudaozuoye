@@ -399,6 +399,8 @@ export interface ProblemSnapshot {
   childWork: string;
   subject: Subject;
   gradeBand: GradeBand;
+  /** 学生实际所处学段；与题目所属课程学段分离。旧会话缺失时按 gradeBand 处理。 */
+  learnerBand?: GradeBand;
   confidence: number;
   userRevised: boolean;
 }

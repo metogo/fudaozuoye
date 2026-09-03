@@ -83,5 +83,6 @@ function parseProblemSnapshot(value) {
     const item = value;
     if (typeof item.text !== "string" || item.text.trim().length < 3 || item.text.length > 8_000 || typeof item.childWork !== "string" || item.childWork.length > 8_000 || !subjects.has(item.subject) || !bands.has(item.gradeBand) || !(0, curriculum_1.isSupportedSubjectBand)(item.subject, item.gradeBand))
         throw new Error("题目确认信息不合法");
-    return { text: item.text.trim(), childWork: item.childWork.trim(), subject: item.subject, gradeBand: item.gradeBand, confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0, userRevised: item.userRevised === true };
+    const gradeBand = item.gradeBand;
+    return { text: item.text.trim(), childWork: item.childWork.trim(), subject: item.subject, gradeBand, learnerBand: gradeBand, confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0, userRevised: item.userRevised === true };
 }

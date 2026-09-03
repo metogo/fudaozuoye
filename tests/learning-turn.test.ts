@@ -162,16 +162,16 @@ describe("教育 Chat 学习回合", () => {
     expect(next.session.flow.stage).toBe("core_explanation");
   });
 
-  it("板书立即完成，不再等待模型二次改写", async () => {
+  it("板书通过适配器生成并携带当前对话上下文", async () => {
     const generator = vi.spyOn(MockProviderAdapter.prototype, "generateBoardLesson");
     const started = await startState("math", "primary");
     const gate = started.session.flow.activeGate!;
-    const body = await turn(started.stateToken, { type: "choose", gateId: gate.id, choice: "view_board" });
+    const boardContext = [{ id: "assistant-current", role: "assistant" as const, text: "学生刚才卡在总量和每天工作量的关系。" }];
+    const body = await turn(started.stateToken, { type: "choose", gateId: gate.id, choice: "view_board", boardContext });
     const instant = event<{ quality?: unknown; blocks: unknown[] }>(body, "board.lesson");
-    expect(instant.quality).toBeUndefined();
     expect(instant.blocks).toHaveLength(5);
     expect(body).toContain("学科原生板书已整理完成");
-    expect(generator).not.toHaveBeenCalled();
+    expect(generator).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), boardContext);
   });
 
   it("模型板书生成失败时保留即时板书，当前互动与学习进度保持不变", async () => {

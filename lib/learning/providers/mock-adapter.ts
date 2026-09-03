@@ -1,10 +1,11 @@
 import { analyzeMock, expandMock, isBuiltInMockProblem, recognizeMock, similarCheckMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
 import { isSupportedSubjectBand } from "../curriculum";
+import { adaptTeachingCopy, teachingBandOf } from "../grade-pedagogy";
 import { isConcreteRecallAnswer } from "../solution-recall";
 import { subjects, type BoardConversationMessage, type BoardLesson, type BoardSuggestion, type CheckItem, type GradeBand, type LearningSession, type ProblemSnapshot, type ProviderId, type ReasoningLevel, type SuggestedQuestion, type TutorScope } from "../types";
 import type { AnalysisPhaseReporter, ProviderAdapter } from "./adapter";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
-import { createSafeBoardLesson } from "./board";
+import { createSafeBoardLesson, finalizeBoardLesson } from "./board";
 import { pendingChatSession, rootOnlySession } from "./provider-validation";
 import { questionSuggestionsMock, tutorReplyMock } from "./tutor";
 
@@ -57,19 +58,19 @@ export class MockProviderAdapter implements ProviderAdapter {
   async generateSimilarCheck(session: LearningSession, nodeId: string) {
     const node = session.nodes.find((item) => item.id === nodeId);
     if (!node || node.kind !== "concept") throw new Error("找不到要换题的知识点");
-    return similarCheckMock(node);
+    return adaptMockCheck(similarCheckMock(node), teachingBandOf(session.problem));
   }
-  async generateTransferCheck(session: LearningSession) { return transferCheckMock(session.problem.subject, session.problem.gradeBand); }
-  async solveProblem(problem: ProblemSnapshot) { return solutionMock(problem); }
+  async generateTransferCheck(session: LearningSession) { return adaptMockCheck(transferCheckMock(session.problem.subject, session.problem.gradeBand), teachingBandOf(session.problem)); }
+  async solveProblem(problem: ProblemSnapshot) { return adaptTeachingCopy(solutionMock(problem), teachingBandOf(problem)); }
   async streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void, _onReset: () => void, signal?: AbortSignal) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const solution = solutionMock(problem);
+    const solution = adaptTeachingCopy(solutionMock(problem), teachingBandOf(problem));
     for (const part of solution.match(/.{1,12}/gs) ?? [solution]) { if (signal?.aborted) throw new DOMException("Aborted", "AbortError"); onDelta(part); }
   }
   async streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string) {
     void imageDataUrl;
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const reply = tutorReplyMock(session, scope, question);
+    const reply = adaptTeachingCopy(tutorReplyMock(session, scope, question), teachingBandOf(session.problem));
     for (const part of reply.match(/.{1,10}/gs) ?? [reply]) onDelta(part);
   }
   async suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]> {
@@ -82,10 +83,37 @@ export class MockProviderAdapter implements ProviderAdapter {
     return { recommended: relation, reason: relation ? "这一步包含图形、关系或多步变化，用板书拆开更容易看清。" : "当前关系用短文字已经可以讲清楚。", layout: /对比|区别|变化/.test(text) ? "comparison" : /公式|方程|函数|化学式/.test(text) ? "formula" : /图|角|三角|四边|光路|电路|受力/.test(text) ? "relation" : "steps" };
   }
   async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[] = []): Promise<BoardLesson> {
-    void context;
-    return createSafeBoardLesson(session, scope, suggestion);
+    return contextualizeMockBoard(createSafeBoardLesson(session, scope, suggestion), session, context);
   }
   cancelPendingRequests() {}
+}
+
+function contextualizeMockBoard(lesson: BoardLesson, session: LearningSession, context: BoardConversationMessage[]): BoardLesson {
+  const match = context.slice().reverse().find((message) => mockContextNote(message.text));
+  const note = match ? mockContextNote(match.text) : "";
+  if (!match || !note || !lesson.plan || !lesson.blocks[0] || !lesson.plan.scenes[0]) return lesson;
+  const content = `${lesson.blocks[0].content} ${note}`;
+  return finalizeBoardLesson({
+    ...lesson,
+    blocks: lesson.blocks.map((block, index) => index === 0 ? { ...block, content } : block),
+    plan: {
+      ...lesson.plan,
+      sourceMessageIds: [match.id],
+      scenes: lesson.plan.scenes.map((scene, index) => index === 0 ? { ...scene, content, sourceMessageIds: [match.id] } : scene),
+    },
+  }, session);
+}
+
+function mockContextNote(text: string): string {
+  if (/单位/.test(text)) return "结合刚才提到的单位，这里把每个数的单位放回对应位置。";
+  if (/总量|每天|工作量/.test(text)) return "结合刚才卡住的总量关系，这里先看总量怎样由每天的量合起来。";
+  if (/为什么|理由|依据/.test(text)) return "结合刚才追问的理由，这里会把这一步为什么成立单独说清楚。";
+  if (/看不懂|没懂|不会|卡住/.test(text)) return "结合刚才没看懂的地方，这里只拆开当前最关键的一步。";
+  return "";
+}
+
+function adaptMockCheck(check: CheckItem, band: GradeBand): CheckItem {
+  return { ...check, prompt: adaptTeachingCopy(check.prompt, band), explanation: adaptTeachingCopy(check.explanation, band) };
 }
 
 function compactProblemText(value: string): string { return value.normalize("NFKC").replace(/[\s，。；：！？?,.!、“”‘’（）()\[\]【】]/g, "").toLowerCase(); }

@@ -4,8 +4,8 @@ exports.postTurn = postTurn;
 const api_1 = require("../api");
 const flow_1 = require("../flow");
 const graph_1 = require("../graph");
+const grade_pedagogy_1 = require("../grade-pedagogy");
 const providers_1 = require("../providers");
-const board_1 = require("../providers/board");
 const provider_validation_1 = require("../providers/provider-validation");
 const assessment_1 = require("../providers/assessment");
 const request_guards_1 = require("../request-guards");
@@ -187,9 +187,9 @@ async function handleChoice(session, gateId, choice, boardContext, adapter, send
     }
     if (choice === "view_board") {
         requireGate(session, gateId);
-        void boardContext;
         const suggestion = requestedBoardSuggestion(session);
-        send("board.lesson", (0, board_1.createInstantBoardLesson)(session, session.flow.focus, suggestion));
+        const lesson = await adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext);
+        send("board.lesson", lesson);
         send("flow.progress", { key: "board", label: "学科原生板书已整理完成" });
         emitState(touch(session), send);
         return;
@@ -388,7 +388,7 @@ async function verifyNodeAnswer(session, nodeId, answer, adapter, send, signal) 
     const result = await verifySafely(node.check, answer, adapter, send);
     if (!result)
         return emitState(touch(session), send);
-    const feedback = (0, assessment_1.safeAssessmentFeedback)(node.check, answer, result);
+    const feedback = (0, assessment_1.safeAssessmentFeedback)(node.check, answer, result, (0, grade_pedagogy_1.teachingBandOf)(session.problem));
     send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "node" });
     const attempts = node.attempts + 1;
     const evidence = { nodeId: node.id, source: "system", answer, passed: result.passed, createdAt: new Date().toISOString() };
@@ -425,7 +425,7 @@ async function verifySolutionRecallAnswer(session, answer, adapter, send) {
     const result = await verifySafely(check, answer, adapter, send);
     if (!result)
         return emitState(touch(session), send);
-    const feedback = (0, assessment_1.safeAssessmentFeedback)(check, answer, result);
+    const feedback = (0, assessment_1.safeAssessmentFeedback)(check, answer, result, (0, grade_pedagogy_1.teachingBandOf)(session.problem));
     send("answer.result", {
         passed: feedback.passed,
         text: feedback.passed ? "这个关键关系已经说清楚了。" : feedback.explanation,
@@ -453,7 +453,7 @@ async function verifyOriginalAnswer(session, answer, adapter, send, signal) {
     const result = await verifySafely(root.check, answer, adapter, send);
     if (!result)
         return emitState(touch(session), send);
-    const feedback = (0, assessment_1.safeAssessmentFeedback)(root.check, answer, result);
+    const feedback = (0, assessment_1.safeAssessmentFeedback)(root.check, answer, result, (0, grade_pedagogy_1.teachingBandOf)(session.problem));
     send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "original" });
     const attempts = root.attempts + 1;
     const evidence = { nodeId: root.id, source: "system", answer, passed: result.passed, createdAt: new Date().toISOString() };
@@ -509,7 +509,7 @@ async function verifyTransferAnswer(session, answer, adapter, send) {
     const result = await verifySafely(session.transferCheck, answer, adapter, send);
     if (!result)
         return emitState(touch(session), send);
-    const feedback = (0, assessment_1.safeAssessmentFeedback)(session.transferCheck, answer, result);
+    const feedback = (0, assessment_1.safeAssessmentFeedback)(session.transferCheck, answer, result, (0, grade_pedagogy_1.teachingBandOf)(session.problem));
     send("answer.result", { passed: feedback.passed, text: feedback.explanation, kind: "transfer" });
     const root = session.nodes.find((item) => item.id === session.rootNodeId);
     if (!root)

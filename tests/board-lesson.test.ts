@@ -1,12 +1,146 @@
 import { describe, expect, it } from "vitest";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
-import { createSafeBoardLesson, createSafeBoardVisual, parseBoardAudit, parseBoardLesson } from "@/lib/learning/providers/board";
+import { boardAuditPrompt, createSafeBoardLesson, createSafeBoardVisual, parseBoardAudit, parseBoardLesson, recoverBoardContentPlan } from "@/lib/learning/providers/board";
 import { parseBoardPlan } from "@/lib/learning/providers/board-plan";
 import type { BoardSuggestion } from "@/lib/learning/types";
 
 const suggestion: BoardSuggestion = { recommended: true, reason: "条件之间存在多步关系，整理成板书更容易看清。", layout: "relation" };
 
 describe("模型板书结构校验", () => {
+  it("Chat 精简板书只能引用当前对话中的真实消息 id", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: lesson.plan!.scenes[index].evidence,
+        content: block.content,
+        sourceMessageIds: index === 0 ? ["missing-chat"] : [],
+        tone: block.tone,
+      })),
+    };
+    expect(() => recoverBoardContentPlan(output, current, suggestion, [{ id: "real-chat", role: "user", text: "我卡在单位关系。" }])).toThrow("不存在的当前对话");
+  });
+
+  it("模型漏抄已验证的目的或证据时会补齐，而不是把整页降级", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: lesson.plan!.scenes[index].evidence,
+        content: [
+          "先找出题目里的对象和已知数量，再确认待求是什么。",
+          "把明确条件放进同一个数量关系，再检查对象是否对应。",
+          "按关系逐步写出式子，并说明每次计算使用哪条已知。",
+          "回到原题检查单位和限制条件，判断关系有没有用错。",
+          "换一组数值后重新找对象和关系，比较方法哪里保持不变。",
+        ][index],
+        sourceMessageIds: [],
+        tone: block.tone,
+      })),
+    };
+    const recovered = recoverBoardContentPlan(output, current, suggestion);
+    expect(recovered.blocks.every((block, index) => !recovered.plan!.scenes[index].purpose || block.content.includes(recovered.plan!.scenes[index].purpose!))).toBe(true);
+    expect(recovered.blocks.every((block, index) => !recovered.plan!.scenes[index].evidence || block.content.includes(recovered.plan!.scenes[index].evidence!))).toBe(true);
+    expect(recovered.quality).toBeUndefined();
+  });
+
+  it("模型把作答要求误当证据时，会改用原题里的真实已知", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: "求两队每天各修多少米",
+        content: [
+          "先找出题目里的对象和已知数量，再确认待求是什么。",
+          "把明确条件放进同一个数量关系，再检查对象是否对应。",
+          "按关系逐步写出式子，并说明每次计算使用哪条已知。",
+          "回到原题检查单位和限制条件，判断关系有没有用错。",
+          "换一组数值后重新找对象和关系，比较方法哪里保持不变。",
+        ][index],
+        sourceMessageIds: [],
+        tone: block.tone,
+      })),
+    };
+    const recovered = recoverBoardContentPlan(output, current, suggestion);
+    expect(recovered.plan?.scenes.every((scene) => scene.evidence !== "求两队每天各修多少米")).toBe(true);
+    expect(recovered.blocks.every((block, index) => block.content.includes(recovered.plan!.scenes[index].evidence!))).toBe(true);
+  });
+
+  it("模型把自查题混进正文时会移除重复栏目，而不是降级整页", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: lesson.plan!.scenes[index].evidence,
+        content: `${lesson.plan!.scenes[index].purpose}。${lesson.plan!.scenes[index].evidence}。${[
+          "先确认对象、已知和待求之间的数量关系。",
+          "把条件连接到同一个式子并检查对象对应。",
+          "逐步计算关系式，并写清每一步使用的已知条件。",
+          "检查单位和限制条件，排除关系使用错误。",
+          "换一组数值后重新建立条件关系并检查结果。",
+        ][index]}自查：题目真正要求哪个量或结论？`,
+        sourceMessageIds: [],
+        tone: block.tone,
+      })),
+    };
+    const recovered = recoverBoardContentPlan(output, current, suggestion);
+    expect(recovered.blocks.every((block) => !block.content.includes("自查："))).toBe(true);
+  });
+
+  it("模型另举题外数字时会移除该句，保留有依据的学科正文", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: lesson.plan!.scenes[index].evidence,
+        content: `${lesson.plan!.scenes[index].purpose}。${lesson.plan!.scenes[index].evidence}。${[
+          "先圈出对象、已知条件和待求。",
+          "把对象和条件放进同一个数量关系。",
+          "沿关系式逐步写出计算使用的条件。",
+          "回到原题检查单位、条件和数量关系。",
+          "换一种问法后重新寻找对象和数量关系。",
+        ][index]}比如另取99计算。`,
+        sourceMessageIds: [],
+        tone: block.tone,
+      })),
+    };
+    const recovered = recoverBoardContentPlan(output, current, suggestion);
+    expect(recovered.blocks.every((block) => !block.content.includes("99"))).toBe(true);
+  });
+
+  it("独立审校只接收候选板书真正引用的对话", () => {
+    const current = session();
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const context = [{ id: "used", role: "user" as const, text: "我卡在单位关系。" }, { id: "unused", role: "assistant" as const, text: "另一段无关说明。" }];
+    lesson.plan!.sourceMessageIds = ["used"];
+    lesson.plan!.scenes[0].sourceMessageIds = ["used"];
+    const payload = JSON.parse(boardAuditPrompt(current, { kind: "problem" }, lesson, context)) as { citedDialogue: Array<{ id: string }> };
+    expect(payload.citedDialogue.map((message) => message.id)).toEqual(["used"]);
+  });
+
+  it("审校布尔结论完整时，不会因为说明过短而丢弃合格板书", () => {
+    expect(parseBoardAudit({
+      correct: true, grounded: true, noAnswerLeak: true, markingRelevant: true,
+      visualCorrect: true, visualGrounded: true, contentDistinct: true,
+      teachingComplete: true, aidUseful: true, reason: "通过",
+    })).toEqual({ passed: true, reason: "审校未提供详细说明" });
+  });
+
   it("拒绝只有四段的 Chat 式摘要冒充新版板书", () => {
     const output = validOutput();
     output.blocks = (output.blocks as Array<Record<string, unknown>>).slice(0, 4);
@@ -213,7 +347,7 @@ describe("模型板书结构校验", () => {
     const science = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(science.plan?.subject).toBe("science");
     expect(science.plan?.discipline).toBe("chemistry");
-    expect(science.blocks.map((block) => block.label)).toContain("守恒账本");
+    expect(science.blocks.map((block) => block.label)).toContain("检查守恒");
     expect(science.blocks.map((block) => block.label)).not.toContain("因果链");
 
     current.problem.subject = "chinese";
@@ -221,14 +355,14 @@ describe("模型板书结构校验", () => {
     current.problemGuide = { goal: "解释词语含义", keyClue: "勇敢", approach: "结合语境说明含义", firstQuestion: "这个词描述什么品质" };
     const language = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(language.plan?.subject).toBe("language");
-    expect(language.blocks.map((block) => block.label)).toContain("词句解剖");
+    expect(language.blocks.map((block) => block.label)).toContain("看关键词句");
 
     current.problem.subject = "history";
     current.problem.text = "历史材料题：结合材料分析制度形成的原因和影响。";
     current.problemGuide = { goal: "分析制度形成的原因和影响", keyClue: "制度形成", approach: "按时间整理材料", firstQuestion: "材料先写了什么背景" };
     const humanities = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
     expect(humanities.plan?.subject).toBe("humanities");
-    expect(humanities.blocks.map((block) => block.label)).toContain("因果链");
+    expect(humanities.blocks.map((block) => block.label)).toContain("前因后果");
 
     current.problem.text = "解释“勇敢”的含义。";
     current.problemGuide = { goal: "解释词语含义", keyClue: "勇敢", approach: "说明含义", firstQuestion: "这个词描述什么品质" };
@@ -248,7 +382,7 @@ describe("模型板书结构校验", () => {
     const root = current.nodes.find((node) => node.id === current.rootNodeId);
     if (root?.check) root.check.answer = "11";
 
-    const relation = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks.find((block) => block.label === "关系结构");
+    const relation = createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks.find((block) => block.label === "找出联系");
 
     expect(relation?.content).toContain("y=2x+3");
     expect(relation?.content).toContain("x=4");
@@ -263,9 +397,9 @@ describe("模型板书结构校验", () => {
 
     const lesson = createSafeBoardLesson(current, { kind: "problem", section: "keyClue" }, suggestion);
 
-    expect(lesson.title).toBe("数学 · 建模与推导");
+    expect(lesson.title).toBe("数学 · 找关系与推理");
     expect(lesson.quality?.status).toBe("safe_fallback");
-    expect(lesson.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
+    expect(lesson.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
     expect(lesson.annotations).toHaveLength(3);
     expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain(answer);
   });
@@ -277,9 +411,9 @@ describe("模型板书结构校验", () => {
 
     const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
 
-    expect(lesson.title).toBe("数学 · 建模与推导安全板书");
+    expect(lesson.title).toBe("数学 · 找关系与推理安全板书");
     expect(lesson.quality?.status).toBe("safe_fallback");
-    expect(lesson.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
+    expect(lesson.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
     expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain("交换对象");
   });
 
