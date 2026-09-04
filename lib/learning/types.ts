@@ -285,6 +285,39 @@ export interface BoardLesson {
   returnLabel: string;
 }
 
+export type BoardSceneMedium = "text" | "derivation" | "relation" | "source";
+
+export type BoardExperienceElement =
+  | { id: string; type: "text"; text: string }
+  | { id: string; type: "visual"; visual: BoardSemanticVisual; fallbackText: string };
+
+export interface BoardExperienceAction {
+  id: string;
+  type: "reveal";
+  targetId: string;
+}
+
+export interface BoardExperienceScene extends BoardScene {
+  medium: BoardSceneMedium;
+  elements: BoardExperienceElement[];
+  actions: BoardExperienceAction[];
+}
+
+export interface BoardExperience {
+  version: 1;
+  key: string;
+  legacyWorkspaceKey: string;
+  title: string;
+  learningGoal: string;
+  subject?: Subject | BoardTeachingSubject;
+  layout: BoardLesson["layout"];
+  annotations: BoardAnnotation[];
+  quality?: BoardLesson["quality"];
+  legacyVisual?: BoardVisual | null;
+  returnLabel: string;
+  scenes: BoardExperienceScene[];
+}
+
 export type BoardWorkspaceMode = "overview" | "derive" | "recall";
 
 export interface BoardDocumentNode {
@@ -301,6 +334,7 @@ export interface BoardDocumentNode {
 export interface BoardDocument {
   version: 1;
   key: string;
+  legacyWorkspaceKey: string;
   title: string;
   learningGoal: string;
   nodes: BoardDocumentNode[];
@@ -403,6 +437,22 @@ export interface ProblemSnapshot {
   learnerBand?: GradeBand;
   confidence: number;
   userRevised: boolean;
+  /** 题目照片中与当前题目相关的视觉证据；原图本身不会写入会话。 */
+  visualContext?: ProblemVisualContext;
+}
+
+export interface ProblemVisualFact {
+  text: string;
+  source: "printed_label" | "visual_relation";
+  confidence: number;
+}
+
+export interface ProblemVisualContext {
+  related: boolean;
+  affectsSolving: boolean;
+  summary: string;
+  facts: ProblemVisualFact[];
+  confidence: number;
 }
 
 export interface ProblemGuide {

@@ -7,6 +7,8 @@ import { parseBoardPlan } from "../lib/learning/providers/board-plan";
 import { assertBalancedLearningMarkup } from "../lib/learning/presentation";
 import { subjectPendingGuide } from "../lib/learning/subject-learning-guide";
 import { subjects, type BoardSemanticVisual, type LearningSession, type Subject } from "../lib/learning/types";
+import { directBoardBlueprint } from "../lib/learning/board-director";
+import { PENDING_ORIGINAL_ANSWER } from "../lib/learning/providers/provider-validation";
 
 const problems: Record<Subject, string> = {
   math: "已知一次函数 y=2x+3，求当 x=4 时 y 的值。",
@@ -26,14 +28,13 @@ describe("第二阶段学科原生板书", () => {
     for (const subject of subjects) {
       const session = representativeSession(subject);
       const lesson = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "需要把当前学科证据和推理动作展开。", layout: "steps" });
-      const profile = subjectBoardProfileFor(session);
-
       expect(listConcepts(subject, session.problem.gradeBand).length, subject).toBeGreaterThan(0);
       expect(lesson.quality, subject).toBeUndefined();
       expect(lesson.plan?.discipline, subject).toBe(subject);
       expect(lesson.plan?.contentRevision, subject).toBe(2);
-      expect(lesson.blocks.map((block) => block.label), subject).toEqual(profile.moves.map((move) => move.label));
-      expect(lesson.plan?.scenes.map((scene) => scene.move), subject).toEqual(profile.moves.map((move) => move.id));
+      const directed = directBoardBlueprint(session, { kind: "problem" });
+      expect(lesson.blocks.map((block) => block.label), subject).toEqual(directed.map((move) => move.label));
+      expect(lesson.plan?.scenes.map((scene) => scene.move), subject).toEqual(directed.map((move) => move.id));
       expect(lesson.blocks.map((block) => block.content).join(" "), subject).not.toContain("标准答案仅服务端持有");
       lesson.plan?.scenes.forEach((scene) => scene.visual && expectVisualGrounded(scene.visual, session));
       signatures.add(lesson.blocks.map((block) => block.label).join("→"));
@@ -52,11 +53,11 @@ describe("第二阶段学科原生板书", () => {
   it("九学科权威正文逐块绑定学科动作，并只保留原题真实证据", () => {
     for (const subject of subjects) {
       const session = representativeSession(subject);
-      const profile = subjectBoardProfileFor(session);
       const lesson = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "建立学科板书。", layout: "steps" });
-      expect(lesson.blocks.map((block) => block.label), subject).toEqual(profile.moves.map((move) => move.label));
+      const directed = directBoardBlueprint(session, { kind: "problem" });
+      expect(lesson.blocks.map((block) => block.label), subject).toEqual(directed.map((move) => move.label));
       expect(lesson.plan?.discipline, subject).toBe(subject);
-      expect(lesson.plan?.scenes.map((scene) => scene.move), subject).toEqual(profile.moves.map((move) => move.id));
+      expect(lesson.plan?.scenes.map((scene) => scene.move), subject).toEqual(directed.map((move) => move.id));
       lesson.plan?.scenes.forEach((scene, index) => {
         expect(lesson.blocks[index].content, `${subject}/${scene.title}/purpose`).toContain(scene.purpose);
         if (scene.evidence) {
@@ -77,13 +78,13 @@ describe("第二阶段学科原生板书", () => {
     vocabulary.problem.text = "What does the word 'plain' mean in this sentence? Use context clues.";
     vocabulary.problemGuide.goal = "Explain the word meaning in context.";
     const vocabularyBoard = createInstantBoardLesson(vocabulary, { kind: "problem" }, { recommended: true, reason: "需要结合上下文判断词义。", layout: "steps" });
-    expect(vocabularyBoard.blocks.map((block) => block.label)).toEqual(["Word evidence", "Local grammar", "Context clues", "Meaning boundary", "Answer in context"]);
+    expect(vocabularyBoard.blocks.map((block) => block.label)).toEqual(["Word evidence", "Local grammar", "Context clues", "Meaning boundary"]);
 
     const classification = representativeSession("chemistry");
     classification.problem.text = "空气、氧气、食盐水中哪些属于混合物？请按组成分类。";
     classification.problemGuide.goal = "按组成判断物质类别";
     const classificationBoard = createInstantBoardLesson(classification, { kind: "problem" }, { recommended: true, reason: "需要统一分类依据。", layout: "steps" });
-    expect(classificationBoard.blocks.map((block) => block.label)).toEqual(["分类对象", "分类依据", "逐项归类", "边界辨析", "分类迁移"]);
+    expect(classificationBoard.blocks.map((block) => block.label)).toEqual(["分类对象", "分类依据", "逐项归类", "边界辨析"]);
     expect(classificationBoard.blocks.map((block) => block.content).join(" ")).not.toContain("生成物");
 
     const genetics = representativeSession("biology");
@@ -100,7 +101,7 @@ describe("第二阶段学科原生板书", () => {
     optics.problem.text = "光从空气斜射入水中时发生折射，说明光线方向怎样变化并画出光路。";
     optics.problemGuide.goal = "用折射规律解释光路";
     const opticsBoard = createInstantBoardLesson(optics, { kind: "problem" }, { recommended: true, reason: "需要沿传播方向解释光路。", layout: "steps" });
-    expect(opticsBoard.blocks.map((block) => block.label)).toEqual(["光学系统", "光路追踪", "规律应用", "边界辨析", "现象回译"]);
+    expect(opticsBoard.blocks.map((block) => block.label)).toEqual(["光学系统", "光路追踪", "规律应用", "边界辨析"]);
     expect(opticsBoard.blocks.map((block) => block.content).join(" ")).not.toContain("每个数值");
 
     const geneticsExperiment = representativeSession("biology");
@@ -176,7 +177,7 @@ describe("第二阶段学科原生板书", () => {
     expression.problemGuide.goal = "解释遗传信息表达的过程。";
     expect(subjectBoardProfileFor(expression).moves[0].id).toBe("locate_genetic_information");
     const expressionBoard = createInstantBoardLesson(expression, { kind: "problem" }, { recommended: true, reason: "保留表达过程。", layout: "steps" });
-    expect(expressionBoard.blocks.map((block) => block.label)).toEqual(["信息起点", "转录过程", "翻译过程", "蛋白质到性状", "表达链复核"]);
+    expect(expressionBoard.blocks.map((block) => block.label)).toEqual(["信息起点", "转录过程", "翻译过程", "蛋白质到性状"]);
     const expressionText = expressionBoard.blocks.map((block) => block.content).join(" ");
     expect(expressionText).toContain("mRNA");
     expect(expressionText).toContain("核糖体");
@@ -358,6 +359,22 @@ describe("第二阶段学科原生板书", () => {
     const visual = board.plan?.scenes.find((scene) => scene.visual)?.visual;
     expect(visual?.kind).toBe("comparison_matrix");
     if (visual?.kind === "comparison_matrix") expect(visual.caption).toContain("不预填材料没有给出的异同");
+
+    const scopedComparison = representativeSession("chemistry");
+    scopedComparison.problem.text = "比较化合反应与分解反应在反应物、生成物数量上的区别。";
+    const scopedBoard = createInstantBoardLesson(scopedComparison, { kind: "problem" }, { recommended: true, reason: "统一比较维度。", layout: "comparison" });
+    const scopedVisual = scopedBoard.plan?.scenes.find((scene) => scene.visual?.kind === "comparison_matrix")?.visual;
+    expect(scopedVisual?.kind).toBe("comparison_matrix");
+    if (scopedVisual?.kind === "comparison_matrix") expect(scopedVisual.columns).toEqual(["化合反应", "分解反应"]);
+  });
+
+  it("标准答案仍在后台准备时，原题可验证的辅助图不会被关闭", () => {
+    const session = representativeSession("chemistry");
+    session.problem.text = "比较化合反应与分解反应在反应物、生成物数量上的区别。";
+    session.nodes.find((node) => node.id === session.rootNodeId)!.check.answer = PENDING_ORIGINAL_ANSWER;
+
+    const board = createInstantBoardLesson(session, { kind: "problem" }, { recommended: true, reason: "统一比较维度。", layout: "comparison" });
+    expect(board.plan?.scenes.some((scene) => scene.visual?.kind === "comparison_matrix")).toBe(true);
   });
 
   it("辅助只在证据足够时出现，并把倒序史料按真实时序排列", () => {

@@ -8,6 +8,7 @@ exports.advanceAfterMastery = advanceAfterMastery;
 const graph_1 = require("./graph");
 const flow_1 = require("./flow");
 const errors_1 = require("./errors");
+const problem_evidence_1 = require("./problem-evidence");
 function parseSession(value) {
     if (!value || typeof value !== "object")
         throw new Error("学习会话不存在");
@@ -15,6 +16,7 @@ function parseSession(value) {
     if (session.schemaVersion !== "1.1" || !Array.isArray(session.nodes) || !Array.isArray(session.edges) || !session.problem || !session.problemGuide) {
         throw new Error("学习会话结构不合法");
     }
+    session.problem.visualContext = (0, problem_evidence_1.parseProblemVisualContext)(session.problem.visualContext);
     for (const key of ["goal", "keyClue", "approach", "firstQuestion"]) {
         if (typeof session.problemGuide[key] !== "string" || !session.problemGuide[key].trim())
             throw new Error("原题引导结构不合法");

@@ -93,12 +93,26 @@ describe("板书缓存恢复", () => {
     const restored = restoreBoardLesson(session, legacy);
 
     expect(restored?.plan?.version).toBe(2);
-    expect(restored?.blocks).toHaveLength(5);
+    expect(restored?.blocks.length).toBeGreaterThanOrEqual(2);
+    expect(restored?.blocks.length).toBeLessThanOrEqual(6);
     expect(restored?.plan?.contentRevision).toBe(2);
-    expect(restored?.plan?.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "recap"]);
+    expect(restored?.plan?.scenes.map((scene) => scene.role)).toContain("reason");
     expect(restored?.blocks.some((block) => block.content.includes("直接复制的一整段聊天解释"))).toBe(false);
     expect(restored?.blocks.some((block) => block.content.includes("这是 Chat 讲解"))).toBe(false);
     expect(restored?.blocks.every((block) => block.content.length < 260)).toBe(true);
+  });
+
+  it("历史单区块缓存不会直接进入新版运行态，而是重建为至少两个教学场景", () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const legacy: BoardLesson = {
+      title: "旧板书", subtitle: "旧说明", returnLabel: "回到主线", layout: "steps",
+      blocks: [{ id: "only", label: "旧内容", content: "这里只保存过一个旧区块。", tone: "plain" }],
+      annotations: [],
+    };
+    expect(isStoredBoardLesson(legacy)).toBe(true);
+    const restored = restoreBoardLesson(session, legacy);
+    expect(restored?.plan?.version).toBe(2);
+    expect(restored?.blocks.length).toBeGreaterThanOrEqual(2);
   });
 
   it("拒绝缺少教学职责字段的伪新版缓存", () => {
@@ -164,7 +178,7 @@ describe("板书缓存恢复", () => {
     const restored = restoreBoardLesson(session, leaked);
     expect(restored).not.toBeNull();
     expect(restored?.plan?.learningGoal).not.toContain("最终答案是8");
-    expect(restored?.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
+    expect(restored?.blocks.map((block) => block.label)).toEqual(restored?.plan?.scenes.map((scene) => scene.title));
   });
 
   it("新版缓存中的虚构配图不会重新展示", () => {

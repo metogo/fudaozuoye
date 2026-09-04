@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 export type StreamingIndicatorStatus = "starting" | "streaming" | "finishing";
 
 export const STREAMING_FINISH_MS = 1160;
+export const STREAMING_SILENCE_MS = 900;
 
 interface StreamingIndicatorProps {
   status: StreamingIndicatorStatus;
@@ -10,11 +13,19 @@ interface StreamingIndicatorProps {
 }
 
 export function StreamingIndicator({ status, compact = false }: StreamingIndicatorProps) {
+  const [waiting, setWaiting] = useState(false);
   const stateLabel = status === "starting" ? "正在准备" : status === "streaming" ? "正在输出" : "输出完成";
+
+  useEffect(() => {
+    if (status !== "streaming") return;
+    const timer = window.setTimeout(() => setWaiting(true), STREAMING_SILENCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [status]);
 
   return <span
     className={`streaming-indicator ${compact ? "streaming-indicator--compact" : ""}`}
     data-phase={status}
+    data-waiting={status === "streaming" && waiting ? "true" : "false"}
     role="img"
     aria-label={stateLabel}
   >
@@ -26,6 +37,6 @@ export function StreamingIndicator({ status, compact = false }: StreamingIndicat
         <path d="m23 5-1.6 1.7"/>
         <path d="M25.5 14h-2.2"/>
       </g>
-    </svg> : <span className="streaming-indicator__ink-dot"/>}
+    </svg> : <><span className="streaming-indicator__ink-dot"/><span className="streaming-indicator__continuing">还在继续</span></>}
   </span>;
 }

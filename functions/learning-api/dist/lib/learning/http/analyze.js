@@ -6,6 +6,7 @@ const providers_1 = require("../providers");
 const mock_engine_1 = require("../mock-engine");
 const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
+const problem_evidence_1 = require("../problem-evidence");
 const types_1 = require("../types");
 const sse_1 = require("./sse");
 const subjects = new Set(types_1.subjects);
@@ -84,5 +85,14 @@ function parseProblemSnapshot(value) {
     if (typeof item.text !== "string" || item.text.trim().length < 3 || item.text.length > 8_000 || typeof item.childWork !== "string" || item.childWork.length > 8_000 || !subjects.has(item.subject) || !bands.has(item.gradeBand) || !(0, curriculum_1.isSupportedSubjectBand)(item.subject, item.gradeBand))
         throw new Error("题目确认信息不合法");
     const gradeBand = item.gradeBand;
-    return { text: item.text.trim(), childWork: item.childWork.trim(), subject: item.subject, gradeBand, learnerBand: gradeBand, confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0, userRevised: item.userRevised === true };
+    return {
+        text: item.text.trim(),
+        childWork: item.childWork.trim(),
+        subject: item.subject,
+        gradeBand,
+        learnerBand: gradeBand,
+        confidence: typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : 0,
+        userRevised: item.userRevised === true,
+        visualContext: (0, problem_evidence_1.parseProblemVisualContext)(item.visualContext),
+    };
 }

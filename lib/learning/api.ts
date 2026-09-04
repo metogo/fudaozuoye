@@ -1,6 +1,7 @@
 import { assertGraphInvariants, isReadyForOriginal, nextReadyNode } from "./graph";
 import { assertFlowState, removeRepeatedSolutionAction } from "./flow";
 import { ServiceError } from "./errors";
+import { parseProblemVisualContext } from "./problem-evidence";
 import type { ApiEnvelope, LearningSession, ProviderId } from "./types";
 
 export function parseSession(value: unknown): LearningSession {
@@ -9,6 +10,7 @@ export function parseSession(value: unknown): LearningSession {
   if (session.schemaVersion !== "1.1" || !Array.isArray(session.nodes) || !Array.isArray(session.edges) || !session.problem || !session.problemGuide) {
     throw new Error("学习会话结构不合法");
   }
+  session.problem.visualContext = parseProblemVisualContext(session.problem.visualContext);
   for (const key of ["goal", "keyClue", "approach", "firstQuestion"] as const) {
     if (typeof session.problemGuide[key] !== "string" || !session.problemGuide[key].trim()) throw new Error("原题引导结构不合法");
   }

@@ -25,6 +25,15 @@ export function prepareLearningMarkdown(source: string, streaming = false): stri
     .join("");
 }
 
+/** Remove tokens that only make sense while the next streamed chunk is pending. */
+export function finalizeLearningMarkdown(source: string): string {
+  let finalized = source.trimEnd();
+  while (/(?:\r?\n|^)[ \t]{0,3}(?:[-+*]|\d{1,3}[.)])$/u.test(finalized)) {
+    finalized = finalized.replace(/(?:\r?\n|^)[ \t]{0,3}(?:[-+*]|\d{1,3}[.)])$/u, "").trimEnd();
+  }
+  return finalized;
+}
+
 export function normalizeStandardLatexDelimiters(source: string, streaming = false): string {
   if (streaming && hasUnclosedCodeFence(source)) return source;
   return source.split(protectedMarkdownPattern)

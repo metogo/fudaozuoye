@@ -17,7 +17,7 @@ describe("数学原生推导板书", () => {
 
     const board = boardFor(session);
     expect(board.quality).toBeUndefined();
-    expect(board.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]);
+    expect(board.blocks.map((block) => block.label)).toEqual(["题意成模", "关系结构", "依据变换", "反查边界"]);
     const visible = board.blocks.map((block) => block.content).join("\n");
     for (const expected of ["$b=3$", "$S=\\frac{3\\sqrt{3}}{2}$", "$b+c=2a\\cos C$", "$c^{2}=a^{2}+b^{2}-2ab\\cos C$", "$a^{2}=c(b+c)$", "三边不等式"]) expect(visible).toContain(expected);
     expect(visible).not.toContain("A. 3√3");

@@ -17,10 +17,12 @@
     "test": "vitest run",
     "test:real-model": "node scripts/real-model-regression.mjs",
     "test:e2e:real-users": "node --env-file=.env.local scripts/real-user-e2e.mjs",
+    "test:e2e:board": "node --env-file=.env.local scripts/board-stage-a-e2e.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.3",
+    "html-to-image": "^1.11.13",
     "jsxgraph": "^1.13.2",
     "katex": "^0.18.4",
     "mermaid": "^11.17.2",

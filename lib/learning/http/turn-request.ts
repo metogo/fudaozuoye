@@ -14,7 +14,7 @@ export async function parseTurnRequest(request: Request, multipart: boolean): Pr
   let inputValue: unknown;
   try { inputValue = JSON.parse(inputRaw); } catch { throw new Error("学习操作不合法"); }
   const input = parseTurnInput(inputValue);
-  if (input.type !== "image_question" && input.type !== "image_answer") throw new Error("图片只能用于当前提问或作答");
+  if (input.type !== "start" && input.type !== "image_question" && input.type !== "image_answer") throw new Error("图片只能用于原题分析、当前提问或作答");
   const image = form.get("image");
   if (!(image instanceof File)) throw new Error("请先选择要发送的图片");
   await assertImageFile(image);

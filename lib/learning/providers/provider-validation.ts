@@ -3,6 +3,7 @@ import { assertGraphInvariants } from "../graph";
 import { createInitialFlow } from "../flow";
 import { subjectPendingGuide } from "../subject-learning-guide";
 import { subjects, type BoardSuggestion, type KnowledgeNode, type LearningSession, type ProblemGuide, type ProblemSnapshot, type ProviderId, type ReasoningLevel } from "../types";
+import { parseProblemVisualContext, visualEvidenceTexts } from "../problem-evidence";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
@@ -76,10 +77,17 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
   const subject = normalizedSubject(result.subject);
   const recognizedBand = normalizedGradeBand(result.gradeBand);
   const confidence = normalizedConfidence(result.confidence);
-  if (typeof result.childWork !== "string" || !subject || !recognizedBand || confidence === null) throw new Error("模型识别结果结构不合法");
+  if (typeof result.childWork !== "string") throw new Error("模型识别结果缺少学生已有作答字段");
+  if (!subject) throw new Error("模型识别结果中的学科不合法");
+  if (!recognizedBand) throw new Error("模型识别结果中的学段不合法");
+  if (confidence === null) throw new Error("模型识别结果中的置信度不合法");
   if (confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
   const gradeBand = normalizeSubjectBand(subject, recognizedBand);
-  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false };
+  const visualContext = parseProblemVisualContext(result.visualContext);
+  if (!visualContext) throw new Error("照片识别结果缺少题图相关性判断");
+  if (!visualContext.related && /(?:如图|见图|下图|图中|根据图|观察图)/.test(result.text)) throw new Error("题干明确指向配图，但题图相关性判断为不相关");
+  if (visualContext.related && visualContext.affectsSolving && visualContext.confidence < 0.55) throw new NonRepairableValidationError("题图中的关键条件无法可靠识别，请重新拍摄并确保题干和配图完整清晰");
+  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false, visualContext };
 }
 
 export function parseTextProblem(result: JsonObject, originalText: string): ProblemSnapshot {
@@ -96,14 +104,17 @@ export function parseTextProblem(result: JsonObject, originalText: string): Prob
 }
 
 function normalizedSubject(value: unknown): ProblemSnapshot["subject"] | null {
-  const aliases: Record<string, ProblemSnapshot["subject"]> = { math: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
+  const aliases: Record<string, ProblemSnapshot["subject"]> = { math: "math", mathematics: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
   const normalized = aliases[String(value ?? "").trim().toLowerCase()];
   return normalized && subjects.includes(normalized) ? normalized : null;
 }
 
 function normalizedGradeBand(value: unknown): ProblemSnapshot["gradeBand"] | null {
-  const aliases: Record<string, ProblemSnapshot["gradeBand"]> = { primary: "primary", 小学: "primary", junior: "junior", 初中: "junior", senior: "senior", 高中: "senior" };
-  return aliases[String(value ?? "").trim().toLowerCase()] ?? null;
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (/小学|primary|elementary/.test(raw)) return "primary";
+  if (/初中|junior|middle school/.test(raw)) return "junior";
+  if (/高中|senior|high school/.test(raw)) return "senior";
+  return null;
 }
 
 function normalizedConfidence(value: unknown): number | null {
@@ -182,7 +193,11 @@ function findBlueprintDetails(value: unknown, depth: number): JsonObject[] {
 }
 
 export function problemEvidenceSources(problem: ProblemSnapshot): EvidenceSource[] {
-  return [{ type: "problem", text: problem.text }, ...(problem.childWork ? [{ type: "child_work" as const, text: problem.childWork }] : [])];
+  return [
+    { type: "problem", text: problem.text },
+    ...visualEvidenceTexts(problem).map((text) => ({ type: "problem" as const, text })),
+    ...(problem.childWork ? [{ type: "child_work" as const, text: problem.childWork }] : []),
+  ];
 }
 
 export function expansionEvidenceSources(problem: ProblemSnapshot, target: KnowledgeNode): EvidenceSource[] {

@@ -3,6 +3,8 @@ import { explicitAnswerClaimLeak, isShortTextAnswer, normalizedAnswerMath, prote
 import { sortChronology } from "./board-chronology";
 import { isTaskInstructionText } from "./board-evidence";
 import { createMathBoardAids, createMathBoardContent } from "./board-math-content";
+import { PENDING_ORIGINAL_ANSWER } from "./providers/provider-validation";
+import { problemEvidenceText } from "./problem-evidence";
 
 export function enrichBoardPlanWithSafeAids(session: LearningSession, plan: BoardPlan, options: { contextualAids?: boolean } = {}): BoardPlan {
   const scenes = plan.scenes.map((scene) => ({ ...scene }));
@@ -50,11 +52,12 @@ export function isBoardLessonSafeForRestore(session: LearningSession, lesson: Bo
   const visibleText = boardLessonVisibleText(lesson);
   const visibleMath = normalizedAnswerMath(visibleText);
   const normalizedAnswer = normalizedAnswerMath(answer);
-  const answerAlreadyInProblem = normalizedAnswer.length >= 2 && normalizedAnswerMath(session.problem.text).includes(normalizedAnswer);
+  const problemEvidence = problemEvidenceText(session.problem);
+  const answerAlreadyInProblem = normalizedAnswer.length >= 2 && normalizedAnswerMath(problemEvidence).includes(normalizedAnswer);
   if (!answerAlreadyInProblem && !isShortTextAnswer(answer) && normalizedAnswer.length >= 2 && protectedAnswerVariants(answer).some((variant) => visibleMath.includes(variant))) return false;
   if (explicitAnswerClaimLeak(visibleText, answer)) return false;
-  if (shortTextAnswerLeak(visibleText, answer, session.problem.text)) return false;
-  if (protectedShortAnswers(answer).some((candidate) => shortProtectedAnswerLeak(visibleText, candidate, session.problem.text))) return false;
+  if (shortTextAnswerLeak(visibleText, answer, problemEvidence)) return false;
+  if (protectedShortAnswers(answer).some((candidate) => shortProtectedAnswerLeak(visibleText, candidate, problemEvidence))) return false;
   const explanation = normalizedAnswerMath(root?.check.explanation ?? "");
   return explanation.length < 12 || !visibleMath.includes(explanation);
 }
@@ -69,8 +72,9 @@ function safePlanFromLegacyLesson(lesson: BoardLesson): BoardPlan {
 }
 
 function safeAidCandidates(session: LearningSession, plan: BoardPlan): BoardSemanticVisual[] {
-  const mathContent = session.problem.subject === "math" ? createMathBoardContent(session.problem.text) : null;
-  const triangle = rightTriangleContext(session.problem.text);
+  const evidence = problemEvidenceText(session.problem);
+  const mathContent = session.problem.subject === "math" ? createMathBoardContent(evidence) : null;
+  const triangle = rightTriangleContext(evidence);
   const root = session.nodes.find((node) => node.id === session.rootNodeId);
   if (!root?.check.answer.trim()) return [];
   const native = subjectNativeAid(session, plan);
@@ -81,9 +85,11 @@ function safeAidCandidates(session: LearningSession, plan: BoardPlan): BoardSema
 }
 
 function subjectNativeAid(session: LearningSession, plan: BoardPlan): BoardSemanticVisual | null {
-  const comparison = comparisonFromProblem(session.problem.text);
+  const evidence = problemEvidenceText(session.problem);
+  const comparison = comparisonFromProblem(evidence);
   if (comparison) return comparison;
-  if (session.problem.subject === "history") return timelineFromProblem(session.problem.text) ?? evidenceChainFromPlan(plan);
+  if (session.problem.subject === "math") return processFlowFromPlan(plan);
+  if (session.problem.subject === "history") return timelineFromProblem(evidence) ?? evidenceChainFromPlan(plan);
   if (session.problem.subject === "chinese" || session.problem.subject === "english" || session.problem.subject === "politics") return evidenceChainFromPlan(plan);
   return processFlowFromPlan(plan);
 }
@@ -91,7 +97,8 @@ function subjectNativeAid(session: LearningSession, plan: BoardPlan): BoardSeman
 function comparisonFromProblem(problem: string): BoardComparisonVisual | null {
   const clause = problem.split(/[。！？!?；;\n]/).map((item) => item.trim()).find((item) => /(?:比较|对比|异同|difference|compare)/i.test(item));
   if (!clause) return null;
-  const match = clause.match(/(?:比较|对比)\s*([^，。；]{1,18}?)\s*(?:与|和)\s*([^，。；]{1,18}?)(?:的)?(?:异同|区别|共同点|$)/) ?? clause.match(/compare\s+(.{1,18}?)\s+(?:with|and)\s+(.{1,18}?)(?:[.。]|$)/i);
+  const scoped = clause.match(/(?:比较|对比)\s*([^，。；]{1,24}?)\s*(?:与|和)\s*([^，。；]{1,24}?)\s*在[^，。；]{1,32}?(?:上|中)(?:的)?(?:异同|区别|共同点|作用)/);
+  const match = scoped ?? clause.match(/(?:比较|对比)\s*([^，。；]{1,18}?)\s*(?:与|和)\s*([^，。；]{1,18}?)(?:的)?(?:异同|区别|共同点|$)/) ?? clause.match(/compare\s+(.{1,18}?)\s+(?:with|and)\s+(.{1,18}?)(?:[.。]|$)/i);
   if (!match) return null;
   const left = match[1].trim();
   const right = match[2].trim();
@@ -150,11 +157,14 @@ function compactEvidence(value: string): string { return value.normalize("NFKC")
 function semanticVisualLeaksAnswer(session: LearningSession, visual: BoardSemanticVisual): boolean {
   const root = session.nodes.find((node) => node.id === session.rootNodeId);
   const answer = root?.check.answer ?? "";
+  // 安全辅助图只使用原题和确定性板书结构。首讲仍在后台准备标准答案时，
+  // 没有隐藏答案可被带入图中，不能因此关闭整个视觉内容引擎。
+  if (answer === PENDING_ORIGINAL_ANSWER) return false;
   const visibleText = semanticVisualText(visual).join("\n");
   const visibleMath = normalizedAnswerMath(visibleText);
   const normalizedAnswer = normalizedAnswerMath(answer);
   if (normalizedAnswer.length >= 2 && protectedAnswerVariants(answer).some((variant) => visibleMath.includes(variant))) return true;
-  if (protectedShortAnswers(answer).some((candidate) => shortProtectedAnswerLeak(visibleText, candidate, session.problem.text))) return true;
+  if (protectedShortAnswers(answer).some((candidate) => shortProtectedAnswerLeak(visibleText, candidate, problemEvidenceText(session.problem)))) return true;
   const explanation = normalizedAnswerMath(root?.check.explanation ?? "");
   return explanation.length >= 12 && visibleMath.includes(explanation);
 }

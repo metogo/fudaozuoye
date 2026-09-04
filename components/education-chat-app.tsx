@@ -5,9 +5,12 @@ import dynamic from "next/dynamic";
 import { readSseResponse } from "@/lib/learning/client-sse";
 import { boardContextFromChat } from "@/lib/learning/board-context";
 import { enrichBoardLessonWithSafeAids } from "@/lib/learning/board-aids";
+import { compileBoardExperience, legacyBoardWorkspaceKey } from "@/lib/learning/board-experience";
 import { BOARD_CACHE_VERSION, isStoredBoardCache, isStoredBoardLesson, type StoredBoardCache } from "@/lib/learning/board-cache";
 import { compileBoardDocument, createBoardWorkspaceState, isStoredBoardWorkspaceState, restoreBoardWorkspaceState } from "@/lib/learning/board-workspace";
-import type { BoardDocument, BoardLesson, BoardWorkspaceState, ChatMessage, ClientSessionState, LearningChoice, LearningGate, LearningSession, LearningTurnInput, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
+import { finalizeLearningMarkdown } from "@/lib/learning/presentation";
+import type { BoardDocument, BoardExperience, BoardLesson, BoardWorkspaceState, ChatMessage, ClientSessionState, LearningChoice, LearningGate, LearningSession, LearningTurnInput, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
+import { needsVisualReview, requiresProblemImage } from "@/lib/learning/problem-evidence";
 import { ImageCropper } from "./image-cropper";
 import { BoardErrorBoundary } from "./board-error-boundary";
 import { LearningChat } from "./learning-chat";
@@ -41,7 +44,7 @@ export function EducationChatApp() {
   const [responseCrop, setResponseCrop] = useState<{ file: File; intent: "answer" | "question" } | null>(null);
   const [whiteboardIntent, setWhiteboardIntent] = useState<"answer" | "question" | null>(null);
   const [reviewProblem, setReviewProblem] = useState<ProblemSnapshot | null>(null);
-  const [boardLesson, setBoardLesson] = useState<BoardLesson | null>(null);
+  const [boardExperience, setBoardExperience] = useState<BoardExperience | null>(null);
   const [cachedBoardLesson, setCachedBoardLesson] = useState<BoardLesson | null>(null);
   const [boardDocument, setBoardDocument] = useState<BoardDocument | null>(null);
   const [boardWorkspaceState, setBoardWorkspaceState] = useState<BoardWorkspaceState | null>(null);
@@ -76,17 +79,19 @@ export function EducationChatApp() {
             setMessages(restored.messages.map((message) => ({ ...message, status: message.status === "streaming" ? "error" : message.status === "finishing" ? "complete" : message.status })));
             setCachedBoardLesson(null);
             boardRestoreRequestIdRef.current = restored.session.requestId;
-            if (isStoredBoardCache(restored.boardCache, restored.session.requestId)) {
+            const recoverableBoardCache = boardCacheCandidate(restored.boardCache, restored.session.requestId);
+            if (recoverableBoardCache) {
+              const legacyWorkspaceKey = isStoredBoardLesson(recoverableBoardCache.lesson) ? legacyBoardWorkspaceKey(recoverableBoardCache.lesson) : undefined;
               const expectedRequestId = restored.session.requestId;
               const expectedEpoch = ++boardRestoreEpochRef.current;
-              setPendingBoardCache(restored.boardCache);
-              void validateStoredBoardLesson(restored.stateToken, restored.boardCache.lesson).then((result) => {
+              if (isStoredBoardCache(restored.boardCache, restored.session.requestId)) setPendingBoardCache(restored.boardCache);
+              void validateStoredBoardLesson(restored.stateToken, recoverableBoardCache.lesson).then((result) => {
                 if (!active || boardRestoreRequestIdRef.current !== expectedRequestId || boardRestoreEpochRef.current !== expectedEpoch) return;
                 if (result.status === "unavailable") return;
                 setPendingBoardCache(null);
                 if (result.status === "valid") {
                   try {
-                    const document = compileBoardDocument(result.lesson);
+                    const document = compileBoardDocument(compileBoardExperience(result.lesson, { legacyWorkspaceKey }));
                     setCachedBoardLesson(result.lesson);
                     setBoardDocument(document);
                     setBoardWorkspaceState(restoreBoardWorkspaceState(document, restored.boardWorkspace));
@@ -263,7 +268,7 @@ export function EducationChatApp() {
       const recognized = result.recognized;
       if (!recognized) throw new Error("没有识别到完整题目");
       finishPendingImageMessage("complete");
-      if (recognized.confidence < 0.82) {
+      if (needsVisualReview(recognized)) {
         setReviewProblem(recognized);
         setLoadingLabel("");
         return;
@@ -294,7 +299,6 @@ export function EducationChatApp() {
     try {
       const form = new FormData();
       form.set("stage", "full"); form.set("provider", "doubao"); form.set("reasoningLevel", reasoningLevel); form.set("problem", JSON.stringify(problem));
-      if (image) form.set("image", new File([image], "homework.jpg", { type: "image/jpeg" }));
       const result: { next?: ClientSessionState } = {};
       await postFormSse(form, (event, data) => {
         if (event === "phase") setLoadingLabel(labelOf(data, "正在准备讲解"));
@@ -310,8 +314,13 @@ export function EducationChatApp() {
       setBoardWorkspaceState(null);
       setSession(next.session); setStateToken(next.stateToken); setPendingImage(null);
       addMessage(milestoneMessage("题目已经读懂，先从核心思路开始"));
-      await performTurn(next, { type: "start" });
-    } catch (error) { setNotice(messageOf(error)); setRetry("重新分析", () => analyzeProblem(problem, image)); }
+      await performTurn(next, { type: "start" }, "chat", requiresProblemImage(problem) ? image ?? undefined : undefined);
+    } catch (error) {
+      const message = messageOf(error);
+      const needsNewPhoto = /重新拍摄|重新提交原题照片|关键条件仍不清楚/.test(message);
+      setNotice(needsNewPhoto ? `${message}。请用下方相机或相册换一张更完整、清晰的照片。` : message);
+      if (!needsNewPhoto) setRetry("重新分析", () => analyzeProblem(problem, image));
+    }
     finally {
       const ownsRequest = abortRef.current === controller;
       finishRequest(controller);
@@ -393,13 +402,14 @@ export function EducationChatApp() {
         }
         if (event === "board.lesson") {
           const lesson = enrichBoardLessonWithSafeAids(current.session, data as BoardLesson);
-          const document = compileBoardDocument(lesson);
+          const experience = compileBoardExperience(lesson);
+          const document = compileBoardDocument(experience);
           boardRestoreEpochRef.current += 1;
           setPendingBoardCache(null);
           setCachedBoardLesson(lesson);
           setBoardDocument(document);
           setBoardWorkspaceState(createBoardWorkspaceState(document));
-          setBoardLesson(lesson);
+          setBoardExperience(experience);
         }
         if (event === "flow.update") {
           const next = data as ClientSessionState;
@@ -461,7 +471,7 @@ export function EducationChatApp() {
     boardRestoreEpochRef.current += 1;
     sessionStorage.removeItem(SESSION_KEY);
     revokePreviews();
-    setSession(null); setStateToken(""); setMessages([]); setReviewProblem(null); setBoardLesson(null); setCachedBoardLesson(null); setBoardDocument(null); setBoardWorkspaceState(null); setPendingBoardCache(null); setPendingImage(null); setCropFile(null); setResponseCrop(null); setWhiteboardIntent(null); setBusy(false); setLoadingLabel(""); setNotice("");
+    setSession(null); setStateToken(""); setMessages([]); setReviewProblem(null); setBoardExperience(null); setCachedBoardLesson(null); setBoardDocument(null); setBoardWorkspaceState(null); setPendingBoardCache(null); setPendingImage(null); setCropFile(null); setResponseCrop(null); setWhiteboardIntent(null); setBusy(false); setLoadingLabel(""); setNotice("");
     clearRetry();
   };
 
@@ -490,10 +500,11 @@ export function EducationChatApp() {
 
   const reopenBoard = () => {
     if (!cachedBoardLesson) return;
-    const document = boardDocument ?? compileBoardDocument(cachedBoardLesson);
+    const experience = compileBoardExperience(cachedBoardLesson);
+    const document = boardDocument ?? compileBoardDocument(experience);
     setBoardDocument(document);
     setBoardWorkspaceState((current) => restoreBoardWorkspaceState(document, current));
-    setBoardLesson(cachedBoardLesson);
+    setBoardExperience(experience);
   };
 
   const updateBoardWorkspace = (next: BoardWorkspaceState) => {
@@ -509,7 +520,7 @@ export function EducationChatApp() {
       cancelReasonRef.current = "board-close";
       abortRef.current?.abort();
     }
-    setBoardLesson(null);
+    setBoardExperience(null);
     const milestone = milestoneMessage("板书讲解收起，回到刚才的学习任务");
     setMessages((current) => current.map((message) => message.surface === "board" ? { ...message, surface: "chat" as const } : message).concat(milestone));
   };
@@ -532,7 +543,7 @@ export function EducationChatApp() {
   };
   const finishStreamMessage = (messageId: string, scopeLabel?: string) => {
     cancelMessageFinish(messageId);
-    updateMessage(messageId, (message) => ({ ...message, status: "finishing", scopeLabel }));
+    updateMessage(messageId, (message) => ({ ...message, text: finalizeLearningMarkdown(message.text), status: "finishing", scopeLabel }));
     const timer = window.setTimeout(() => {
       updateMessage(messageId, (message) => ({ ...message, status: "complete" }));
       messageFinishTimersRef.current.delete(messageId);
@@ -554,7 +565,7 @@ export function EducationChatApp() {
 
   if (!hydrated) return <div className="flex h-dvh items-center justify-center bg-[#f7f6f2] text-xs text-stone-400">正在准备学习空间…</div>;
   const initialWhiteboard = !session && whiteboardIntent === "question";
-  return <><LearningChat messages={messages} session={session} reasoningLevels={reasoningLevels} reasoningLevel={reasoningLevel} ready={ready} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} reviewProblem={reviewProblem} onReasoningLevel={selectReasoningLevel} onFile={(file) => { setNotice(""); clearRetry(); setCropFile(file); }} onResponsePhoto={(file, intent) => { setNotice(""); clearRetry(); setResponseCrop({ file, intent }); }} onWhiteboard={setWhiteboardIntent} onSend={sendText} onQuestion={askCurrentQuestion} onChoice={choose} onSuggestion={chooseSuggestion} onConfirmProblem={confirmProblem} onRetryOriginal={retryOriginal} onRequestTransfer={requestTransfer} onReopenBoard={cachedBoardLesson ? reopenBoard : undefined} onNewProblem={reset} onRetry={retry}/>{cropFile && <ImageCropper file={cropFile} onConfirm={receiveImage} onCancel={() => setCropFile(null)}/>} {responseCrop && <ImageCropper file={responseCrop.file} title={responseCrop.intent === "answer" ? "只保留你的作答" : "只保留想问的位置"} hint="拖动框移动，拖四角精确调整" confirmLabel={responseCrop.intent === "answer" ? "使用这份作答" : "发送这张图片"} onConfirm={(blob, previewUrl) => { const intent = responseCrop.intent; setResponseCrop(null); void sendImageResponse(blob, previewUrl, intent, "photo"); }} onCancel={() => setResponseCrop(null)}/>} {whiteboardIntent && <WhiteboardInput title={initialWhiteboard ? "白板写题" : "白板作答"} taskLabel={initialWhiteboard ? "写下题目、公式或画出图形" : session?.flow.activeGate?.title ?? "围绕当前题目写下步骤或画出疑问"} submitLabel={initialWhiteboard ? "识别这道题" : whiteboardIntent === "answer" ? "提交作答" : "发送提问"} hint={initialWhiteboard ? "写题目、公式或画图都可以，AI 会先识别再开始讲解" : undefined} onConfirm={(blob, previewUrl) => { const intent = whiteboardIntent; setWhiteboardIntent(null); if (!session) void receiveImage(blob, previewUrl); else void sendImageResponse(blob, previewUrl, intent, "whiteboard"); }} onCancel={() => setWhiteboardIntent(null)}/>} {boardLesson && boardDocument && boardWorkspaceState && <BoardErrorBoundary onClose={closeBoard}><LearningBoard lesson={boardLesson} document={boardDocument} workspaceState={boardWorkspaceState} onWorkspaceChange={updateBoardWorkspace} messages={messages.filter((message) => message.surface === "board")} sourceMessages={sourceMessagesForBoard(boardLesson, messages)} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} onAsk={askOnBoard} onRegenerate={regenerateBoard} onClose={closeBoard} onRetry={retry}/></BoardErrorBoundary>}</>;
+  return <><LearningChat messages={messages} session={session} reasoningLevels={reasoningLevels} reasoningLevel={reasoningLevel} ready={ready} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} reviewProblem={reviewProblem} onReasoningLevel={selectReasoningLevel} onFile={(file) => { setNotice(""); clearRetry(); setCropFile(file); }} onResponsePhoto={(file, intent) => { setNotice(""); clearRetry(); setResponseCrop({ file, intent }); }} onWhiteboard={setWhiteboardIntent} onSend={sendText} onQuestion={askCurrentQuestion} onChoice={choose} onSuggestion={chooseSuggestion} onConfirmProblem={confirmProblem} onRetryOriginal={retryOriginal} onRequestTransfer={requestTransfer} onReopenBoard={cachedBoardLesson ? reopenBoard : undefined} onNewProblem={reset} onRetry={retry}/>{cropFile && <ImageCropper file={cropFile} onConfirm={receiveImage} onCancel={() => setCropFile(null)}/>} {responseCrop && <ImageCropper file={responseCrop.file} title={responseCrop.intent === "answer" ? "只保留你的作答" : "只保留想问的位置"} hint="拖动框移动，拖四角精确调整" confirmLabel={responseCrop.intent === "answer" ? "使用这份作答" : "发送这张图片"} onConfirm={(blob, previewUrl) => { const intent = responseCrop.intent; setResponseCrop(null); void sendImageResponse(blob, previewUrl, intent, "photo"); }} onCancel={() => setResponseCrop(null)}/>} {whiteboardIntent && <WhiteboardInput title={initialWhiteboard ? "白板写题" : "白板作答"} taskLabel={initialWhiteboard ? "写下题目、公式或画出图形" : session?.flow.activeGate?.title ?? "围绕当前题目写下步骤或画出疑问"} submitLabel={initialWhiteboard ? "识别这道题" : whiteboardIntent === "answer" ? "提交作答" : "发送提问"} hint={initialWhiteboard ? "写题目、公式或画图都可以，AI 会先识别再开始讲解" : undefined} onConfirm={(blob, previewUrl) => { const intent = whiteboardIntent; setWhiteboardIntent(null); if (!session) void receiveImage(blob, previewUrl); else void sendImageResponse(blob, previewUrl, intent, "whiteboard"); }} onCancel={() => setWhiteboardIntent(null)}/>} {boardExperience && boardDocument && boardWorkspaceState && <BoardErrorBoundary onClose={closeBoard}><LearningBoard experience={boardExperience} document={boardDocument} workspaceState={boardWorkspaceState} onWorkspaceChange={updateBoardWorkspace} messages={messages.filter((message) => message.surface === "board")} sourceMessages={sourceMessagesForBoard(boardExperience, messages)} busy={busy} loadingLabel={loadingLabel} notice={notice} retryLabel={retryLabel} onAsk={askOnBoard} onRegenerate={regenerateBoard} onClose={closeBoard} onRetry={retry}/></BoardErrorBoundary>}</>;
 }
 
 export function understandingChoiceFromText(text: string): "continue" | "try" | "not_understood" | null {
@@ -586,7 +597,7 @@ function isStoredChatState(value: unknown): value is StoredChatState {
 
 type BoardCacheValidation = { status: "valid"; lesson: BoardLesson } | { status: "invalid" } | { status: "unavailable" };
 
-async function validateStoredBoardLesson(stateToken: string, lesson: BoardLesson): Promise<BoardCacheValidation> {
+async function validateStoredBoardLesson(stateToken: string, lesson: unknown): Promise<BoardCacheValidation> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 8_000);
   try {
@@ -607,9 +618,15 @@ async function validateStoredBoardLesson(stateToken: string, lesson: BoardLesson
   }
 }
 
+function boardCacheCandidate(value: unknown, requestId: string): { lesson: unknown } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  return candidate.requestId === requestId && "lesson" in candidate ? { lesson: candidate.lesson } : null;
+}
+
 function userMessage(text: string): ChatMessage { return { id: id("user"), role: "user", kind: "user", text, status: "complete", createdAt: new Date().toISOString() }; }
 function milestoneMessage(text: string, surface: "chat" | "board" = "chat"): ChatMessage { return { id: id("milestone"), role: "system", kind: "milestone", text, status: "complete", surface, createdAt: new Date().toISOString() }; }
-function sourceMessagesForBoard(lesson: BoardLesson, messages: ChatMessage[]) { const ids = new Set(lesson.plan?.sourceMessageIds ?? []); return boardContextFromChat(messages.filter((message) => ids.has(message.id))); }
+function sourceMessagesForBoard(experience: BoardExperience, messages: ChatMessage[]) { const ids = new Set(experience.scenes.flatMap((scene) => scene.sourceMessageIds)); return boardContextFromChat(messages.filter((message) => ids.has(message.id))); }
 function id(prefix: string) { return `${prefix}-${crypto.randomUUID().slice(0, 8)}`; }
 function apiUrl(path: string) { const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, ""); return `${base ?? "/api"}${path}`; }
 function labelOf(value: unknown, fallback: string) { return String((value as { label?: string })?.label ?? fallback); }

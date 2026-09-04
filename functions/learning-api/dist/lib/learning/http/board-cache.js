@@ -5,16 +5,17 @@ const board_cache_1 = require("../board-cache");
 const errors_1 = require("../errors");
 const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
+const board_1 = require("../providers/board");
 async function postBoardCache(request) {
     try {
         (0, request_guards_1.assertSameOrigin)(request);
-        (0, request_guards_1.assertRateLimit)(request, 30);
+        (0, request_guards_1.assertRateLimit)(request, 30, (0, server_state_1.consentRateIdentity)(request) ?? undefined);
         (0, request_guards_1.assertContentLength)(request, 240_000);
         const body = await request.json();
         const session = (0, server_state_1.openSession)(body.stateToken);
-        const lesson = (0, board_cache_1.restoreBoardLesson)(session, body.lesson);
-        if (!lesson)
-            throw new Error("保存的板书没有通过可靠性复检");
+        const lesson = (0, board_cache_1.restoreBoardLesson)(session, body.lesson) ?? (0, board_1.createInstantBoardLesson)(session, session.flow.focus, {
+            recommended: true, reason: "保存的板书已失效，已按当前题目重建。", layout: "steps",
+        });
         return Response.json({ schemaVersion: "1.0", data: { lesson }, error: null });
     }
     catch (error) {

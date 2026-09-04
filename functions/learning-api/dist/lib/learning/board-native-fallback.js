@@ -9,6 +9,7 @@ const board_subject_engine_1 = require("./board-subject-engine");
 const presentation_1 = require("./presentation");
 const board_evidence_1 = require("./board-evidence");
 const answer_protection_1 = require("./providers/answer-protection");
+const problem_evidence_1 = require("./problem-evidence");
 function inferBoardSubject(session) {
     if (session.problem.subject === "math")
         return "math";
@@ -22,17 +23,17 @@ function createNativeBoardFallbackPlan(session, blocks) {
     const profile = (0, board_subject_engine_1.subjectBoardProfileFor)(session);
     const evidence = boardEvidenceCandidates(session);
     const scenes = blocks.map((block, index) => {
-        const move = profile.moves[index] ?? profile.moves.at(-1);
+        const move = profile.moves.find((candidate) => candidate.label === block.label) ?? profile.moves[index] ?? profile.moves.at(-1);
         return {
             id: block.id,
-            intent: ["extract", "connect", "derive", "compare", "verify"][index] ?? "verify",
+            intent: intentForRole(move.role),
             role: move.role,
             move: move.id,
             title: block.label,
             content: block.content,
             tone: block.tone,
             purpose: move.purpose,
-            evidence: evidence.find((candidate) => block.content.includes(candidate)) ?? evidence[0],
+            evidence: matchingEvidence(block.content, evidence, index),
             why: nativeMoveWhy(move.label, move.role),
             selfCheck: move.selfCheck,
             sourceMessageIds: [],
@@ -45,10 +46,25 @@ function createNativeBoardFallbackPlan(session, blocks) {
         subject: inferBoardSubject(session),
         discipline: session.problem.subject,
         thesis: profile.thesis,
-        learningGoal: `${profile.moves[0].purpose}，再${profile.moves[2].purpose}。`,
+        learningGoal: scenes.map((scene) => scene.purpose).filter(Boolean).join("，"),
         sourceMessageIds: [],
         scenes,
     };
+}
+function intentForRole(role) {
+    if (role === "orient")
+        return "extract";
+    if (role === "model")
+        return "connect";
+    if (role === "reason")
+        return "derive";
+    if (role === "misconception")
+        return "compare";
+    return "verify";
+}
+function matchingEvidence(content, evidence, index) {
+    const matches = evidence.filter((candidate) => content.includes(candidate));
+    return matches[index % matches.length] ?? evidence[index % evidence.length];
 }
 function createNativeBoardBlocks(session, scope) {
     return (0, board_subject_engine_1.createSubjectNativeBlocks)(session, scope);
@@ -59,7 +75,7 @@ function createNativeBoardTitle(session, scope) {
     return node?.title && !(0, answer_protection_1.generatedTextContainsAnswer)(node.title, answer) ? node.title : (0, board_subject_engine_1.subjectBoardProfileFor)(session).label;
 }
 function boardEvidenceCandidates(session) {
-    const values = [session.problem.text, ...session.nodes.flatMap((node) => node.kind === "concept" && node.diagnosticEvidence ? [node.diagnosticEvidence] : [])]
+    const values = [(0, problem_evidence_1.problemEvidenceText)(session.problem), ...session.nodes.flatMap((node) => node.kind === "concept" && node.diagnosticEvidence ? [node.diagnosticEvidence] : [])]
         .flatMap(board_evidence_1.extractBoardEvidenceClauses).map((value) => value.trim().replace(/\s+/g, " ")).filter((value) => value.length >= 4);
     const unique = Array.from(new Set(values)).map((value) => safeSlice(value, 120));
     return unique;

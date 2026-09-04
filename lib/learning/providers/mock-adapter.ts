@@ -34,7 +34,8 @@ export class MockProviderAdapter implements ProviderAdapter {
     if (!isBuiltInMockProblem(problem)) throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
     return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
   }
-  async completeChatSession(session: LearningSession) {
+  async completeChatSession(session: LearningSession, imageDataUrl?: string) {
+    void imageDataUrl;
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
     return root?.check.answer === "等待后台核验" ? rootOnlySession(analyzeMock(session.problem, this.id, this.reasoningLevel)) : session;
   }
@@ -67,8 +68,9 @@ export class MockProviderAdapter implements ProviderAdapter {
     const solution = adaptTeachingCopy(solutionMock(problem), teachingBandOf(problem));
     for (const part of solution.match(/.{1,12}/gs) ?? [solution]) { if (signal?.aborted) throw new DOMException("Aborted", "AbortError"); onDelta(part); }
   }
-  async streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string) {
+  async streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string, imageRole?: "problem" | "student") {
     void imageDataUrl;
+    void imageRole;
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const reply = adaptTeachingCopy(tutorReplyMock(session, scope, question), teachingBandOf(session.problem));
     for (const part of reply.match(/.{1,10}/gs) ?? [reply]) onDelta(part);

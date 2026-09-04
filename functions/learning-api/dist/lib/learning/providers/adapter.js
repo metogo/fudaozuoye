@@ -5,6 +5,7 @@ const curriculum_1 = require("../curriculum");
 const errors_1 = require("../errors");
 const grade_pedagogy_1 = require("../grade-pedagogy");
 const solution_recall_1 = require("../solution-recall");
+const problem_evidence_1 = require("../problem-evidence");
 const blueprint_1 = require("./blueprint");
 const board_generation_1 = require("./board-generation");
 const model_support_1 = require("./model-support");
@@ -14,6 +15,7 @@ const assessment_1 = require("./assessment");
 const student_response_1 = require("./student-response");
 const transient_fetch_1 = require("./transient-fetch");
 const provider_validation_1 = require("./provider-validation");
+const problem_image_analysis_1 = require("./problem-image-analysis");
 const solution_1 = require("./solution");
 var mock_adapter_1 = require("./mock-adapter");
 Object.defineProperty(exports, "MockProviderAdapter", { enumerable: true, get: function () { return mock_adapter_1.MockProviderAdapter; } });
@@ -38,7 +40,8 @@ class LiveProviderAdapter {
     async recognizeProblem(imageDataUrl, subject, gradeBand) {
         void subject;
         void gradeBand;
-        return this.validatedJsonRequest("你是严格的 K12 作业照片门禁与识别器。先判断图片里是否真实、清晰、完整地出现至少一道数学、物理、化学、生物、语文、英语、历史、地理或政治题。只看到天花板、墙面、人物、空白纸、无关物体、严重模糊、题干被裁断或多题无法分离时，绝对禁止猜测、补全或套用示例，必须返回 recognized=false。只有能逐字依据图片提取完整题干时才返回 recognized=true。只识别一道题及学生已有作答，不求解。输出严格 JSON。", "请根据题干中的术语、材料、公式、设问与难度判断学科和学段；没有足够依据时降低 confidence。physics、chemistry、biology、history、geography、politics 不支持 primary。输出字段：recognized(boolean), failureReason(string；成功时为空), text(string；失败时为空), childWork(string；失败时为空), subject(math|physics|chemistry|biology|chinese|english|history|geography|politics), gradeBand(primary|junior|senior), confidence(0到1；失败时为0)。", provider_validation_1.parseProblem, imageDataUrl);
+        const [system, prompt] = (0, problem_image_analysis_1.problemRecognitionPrompt)();
+        return this.validatedJsonRequest(system, prompt, provider_validation_1.parseProblem, imageDataUrl);
     }
     async recognizeTextProblem(text) {
         return this.validatedJsonRequest("你是严格的 K12 作业题门禁与分类器。判断用户文字是否包含一道可以学习的数学、物理、化学、生物、语文、英语、历史、地理或政治题。不得求解、不得改写或复述原题。只输出严格 JSON。", JSON.stringify({
@@ -73,33 +76,26 @@ class LiveProviderAdapter {
             return analysis;
         });
         onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
-        const blueprints = await this.generateBlueprintBatch(result.selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: problem.text }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
+        const blueprints = await this.generateBlueprintBatch(result.selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
         return (0, provider_validation_1.buildSession)(problem, this.id, this.reasoningLevel, this.modelId, blueprints, result.originalAnswer, result.originalExplanation, result.problemGuide);
     }
     async prepareChatSession(problem, onPhase) {
         onPhase?.("ready", "题目已读懂，正在准备核心思路");
         return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
-    async completeChatSession(session) {
+    async completeChatSession(session, imageDataUrl) {
         const problem = session.problem;
-        const system = [
-            "你是中国 K12 九学科原题求解器。只处理当前原题，不生成知识卡、板书、首讲或迁移题。输出严格 JSON。",
-            "originalAnswer 与 originalExplanation 是服务端保存的核验依据，必须准确、完整、可复核。",
-            "如果题目要求说明理由、解释原因或写出依据，originalAnswer 必须同时包含结论和不可缺少的理由，不能只写结论。",
-            "解题依据出现数学或物理公式时，必须使用 KaTeX 兼容的 LaTeX：行内写成 $...$，独立公式写成 $$...$$。所有字段不得包含 HTML。",
-        ].join("\n");
-        const prompt = JSON.stringify({
-            task: "完整求解原题，只返回后续验题必需的标准答案和可复核解题依据",
-            problem,
-            output: {
-                originalAnswer: "标准答案",
-                originalExplanation: "足以复核答案的完整解题依据",
-            },
-        });
-        const result = this.config.protocol === "chat-completions"
+        const { system, prompt } = (0, problem_image_analysis_1.problemSolutionRequest)(problem, Boolean(imageDataUrl));
+        const audited = imageDataUrl
+            ? await this.validatedJsonRequest(system, prompt, (value) => (0, problem_image_analysis_1.parseAuditedProblemSolution)(value, true, Boolean(problem.userRevised && problem.visualContext?.affectsSolving)), imageDataUrl)
+            : null;
+        if (audited)
+            (0, problem_image_analysis_1.assertConfirmedVisualFactsPreserved)(problem, audited.visualContext);
+        const result = audited?.solution ?? (this.config.protocol === "chat-completions"
             ? await this.validatedStructuredRequest(system, prompt, (0, model_support_1.problemSolutionTool)(), provider_validation_1.parseProblemSolution)
-            : await this.validatedJsonRequest(system, prompt, provider_validation_1.parseProblemSolution);
-        const completed = (0, provider_validation_1.buildSession)(problem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
+            : await this.validatedJsonRequest(system, prompt, provider_validation_1.parseProblemSolution));
+        const completedProblem = audited?.visualContext && !problem.userRevised ? { ...problem, visualContext: audited.visualContext } : problem;
+        const completed = (0, provider_validation_1.buildSession)(completedProblem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
         return { ...completed, requestId: session.requestId, createdAt: session.createdAt };
     }
     async diagnoseProblem(session, onPhase) {
@@ -139,7 +135,7 @@ class LiveProviderAdapter {
             });
         });
         onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
-        const blueprints = await this.generateBlueprintBatch(selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: problem.text }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
+        const blueprints = await this.generateBlueprintBatch(selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
         const nodes = blueprints.map(blueprint_1.knowledgeNodeFromBlueprint);
         return { nodes, edges: nodes.map((node, index) => ({ from: node.id, to: session.rootNodeId, reason: (0, provider_validation_1.edgeReason)(node, blueprints[index], "原题") })) };
     }
@@ -319,7 +315,7 @@ class LiveProviderAdapter {
         const target = concepts[0];
         if (!target || !root)
             throw new Error("找不到迁移题对应的核心知识点");
-        const original = { problem: session.problem.text, check: root.check.prompt, solutionBasis: root.check.explanation };
+        const original = { problem: (0, problem_evidence_1.problemEvidenceText)(session.problem), check: root.check.prompt, solutionBasis: root.check.explanation };
         const targets = concepts.map((node) => ({ id: node.conceptId, title: node.title, reason: node.simplification }));
         const system = [
             "你是 K12 迁移题生成器。生成一道与原题考查相同核心知识和解题方法、难度相近，但情境、数据和表述明显不同的短题。不能只挑一个局部前置知识另出一道过于简单的题；候选题必须能检验学生是否会迁移原题的核心方法。不得复述或换皮原题，不得泄露答案，不得声称是真题、高频题或编造来源。prompt 与 explanation 中的公式使用 KaTeX 兼容的 LaTeX；answer 保持便于学生直接输入和判定的纯答案。不得输出 HTML。",
@@ -355,8 +351,8 @@ class LiveProviderAdapter {
     generateSolution(problem, signal) {
         return (0, solution_1.generateValidatedSolution)(problem, (system, prompt, onDelta, maxTokens) => this.streamTextRequest(system, prompt, onDelta, signal, undefined, maxTokens));
     }
-    async streamTutorReply(session, scope, question, onDelta, signal, imageDataUrl) {
-        const imageInstruction = imageDataUrl ? "\n学生还附上了一张当前作答或草图。必须结合图片回应，但不要把它误认为一道新题。" : "";
+    async streamTutorReply(session, scope, question, onDelta, signal, imageDataUrl, imageRole = "student") {
+        const imageInstruction = imageDataUrl ? (0, problem_image_analysis_1.tutorImageInstruction)(imageRole === "problem") : "";
         let output = "";
         await this.streamTextRequest((0, tutor_1.tutorSystemPrompt)((0, grade_pedagogy_1.teachingBandOf)(session.problem)), `${(0, tutor_1.tutorPrompt)(session, scope, question)}${imageInstruction}`, (text) => { output += text; onDelta(text); }, signal, imageDataUrl);
         const gradeIssues = (0, grade_pedagogy_1.inspectGradeLanguage)(output, (0, grade_pedagogy_1.teachingBandOf)(session.problem), session.problem.text, "chat");
@@ -380,7 +376,7 @@ class LiveProviderAdapter {
         const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : null;
         const system = "你是 K12 教学呈现决策器。只判断当前一步是否因为图形、空间、多个条件关系、公式推导或对比结构而需要切换为全屏结构化板书。简单的一句话解释或单步计算必须返回 recommended=false。不得求解，不得输出答案。";
         const prompt = JSON.stringify({
-            problem: session.problem.text,
+            problem: (0, problem_evidence_1.problemEvidenceText)(session.problem),
             currentFocus: node ? { title: node.title, evidence: node.diagnosticEvidence, reason: node.simplification } : { keyClue: session.problemGuide.keyClue, approach: session.problemGuide.approach },
         });
         if (this.config.protocol === "chat-completions")
@@ -571,11 +567,14 @@ class LiveProviderAdapter {
                 throw (0, errors_1.providerError)("模型讲解传输未完整结束，请重试同一模型", 502);
         }
         catch (error) {
+            if (externalSignal?.aborted || this.requestSignal?.aborted)
+                throw new DOMException("请求已取消", "AbortError");
             if (error instanceof DOMException && error.name === "AbortError" && timeoutKind)
                 throw (0, errors_1.providerError)(timeoutKind === "total" ? "模型流式输出总时长超限，请稍后重试同一模型" : "模型流式输出等待超时，请稍后重试同一模型", 504);
             throw error;
         }
         finally {
+            controller.abort();
             externalSignal?.removeEventListener("abort", abort);
             this.requestSignal?.removeEventListener("abort", abort);
             if (timeout)

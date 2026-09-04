@@ -8,6 +8,7 @@ exports.parseQuestionSuggestions = parseQuestionSuggestions;
 exports.questionSuggestionsMock = questionSuggestionsMock;
 const flow_1 = require("../flow");
 const grade_pedagogy_1 = require("../grade-pedagogy");
+const problem_evidence_1 = require("../problem-evidence");
 const guideSectionLabels = {
     goal: "这道题要解决什么",
     keyClue: "先抓住这条线索",
@@ -79,7 +80,7 @@ function questionSuggestionsPrompt(session, scope, sourceText) {
     const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
     return JSON.stringify({
         task: "判断刚完成的讲解之后，是否存在值得学生顺手追问、但不会打断当前学习任务的问题。没有必要时返回 recommended=false。",
-        problem: session.problem.text,
+        problem: (0, problem_evidence_1.problemEvidenceText)(session.problem),
         currentFocus: scope.kind === "problem"
             ? { label: (0, flow_1.flowScopeLabel)(session, scope), guide: session.problemGuide }
             : { label: (0, flow_1.flowScopeLabel)(session, scope), title: node?.title, evidence: node?.diagnosticEvidence, teaching: node?.teaching.explanation },

@@ -4,13 +4,14 @@ import { describe, expect, it } from "vitest";
 import { LearningChat } from "@/components/learning-chat";
 import { LearningBoard } from "@/components/learning-board";
 import { RichLearningText } from "@/components/rich-learning-text";
-import { STREAMING_FINISH_MS, StreamingIndicator } from "@/components/streaming-indicator";
+import { STREAMING_FINISH_MS, STREAMING_SILENCE_MS, StreamingIndicator } from "@/components/streaming-indicator";
 import { understandingChoiceFromText } from "@/components/education-chat-app";
 import { answerGate, understandingGate } from "@/lib/learning/flow";
 import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "@/lib/learning/board-native-fallback";
+import { compileBoardExperience } from "@/lib/learning/board-experience";
 import { compileBoardDocument, createBoardWorkspaceState } from "@/lib/learning/board-workspace";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
-import { learningTextToPlainText, parseLearningPrompt, prepareLearningMarkdown, stripLearningChoiceLabel } from "@/lib/learning/presentation";
+import { finalizeLearningMarkdown, learningTextToPlainText, parseLearningPrompt, prepareLearningMarkdown, stripLearningChoiceLabel } from "@/lib/learning/presentation";
 import { solutionSystemPrompt } from "@/lib/learning/providers/model-support";
 import { tutorSystemPrompt } from "@/lib/learning/providers/tutor";
 import type { BoardLesson } from "@/lib/learning/types";
@@ -23,6 +24,7 @@ describe("AI 教学内容排版", () => {
     expect(starting).toContain('class="streaming-indicator');
     expect(starting).toContain('data-phase="streaming"');
     expect(starting).toContain('aria-label="正在输出"');
+    expect(starting).toContain("还在继续");
     expect(finishing).toContain('data-phase="finishing"');
     expect(finishing).toContain('aria-label="输出完成"');
     expect(starting).toContain("streaming-indicator__ink-dot");
@@ -30,6 +32,7 @@ describe("AI 教学内容排版", () => {
     expect(finishing).toContain("streaming-indicator__sparks");
     expect(finishing).not.toContain("pencil");
     expect(STREAMING_FINISH_MS).toBeGreaterThanOrEqual(1_100);
+    expect(STREAMING_SILENCE_MS).toBeGreaterThanOrEqual(700);
   });
 
   it("流式正文把状态标记接在最后一段，完成消息不再显示标记", () => {
@@ -39,6 +42,11 @@ describe("AI 教学内容排版", () => {
     expect(active).toContain("rich-learning-text--with-trailing");
     expect(active).toContain("streaming-indicator");
     expect(complete).not.toContain("streaming-indicator");
+    expect(active).not.toContain('aria-label="复制讲解"');
+    expect(complete).toContain('aria-label="复制讲解"');
+    expect(complete).toContain('title="复制文本"');
+    expect(complete).not.toContain('aria-haspopup="menu"');
+    expect(complete).not.toContain("复制图片");
   });
 
   it("首页不要求选择学段，直接开放拍照、相册、白板和文字发题入口", () => {
@@ -94,6 +102,7 @@ describe("AI 教学内容排版", () => {
     }));
 
     expect(html).toContain("模型识别为小学题");
+    expect(html).not.toContain("<time");
     expect(html).not.toContain("按高中方式讲");
     expect(html).not.toContain("课程内容：小学");
   });
@@ -308,6 +317,14 @@ describe("AI 教学内容排版", () => {
     expect(prepareLearningMarkdown("正在推导 $$\nx=3", true)).toBe("正在推导 $$\nx=3");
   });
 
+  it("消息完成时移除没有内容的尾部列表标记", () => {
+    expect(finalizeLearningMarkdown("结论已经说明完。\n\n- ")).toBe("结论已经说明完。");
+    expect(finalizeLearningMarkdown("三点说明\n\n1. 第一项\n2. ")).toBe("三点说明\n\n1. 第一项");
+    expect(finalizeLearningMarkdown("内容结束。\n\n*\n\n")).toBe("内容结束。");
+    expect(finalizeLearningMarkdown("内容结束。\n\n-\n*\n")).toBe("内容结束。");
+    expect(finalizeLearningMarkdown("- 有实际内容")).toBe("- 有实际内容");
+  });
+
   it("保护波浪线代码围栏，并保留无障碍文本中的大于号", () => {
     expect(prepareLearningMarkdown("~~~txt\nx = 3\n~~~")).toBe("~~~txt\nx = 3\n~~~");
     expect(learningTextToPlainText("条件 $x>3$")).toContain("x>3");
@@ -485,14 +502,17 @@ describe("AI 教学内容排版", () => {
       title: "速度关系 $v=s/t$",
       subtitle: "把 $s$、$t$ 与 $v$ 的关系放在一起看。",
       layout: "formula",
-      blocks: [{ id: "board-1", label: "核心关系", content: "先圈出 $v=s/t$，再核对单位。", tone: "key" }],
+      blocks: [
+        { id: "board-1", label: "核心关系", content: "先圈出 $v=s/t$，再核对单位。", tone: "key" },
+        { id: "board-2", label: "单位核对", content: "最后回到 $v=s/t$ 检查三个量的单位。", tone: "plain" },
+      ],
       annotations: [{ blockId: "board-1", target: "$v=s/t$", kind: "circle", reason: "这是连接路程与时间的核心公式 $v=s/t$。" }],
       visual: null,
       returnLabel: "回到原题",
     };
-    const document = compileBoardDocument(lesson);
+    const document = compileBoardDocument(compileBoardExperience(lesson));
     const html = renderToStaticMarkup(createElement(LearningBoard, {
-      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
+      experience: compileBoardExperience(lesson), document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
       messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
       onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
     }));
@@ -506,14 +526,17 @@ describe("AI 教学内容排版", () => {
       title: "速度关系",
       subtitle: "看清变量之间的关系。",
       layout: "formula",
-      blocks: [{ id: "board-1", label: "核心关系", content: "先由 $x+2=5$ 求出未知数。", tone: "key" }],
+      blocks: [
+        { id: "board-1", label: "核心关系", content: "先由 $x+2=5$ 求出未知数。", tone: "key" },
+        { id: "board-2", label: "回看等式", content: "变形后再代回原等式核对。", tone: "plain" },
+      ],
       annotations: [{ blockId: "board-1", target: "x+2=5", kind: "circle", reason: "这是当前推理使用的核心等式。" }],
       visual: null,
       returnLabel: "回到原题",
     };
-    const document = compileBoardDocument(lesson);
+    const document = compileBoardDocument(compileBoardExperience(lesson));
     const html = renderToStaticMarkup(createElement(LearningBoard, {
-      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
+      experience: compileBoardExperience(lesson), document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
       messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
       onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
     }));
@@ -521,6 +544,44 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain("board-mark--circle");
     expect(html).toContain("class=\"katex\"");
     expect(html).not.toContain("$</span>");
+  });
+
+  it("专用介质承担主内容时不再重复展示长正文和失去目标的标记", () => {
+    const lesson: BoardLesson = {
+      title: "等式变形",
+      subtitle: "看清每一步为什么成立",
+      layout: "formula",
+      blocks: [
+        { id: "given", label: "已知关系", content: "先确认题目给出的等式。", tone: "plain" },
+        { id: "derive", label: "推导过程", content: "这段迁移正文不应和公式脉络重复出现。", tone: "key" },
+      ],
+      annotations: [{ blockId: "derive", target: "迁移正文", kind: "box", reason: "隐藏正文的标记说明也不应单独出现。" }],
+      plan: {
+        learningGoal: "看清每一步为什么成立",
+        sourceMessageIds: [],
+        scenes: [
+          { id: "given", title: "已知关系", content: "先确认题目给出的等式。", tone: "plain", intent: "extract", sourceMessageIds: [], visual: null },
+          {
+            id: "derive", title: "推导过程", content: "这段迁移正文不应和公式脉络重复出现。", tone: "key", intent: "derive", sourceMessageIds: [],
+            visual: {
+              kind: "formula_chain", title: "公式脉络", evidence: "题目给出 $a=b$", caption: "每次只做一次等价变形。",
+              steps: [{ id: "f1", expression: "$a=b$", explanation: "写出已知" }, { id: "f2", expression: "$a+c=b+c$", explanation: "两边同加一个量" }],
+            },
+          },
+        ],
+      },
+      returnLabel: "回到原题",
+    };
+    const document = compileBoardDocument(compileBoardExperience(lesson));
+    const html = renderToStaticMarkup(createElement(LearningBoard, {
+      experience: compileBoardExperience(lesson), document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
+      messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
+      onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
+    }));
+    expect(html).toContain("board-scene-visual--primary");
+    expect(html).toContain("公式脉络");
+    expect(html).not.toContain("这段迁移正文");
+    expect(html).not.toContain("隐藏正文的标记说明也不应单独出现");
   });
 
   it("新版板书默认是一页连续课程，不展示无持久价值的学习记录工具", () => {
@@ -537,9 +598,9 @@ describe("AI 教学内容排版", () => {
       quality: { status: "safe_fallback", reason: "完整板书没有通过内容验收。" },
       returnLabel: "回到原题",
     };
-    const document = compileBoardDocument(lesson);
+    const document = compileBoardDocument(compileBoardExperience(lesson));
     const html = renderToStaticMarkup(createElement(LearningBoard, {
-      lesson, document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
+      experience: compileBoardExperience(lesson), document, workspaceState: createBoardWorkspaceState(document), onWorkspaceChange: () => {},
       messages: [], busy: false, loadingLabel: "", notice: "", retryLabel: "",
       onAsk: () => {}, onRegenerate: () => {}, onClose: () => {}, onRetry: () => {},
     }));
@@ -550,16 +611,13 @@ describe("AI 教学内容排版", () => {
     expect(html).not.toContain("board-course-hero__heading");
     expect(html.indexOf("board-course-route-nav")).toBeLessThan(html.indexOf("board-course-content"));
     expect(html.match(/data-board-step-index=/g)?.length).toBe(5);
-    for (const label of ["看懂题目", "找出联系", "关键推导", "易错检查", "举一反三"]) {
-      expect(html.match(new RegExp(label, "g"))?.length).toBe(2);
+    for (const label of ["题意成模", "关系结构", "依据变换", "反查边界", "迁移骨架"]) {
+      expect(html).toContain(label);
     }
-    for (const label of ["已知什么，要解决什么", "条件之间怎么连起来", "从哪里开始，为什么这样做", "哪些地方最容易出错", "同类题怎么解决"]) {
-      expect(html.match(new RegExp(label, "g"))?.length).toBe(1);
-    }
-    expect(html.match(/本题这一步：/g)?.length).toBe(5);
+    expect(html).not.toContain("本题这一步：");
     expect(html).toContain("本步目标");
     expect(html).toContain("怎么做");
-    expect(html.match(/题目依据/g)?.length).toBe(lesson.plan?.scenes.filter((scene) => scene.evidence).length);
+    expect(html.match(/题目依据/g)?.length).toBe(compileBoardExperience(lesson).scenes.filter((scene) => scene.medium === "text" && scene.evidence).length);
     expect(html).toContain("为什么");
     expect(html).toContain("自己检查");
     expect(html).toContain("当前是安全学习框架，不是完整板书");

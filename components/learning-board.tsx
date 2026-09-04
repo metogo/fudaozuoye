@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { learningTextToPlainText } from "@/lib/learning/presentation";
-import type { BoardConversationMessage, BoardDocument, BoardLesson, BoardWorkspaceState, ChatMessage } from "@/lib/learning/types";
+import type { BoardConversationMessage, BoardDocument, BoardExperience, BoardWorkspaceState, ChatMessage } from "@/lib/learning/types";
 import { BoardVisualFigure } from "./board-visual";
 import { BoardWorkspace } from "./board-workspace";
 import { ArrowIcon, ChevronIcon, NetworkIcon } from "./icons";
@@ -11,7 +11,7 @@ import { RichLearningText } from "./rich-learning-text";
 import { StreamingIndicator } from "./streaming-indicator";
 
 interface LearningBoardProps {
-  lesson: BoardLesson;
+  experience: BoardExperience;
   messages: ChatMessage[];
   sourceMessages?: BoardConversationMessage[];
   busy: boolean;
@@ -27,7 +27,7 @@ interface LearningBoardProps {
   onRetry: () => void;
 }
 
-export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loadingLabel, notice, retryLabel, document: boardDocument, workspaceState, onWorkspaceChange, onAsk, onRegenerate, onClose, onRetry }: LearningBoardProps) {
+export function LearningBoard({ experience, messages, sourceMessages = [], busy, loadingLabel, notice, retryLabel, document: boardDocument, workspaceState, onWorkspaceChange, onAsk, onRegenerate, onClose, onRetry }: LearningBoardProps) {
   const [input, setInput] = useState("");
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [panelExpanded, setPanelExpanded] = useState(false);
@@ -102,8 +102,7 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
   const lastUserIndex = visibleMessages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
   const hasAssistantOutputForCurrentTurn = busy && visibleMessages.slice(lastUserIndex + 1).some((message) => message.role === "assistant" && message.status !== "error");
   const quote = loadingLearningQuotes[quoteIndex % loadingLearningQuotes.length];
-  const plan = lesson.plan;
-  const showLegacyVisual = lesson.visual && !legacyVisualCovered(lesson.visual, plan) ? lesson.visual : null;
+  const showLegacyVisual = experience.legacyVisual && !legacyVisualCovered(experience.legacyVisual, experience) ? experience.legacyVisual : null;
   const togglePanel = () => {
     if (!panelExpanded) setHasUnreadAnswer(false);
     setPanelExpanded((value) => !value);
@@ -128,20 +127,20 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
     }
   };
 
-  return <section ref={boardRef} role="dialog" aria-modal="true" aria-label={`AI 专注板书：${learningTextToPlainText(lesson.title)}`} tabIndex={-1} onKeyDown={handleBoardKeyDown} className="learning-board fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-[#f1f2ea] text-stone-950 outline-none">
+  return <section ref={boardRef} role="dialog" aria-modal="true" aria-label={`AI 专注板书：${learningTextToPlainText(experience.title)}`} tabIndex={-1} onKeyDown={handleBoardKeyDown} className="learning-board fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-[#f1f2ea] text-stone-950 outline-none">
     <header className="flex shrink-0 items-center justify-between border-b border-stone-900/10 bg-[#f1f2ea]/90 px-4 py-3 backdrop-blur-xl sm:px-7">
-      <div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-950 text-white"><NetworkIcon className="h-4 w-4"/></span><div className="min-w-0"><p className="text-[9px] font-semibold tracking-[.16em] text-emerald-800">AI 专注板书</p><h1 className="truncate text-sm font-bold"><RichLearningText text={lesson.title} compact/></h1></div></div>
+      <div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-950 text-white"><NetworkIcon className="h-4 w-4"/></span><div className="min-w-0"><p className="text-[9px] font-semibold tracking-[.16em] text-emerald-800">AI 专注板书</p><h1 className="truncate text-sm font-bold"><RichLearningText text={experience.title} compact/></h1></div></div>
       <button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-stone-900/10 bg-white/65 px-4 text-xs font-semibold text-stone-700 shadow-sm">{busy ? "停止回答并返回" : "回到学习主线"}</button>
     </header>
 
     <div className="board-scroll min-h-0 flex-1 overflow-y-auto px-4 pt-6 sm:px-7 sm:pt-10" style={{ paddingBottom: questionDockHeight > 0 ? questionDockHeight + 44 : panelExpanded ? 280 : 112 }}>
       <article className="mx-auto w-full max-w-4xl">
-        {lesson.quality?.status === "safe_fallback" && <div role="status" className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1"><p className="text-xs font-bold">当前是安全学习框架，不是完整板书</p><p className="mt-1 text-[11px] leading-5 text-amber-900/75">{lesson.quality.reason} 已保留原学习位置，你可以重试完整板书。</p></div>
+        {experience.quality?.status === "safe_fallback" && <div role="status" className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1"><p className="text-xs font-bold">当前是安全学习框架，不是完整板书</p><p className="mt-1 text-[11px] leading-5 text-amber-900/75">{experience.quality.reason} 已保留原学习位置，你可以重试完整板书。</p></div>
           <button type="button" disabled={busy} onClick={onRegenerate} className="min-h-11 shrink-0 rounded-xl bg-amber-950 px-4 text-xs font-semibold text-white disabled:opacity-40">重试完整板书</button>
         </div>}
         {showLegacyVisual && <BoardVisualFigure visual={showLegacyVisual}/>}
-        <BoardWorkspace document={boardDocument} lesson={lesson} sourceMessages={sourceMessages} state={workspaceState} onChange={onWorkspaceChange}/>
+        <BoardWorkspace document={boardDocument} experience={experience} sourceMessages={sourceMessages} state={workspaceState} onChange={onWorkspaceChange}/>
       </article>
     </div>
 
@@ -179,7 +178,7 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
 
           <button type="button" onClick={onClose} className="board-return-task mt-2 flex min-h-11 w-full items-center gap-3 rounded-2xl px-3 text-left transition-colors hover:bg-stone-50">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-stone-900/10 bg-white text-emerald-900"><ArrowIcon className="h-3.5 w-3.5"/></span>
-            <span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold text-stone-400">{busy ? "停止回答并回到学习主线" : "回到学习主线"}</span><span className="block truncate text-[10px] font-semibold text-stone-600"><RichLearningText text={lesson.returnLabel} compact/></span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold text-stone-400">{busy ? "停止回答并回到学习主线" : "回到学习主线"}</span><span className="block truncate text-[10px] font-semibold text-stone-600"><RichLearningText text={experience.returnLabel} compact/></span></span>
           </button>
         </div>}
       </div>
@@ -187,9 +186,9 @@ export function LearningBoard({ lesson, messages, sourceMessages = [], busy, loa
   </section>;
 }
 
-function legacyVisualCovered(visual: NonNullable<BoardLesson["visual"]>, plan?: BoardLesson["plan"]): boolean {
+function legacyVisualCovered(visual: NonNullable<BoardExperience["legacyVisual"]>, experience: BoardExperience): boolean {
   const semanticKind = visual.kind === "geometry" ? "geometry_model" : visual.kind === "relation" || visual.kind === "process" ? "concept_graph" : null;
-  return Boolean(semanticKind && plan?.scenes.some((scene) => scene.visual?.kind === semanticKind));
+  return Boolean(semanticKind && experience.scenes.some((scene) => scene.visual?.kind === semanticKind));
 }
 
 function recentBoardMessages(messages: ChatMessage[]): ChatMessage[] {

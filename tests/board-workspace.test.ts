@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { compileBoardDocument, createBoardWorkspaceState, isStoredBoardWorkspaceState, restoreBoardWorkspaceState } from "@/lib/learning/board-workspace";
+import { compileBoardExperience, legacyBoardWorkspaceKey } from "@/lib/learning/board-experience";
 import type { BoardLesson } from "@/lib/learning/types";
 
 describe("板书工作台文档", () => {
   it("把板书场景编译为稳定节点和可追踪依赖", () => {
-    const document = compileBoardDocument(lesson());
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
     expect(document.nodes.map((node) => node.id)).toEqual(["given", "relation", "derive", "check"]);
     expect(document.nodes[2].prerequisiteIds).toEqual(["relation", "given"]);
     expect(document.nodes[0].dependentIds).toContain("derive");
-    expect(compileBoardDocument(lesson()).key).toBe(document.key);
+    expect(compileBoardDocument(compileBoardExperience(lesson())).key).toBe(document.key);
   });
 
   it("只为当次主动回忆保留最小临时状态", () => {
-    const document = compileBoardDocument(lesson());
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
     const state = createBoardWorkspaceState(document);
     expect(state.mode).toBe("overview");
     expect(state.activeNodeId).toBe("given");
@@ -21,7 +22,7 @@ describe("板书工作台文档", () => {
   });
 
   it("恢复当前题目里的主动回忆位置", () => {
-    const document = compileBoardDocument(lesson());
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
     const state = createBoardWorkspaceState(document);
     state.mode = "recall";
     state.activeNodeId = "derive";
@@ -31,7 +32,7 @@ describe("板书工作台文档", () => {
   });
 
   it("损坏或串题状态只重置当前回忆位置", () => {
-    const document = compileBoardDocument(lesson());
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
     const invalid = { ...createBoardWorkspaceState(document), documentKey: "another-board" };
     const restored = restoreBoardWorkspaceState(document, invalid);
     expect(restored.documentKey).toBe(document.key);
@@ -39,8 +40,41 @@ describe("板书工作台文档", () => {
     expect(restored.nodes.every((node) => !node.revealed)).toBe(true);
   });
 
+  it("旧五段板书升级为动态场景时保留仍存在节点的回忆状态", () => {
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
+    const legacy = { ...createBoardWorkspaceState(document), documentKey: document.legacyWorkspaceKey, nodes: [
+      { nodeId: "given", revealed: true }, { nodeId: "relation", revealed: false },
+      { nodeId: "derive", revealed: true }, { nodeId: "removed", revealed: true }, { nodeId: "check", revealed: false },
+    ] };
+    const restored = restoreBoardWorkspaceState(document, legacy);
+    expect(restored.documentKey).toBe(document.key);
+    expect(restored.nodes.map((node) => [node.nodeId, node.revealed])).toEqual([
+      ["given", true], ["relation", false], ["derive", true], ["check", false],
+    ]);
+  });
+
+  it("服务端重建过正文后仍按原缓存 key 迁移学习位置", () => {
+    const original = lesson();
+    const legacyKey = legacyBoardWorkspaceKey(original);
+    const oldDocument = compileBoardDocument(compileBoardExperience(original));
+    const oldState = createBoardWorkspaceState(oldDocument);
+    oldState.documentKey = legacyKey;
+    oldState.mode = "recall";
+    oldState.activeNodeId = "derive";
+    oldState.nodes[2].revealed = true;
+
+    const rebuilt = structuredClone(original);
+    rebuilt.blocks.forEach((block, index) => { block.content += ` 重建内容${index + 1}`; });
+    rebuilt.plan!.scenes.forEach((scene, index) => { scene.content = rebuilt.blocks[index].content; });
+    const rebuiltDocument = compileBoardDocument(compileBoardExperience(rebuilt, { legacyWorkspaceKey: legacyKey }));
+    const restored = restoreBoardWorkspaceState(rebuiltDocument, oldState);
+    expect(restored.mode).toBe("recall");
+    expect(restored.activeNodeId).toBe("derive");
+    expect(restored.nodes[2].revealed).toBe(true);
+  });
+
   it("拒绝缺少回忆状态的损坏节点", () => {
-    const document = compileBoardDocument(lesson());
+    const document = compileBoardDocument(compileBoardExperience(lesson()));
     const invalid = createBoardWorkspaceState(document) as unknown as { nodes: Array<{ nodeId: string }> };
     invalid.nodes[0] = { nodeId: invalid.nodes[0].nodeId };
     expect(isStoredBoardWorkspaceState(invalid, document)).toBe(false);
@@ -49,7 +83,7 @@ describe("板书工作台文档", () => {
   it("拒绝会让依赖和学生记录串位的重复节点", () => {
     const duplicated = lesson();
     duplicated.plan!.scenes[1].id = duplicated.plan!.scenes[0].id;
-    expect(() => compileBoardDocument(duplicated)).toThrow("板书学习节点不能重复");
+    expect(() => compileBoardDocument(compileBoardExperience(duplicated))).toThrow("板书学习节点不能重复");
   });
 });
 

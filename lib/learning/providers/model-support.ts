@@ -1,21 +1,22 @@
 import { gradeTeachingInstruction } from "../grade-pedagogy";
+import { ServiceError } from "../errors";
 import type { CheckItem, GradeBand, KnowledgeNode } from "../types";
 import type { ProviderConfig } from "./config";
 
 export type JsonObject = Record<string, unknown>;
 
-export function responsesBody(model: string, system: string, prompt: string, image?: string, maxOutputTokens?: number) {
+export function responsesBody(model: string, system: string, prompt: string, image?: string, maxOutputTokens?: number | null) {
   const content: JsonObject[] = image ? [{ type: "input_image", image_url: image, detail: "high" }, { type: "input_text", text: prompt }] : [{ type: "input_text", text: prompt }];
   return { model, instructions: system, input: [{ role: "user", content }], store: false, ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}) };
 }
 
-export function chatBody(model: string, system: string, prompt: string, image?: string, jsonMode = false, disableThinking = false, maxTokens = 3000) {
+export function chatBody(model: string, system: string, prompt: string, image?: string, jsonMode = false, disableThinking = false, maxTokens: number | null = 3000) {
   const content: JsonObject[] = image ? [{ type: "image_url", image_url: { url: image } }, { type: "text", text: prompt }] : [{ type: "text", text: prompt }];
   return {
     model,
     messages: [{ role: "system", content: system }, { role: "user", content }],
     stream: false,
-    max_tokens: maxTokens,
+    ...(maxTokens === null ? {} : { max_tokens: maxTokens }),
     ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
     ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   };
@@ -184,12 +185,16 @@ export function emitProviderDelta(line: string, protocol: ProviderConfig["protoc
     const choice = choices?.[0];
     const delta = choice?.delta?.content;
     if (delta) onDelta(delta);
-    if (choice?.finish_reason === "length") throw new Error("完整讲解因输出长度限制被截断，请重试当前操作");
+    if (choice?.finish_reason === "length") throw new ServiceError("完整讲解因输出长度限制被截断，请重试当前操作", 502, "PROVIDER_OUTPUT_LIMIT", true);
     if (choice?.finish_reason && choice.finish_reason !== "stop") throw new Error("模型没有完整结束本次讲解，请重试当前操作");
     return choice?.finish_reason === "stop";
   }
   if (event.type === "response.output_text.delta" && typeof event.delta === "string") onDelta(event.delta);
-  if (event.type === "response.incomplete") throw new Error("完整讲解因输出长度限制被截断，请重试当前操作");
+  if (event.type === "response.incomplete") {
+    const response = event.response as { incomplete_details?: { reason?: string } } | undefined;
+    if (response?.incomplete_details?.reason === "max_output_tokens") throw new ServiceError("完整讲解因输出长度限制被截断，请重试当前操作", 502, "PROVIDER_OUTPUT_LIMIT", true);
+    throw new ServiceError("模型没有完整结束本次讲解，请重试当前操作", 502, "PROVIDER_INCOMPLETE", true);
+  }
   return event.type === "response.completed";
 }
 
@@ -310,7 +315,7 @@ export function solutionSystemPrompt(learnerBand: GradeBand = "junior"): string 
     "使用清晰 Markdown 组织讲解，并严格依次使用四个三级标题：“### 解题思路”“### 分步推导”“### 结论”“### 易错提醒”。不得改名、合并或省略标题。分步推导使用有序列表完整展开每一步，并解释关键等式、定理或条件如何得到；题目有多个小问时必须逐问作答，并用“第1问”“第2问”等小标题明确分开。不使用表格、HTML 或分隔线。",
     "推导不得跳过决定答案的中间步骤。几何题交代对应关系和判定依据；物理题写公式、代入、单位和物理含义；化学题说明组成、反应或计量依据；生物题写清结构功能、实验变量或反馈过程；语文、英语、历史、地理、政治题必须逐字引用材料证据，并解释证据怎样支持结论。",
     "所有数学与物理公式必须使用 KaTeX 兼容的 LaTeX：行内公式写在 $...$ 中，独立推导写在 $$...$$ 中；不要用代码块包裹公式。化学式使用 $\\mathrm{H_2O}$ 这类标准 LaTeX。",
-    "控制篇幅：单问题通常写 600 到 1000 个汉字；多小问按实际需要展开，但删除重复复述和无关背景。完整不等于冗长。",
+    "按实际需要完整展开推导和各小问，删除重复复述和无关背景。完整不等于冗长。",
     gradeTeachingInstruction(learnerBand, "solution"),
   ].join("\n");
 }

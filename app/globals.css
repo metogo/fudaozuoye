@@ -562,62 +562,27 @@ button:disabled { cursor: not-allowed; }
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(circle at 88% 8%, rgba(255,255,255,.94), transparent 25rem),
-    linear-gradient(155deg, #f8f7f3 0%, #f2f0eb 100%);
-}
-.home-chat-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: .23;
-  background-image: radial-gradient(rgba(68,64,60,.18) .65px, transparent .65px);
-  background-size: 18px 18px;
-  mask-image: linear-gradient(to bottom, black, transparent 44%);
+    radial-gradient(ellipse at 85% 28%, rgba(211,230,221,.26), transparent 60%),
+    linear-gradient(155deg, #fafaf7 0%, #f4f3ef 100%);
 }
 .home-chat-header { background: transparent; }
-.home-chat-scroll { scroll-behavior: smooth; }
-.home-canvas { isolation: isolate; }
-.home-ambient {
-  position: absolute;
-  top: 0;
-  right: -62px;
-  width: 190px;
-  height: 190px;
-  pointer-events: none;
-  opacity: .72;
+.home-chat-scroll {
+  flex: 0 1 auto;
+  margin-top: auto;
+  padding-bottom: 0;
+  scroll-behavior: smooth;
 }
-.home-ambient::before,
-.home-ambient::after {
-  content: "";
-  position: absolute;
-  border: 1px solid rgba(120,113,108,.14);
-  border-radius: 999px;
-}
-.home-ambient::before { inset: 0; }
-.home-ambient::after { inset: 29px; }
-.home-ambient i {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #292524;
-  box-shadow: 0 0 0 5px rgba(255,255,255,.62);
-}
-.home-ambient i:nth-child(1) { left: 9px; top: 91px; }
-.home-ambient i:nth-child(2) { left: 56px; top: 19px; width: 4px; height: 4px; background: #a8a29e; }
-.home-ambient i:nth-child(3) { left: 63px; bottom: 17px; width: 4px; height: 4px; background: #f59e0b; }
-.home-quote { text-wrap: balance; }
+.home-welcome-title { text-wrap: balance; }
 .home-chat-composer {
   border-top: 0;
-  background: linear-gradient(to top, rgba(244,243,239,.98) 68%, rgba(244,243,239,0));
+  background: transparent;
+  margin-bottom: auto;
   box-shadow: none;
-  padding-top: 20px;
+  padding-top: 0;
 }
 .home-input-panel {
-  border-color: rgba(214,211,209,.92);
-  box-shadow: 0 18px 55px rgba(41,37,36,.12), 0 2px 7px rgba(41,37,36,.04);
+  border-color: rgba(214,211,209,.72);
+  box-shadow: 0 14px 40px rgba(41,37,36,.06), 0 2px 6px rgba(41,37,36,.025);
 }
 .chat-toast { animation: chat-toast-enter .24s cubic-bezier(.2,.8,.2,1) both; }
 @media (min-width: 1024px) {

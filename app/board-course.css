@@ -34,6 +34,10 @@
 .board-scene-visual figcaption { margin-top: 10px; color: #57534e; font-size: 13px; line-height: 1.7; }
 .board-scene-visual__evidence { margin-top: 8px; border-left: 2px solid rgba(217,119,6,.5); padding-left: 9px; color: #78716c; font-size: 11px; line-height: 1.65; }
 .board-scene-visual__evidence span { margin-right: 6px; color: #b45309; font-weight: 750; }
+.board-scene-visual--primary { margin-top: 16px; border-top: 0; padding-top: 0; }
+.board-scene-visual--primary .board-scene-visual__heading h3 { font-size: 18px; line-height: 1.45; }
+.board-scene-visual--primary .board-scene-visual__canvas { margin-top: 13px; border-color: rgba(6,78,59,.16); background: #fbfdf9; padding: 12px; }
+.board-scene-visual--primary figcaption { border-left: 3px solid rgba(217,119,6,.5); padding-left: 10px; color: #44403c; font-size: 14px; }
 
 .board-mermaid { display: grid; min-height: 200px; place-items: center; overflow: auto; }
 .board-mermaid svg { width: 100%; min-width: 300px; max-height: 330px; }

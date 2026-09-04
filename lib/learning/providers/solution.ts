@@ -2,10 +2,12 @@ import { assertDetailedSolution, describeDetailedSolutionIssues, inspectDetailed
 import { inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
 import { ServiceError } from "../errors";
 import { assertBalancedLearningMarkup } from "../presentation";
+import { problemEvidenceText } from "../problem-evidence";
 import type { ProblemSnapshot } from "../types";
 import { solutionSystemPrompt } from "./model-support";
 
-type StreamRequest = (system: string, prompt: string, onDelta: (text: string) => void, maxTokens: number) => Promise<void>;
+type StreamRequest = (system: string, prompt: string, onDelta: (text: string) => void, maxTokens: number | null) => Promise<void>;
+type OutputBudget = { characters: number; continued: boolean };
 
 export async function generateValidatedSolution(problem: ProblemSnapshot, request: StreamRequest): Promise<string> {
   let output = "";
@@ -20,9 +22,11 @@ export async function streamValidatedSolution(
   onReset: () => void,
 ): Promise<void> {
   const learnerBand = teachingBandOf(problem);
-  const draftResult = await collect(request, solutionSystemPrompt(learnerBand), JSON.stringify(problem), onDelta);
+  const evidence = problemEvidenceText(problem);
+  const budget: OutputBudget = { characters: 0, continued: false };
+  const draftResult = await collect(request, solutionSystemPrompt(learnerBand), JSON.stringify(problem), onDelta, budget);
   const draft = draftResult.output;
-  const inspection = inspectDetailedSolution(draft, problem.text);
+  const inspection = inspectDetailedSolution(draft, evidence);
   const gradeIssues = inspectGradeLanguage(draft, learnerBand, problem.text, "solution");
   if (inspection.valid && hasBalancedMarkup(draft)) {
     warnGradeIssues(gradeIssues);
@@ -41,9 +45,10 @@ export async function streamValidatedSolution(
       requiredStructure: ["### 解题思路", "### 分步推导", "### 结论", "### 易错提醒"],
     }),
     () => undefined,
+    budget,
   );
   const repaired = repairedResult.output;
-  assertDetailedSolution(repaired, problem.text);
+  assertDetailedSolution(repaired, evidence);
   assertBalancedLearningMarkup(repaired, "完整讲解");
   warnGradeIssues(inspectGradeLanguage(repaired, learnerBand, problem.text, "solution"));
   onReset();
@@ -58,13 +63,29 @@ function hasBalancedMarkup(output: string): boolean {
   try { assertBalancedLearningMarkup(output, "完整讲解"); return true; } catch { return false; }
 }
 
-async function collect(request: StreamRequest, system: string, prompt: string, onDelta: (text: string) => void): Promise<{ output: string }> {
+async function collect(request: StreamRequest, system: string, prompt: string, onDelta: (text: string) => void, budget: OutputBudget): Promise<{ output: string }> {
   let output = "";
+  const emit = (text: string) => {
+    budget.characters += text.length;
+    if (budget.characters > 60_000) throw new ServiceError("模型流式输出超过安全长度，请缩短问题后重试", 502, "PROVIDER_ERROR", true);
+    output += text;
+    onDelta(text);
+  };
   try {
-    await request(system, prompt, (text) => { output += text; onDelta(text); }, 3_200);
+    await request(system, prompt, emit, null);
     return { output };
   } catch (error) {
     if (isExternalAbort(error)) throw error;
+    if (error instanceof ServiceError && error.code === "PROVIDER_OUTPUT_LIMIT") {
+      if (!output.trim() || budget.continued) throw error;
+      budget.continued = true;
+      await request(system, JSON.stringify({
+        task: "上次输出因模型额度限制中断。仅从前文末尾继续，补完尚未完成的推导、各小问和剩余章节；不要重述已输出内容，不要从头重写，不要添加前言。若末尾公式或句子未闭合，先续完它。",
+        originalPrompt: prompt,
+        previousDraft: output,
+      }), emit, null);
+      return { output };
+    }
     if (!isRecoverableTailInterruption(error)) throw error;
     return { output };
   }

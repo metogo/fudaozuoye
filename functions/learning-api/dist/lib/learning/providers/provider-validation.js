@@ -22,6 +22,7 @@ const graph_1 = require("../graph");
 const flow_1 = require("../flow");
 const subject_learning_guide_1 = require("../subject-learning-guide");
 const types_1 = require("../types");
+const problem_evidence_1 = require("../problem-evidence");
 const blueprint_1 = require("./blueprint");
 exports.PENDING_ORIGINAL_ANSWER = "等待后台核验";
 class NonRepairableValidationError extends Error {
@@ -83,12 +84,25 @@ function parseProblem(result) {
     const subject = normalizedSubject(result.subject);
     const recognizedBand = normalizedGradeBand(result.gradeBand);
     const confidence = normalizedConfidence(result.confidence);
-    if (typeof result.childWork !== "string" || !subject || !recognizedBand || confidence === null)
-        throw new Error("模型识别结果结构不合法");
+    if (typeof result.childWork !== "string")
+        throw new Error("模型识别结果缺少学生已有作答字段");
+    if (!subject)
+        throw new Error("模型识别结果中的学科不合法");
+    if (!recognizedBand)
+        throw new Error("模型识别结果中的学段不合法");
+    if (confidence === null)
+        throw new Error("模型识别结果中的置信度不合法");
     if (confidence < 0.55)
         throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
     const gradeBand = (0, curriculum_1.normalizeSubjectBand)(subject, recognizedBand);
-    return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false };
+    const visualContext = (0, problem_evidence_1.parseProblemVisualContext)(result.visualContext);
+    if (!visualContext)
+        throw new Error("照片识别结果缺少题图相关性判断");
+    if (!visualContext.related && /(?:如图|见图|下图|图中|根据图|观察图)/.test(result.text))
+        throw new Error("题干明确指向配图，但题图相关性判断为不相关");
+    if (visualContext.related && visualContext.affectsSolving && visualContext.confidence < 0.55)
+        throw new NonRepairableValidationError("题图中的关键条件无法可靠识别，请重新拍摄并确保题干和配图完整清晰");
+    return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false, visualContext };
 }
 function parseTextProblem(result, originalText) {
     if (result.recognized !== true) {
@@ -104,13 +118,19 @@ function parseTextProblem(result, originalText) {
     return { text: originalText.trim(), childWork: "", subject, gradeBand, confidence, userRevised: true };
 }
 function normalizedSubject(value) {
-    const aliases = { math: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
+    const aliases = { math: "math", mathematics: "math", 数学: "math", physics: "physics", 物理: "physics", chemistry: "chemistry", 化学: "chemistry", biology: "biology", 生物: "biology", chinese: "chinese", 语文: "chinese", english: "english", 英语: "english", history: "history", 历史: "history", geography: "geography", 地理: "geography", politics: "politics", 政治: "politics", 道德与法治: "politics" };
     const normalized = aliases[String(value ?? "").trim().toLowerCase()];
     return normalized && types_1.subjects.includes(normalized) ? normalized : null;
 }
 function normalizedGradeBand(value) {
-    const aliases = { primary: "primary", 小学: "primary", junior: "junior", 初中: "junior", senior: "senior", 高中: "senior" };
-    return aliases[String(value ?? "").trim().toLowerCase()] ?? null;
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (/小学|primary|elementary/.test(raw))
+        return "primary";
+    if (/初中|junior|middle school/.test(raw))
+        return "junior";
+    if (/高中|senior|high school/.test(raw))
+        return "senior";
+    return null;
 }
 function normalizedConfidence(value) {
     const confidence = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
@@ -190,7 +210,11 @@ function findBlueprintDetails(value, depth) {
     return Object.values(object).flatMap((child) => findBlueprintDetails(child, depth + 1));
 }
 function problemEvidenceSources(problem) {
-    return [{ type: "problem", text: problem.text }, ...(problem.childWork ? [{ type: "child_work", text: problem.childWork }] : [])];
+    return [
+        { type: "problem", text: problem.text },
+        ...(0, problem_evidence_1.visualEvidenceTexts)(problem).map((text) => ({ type: "problem", text })),
+        ...(problem.childWork ? [{ type: "child_work", text: problem.childWork }] : []),
+    ];
 }
 function expansionEvidenceSources(problem, target) {
     return [...problemEvidenceSources(problem), { type: "parent", text: target.title }, { type: "parent", text: target.simplification }, { type: "parent", text: target.teaching.explanation }];

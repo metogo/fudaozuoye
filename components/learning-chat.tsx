@@ -7,8 +7,9 @@ import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/pr
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { gradeBandLabels } from "@/lib/learning/grade-pedagogy";
 import type { ChatMessage, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
-import { ArrowIcon, CameraIcon, CheckIcon, ImageIcon, InfoIcon, NetworkIcon, PencilIcon, RefreshIcon, SparkIcon } from "./icons";
+import { ArrowIcon, CameraIcon, CheckIcon, ImageIcon, InfoIcon, NetworkIcon, PencilIcon, SparkIcon } from "./icons";
 import { RichLearningText } from "./rich-learning-text";
+import { CopyableLearningText } from "./copyable-learning-text";
 import { StreamingIndicator } from "./streaming-indicator";
 
 interface LearningChatProps {
@@ -41,7 +42,6 @@ interface LearningChatProps {
 export function LearningChat(props: LearningChatProps) {
   const [input, setInput] = useState("");
   const [fileError, setFileError] = useState("");
-  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [hasNewContent, setHasNewContent] = useState(false);
   const [questionGateId, setQuestionGateId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -70,11 +70,6 @@ export function LearningChat(props: LearningChatProps) {
   const lastUserIndex = visibleChatMessages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
   const hasAssistantOutputForCurrentTurn = props.busy && visibleChatMessages.slice(lastUserIndex + 1).some((message) => message.role === "assistant" && message.status !== "error");
   const isPreparingNextTurn = Boolean(props.session && props.busy && hasAssistantOutputForCurrentTurn && !hasWritingChatStream);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const area = scrollRef.current;
@@ -162,11 +157,11 @@ export function LearningChat(props: LearningChatProps) {
   };
 
   return <main className={`learning-chat-shell mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden ${isHome ? "home-chat-shell" : "bg-[#f7f6f2]"}`}>
-    {isHome && <h1 className="sr-only">学习首页</h1>}
     <header className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <span className={`flex shrink-0 items-center justify-center bg-stone-950 text-white ${isHome ? "h-8 w-8 rounded-xl shadow-[0_8px_24px_rgba(28,25,23,.16)]" : "h-10 w-10 rounded-2xl shadow-lg shadow-stone-300"}`}><NetworkIcon className={isHome ? "h-3.5 w-3.5" : "h-4 w-4"}/></span>
-        {!isHome && <div className="min-w-0"><time dateTime={currentTime.toISOString()} className="block truncate text-xs tabular-nums text-stone-500">{formatCurrentTime(currentTime)}</time>{props.session && <span className="mt-0.5 block text-[9px] font-medium text-stone-400">模型识别为{gradeBandLabels[props.session.problem.gradeBand]}题</span>}</div>}
+        {isHome && <span className="home-brand text-xs font-semibold tracking-wide text-stone-600">专注作业</span>}
+        {!isHome && props.session && <span className="block truncate text-[10px] font-medium text-stone-400">模型识别为{gradeBandLabels[props.session.problem.gradeBand]}题</span>}
       </div>
       {props.session && <button type="button" onClick={props.onNewProblem} className="min-h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 transition hover:bg-white hover:text-stone-900">开始新题</button>}
     </header>
@@ -212,18 +207,13 @@ export function LearningChat(props: LearningChatProps) {
 }
 
 function EmptyConversation({ ready, fileError }: { ready: boolean; fileError: string }) {
-  const [quoteIndex, setQuoteIndex] = useState(0);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setQuoteIndex(randomQuoteIndex()), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-  const quote = loadingLearningQuotes[quoteIndex];
-  const refreshQuote = () => setQuoteIndex((current) => randomQuoteIndexExcept(current));
-  return <section className="empty-chat home-canvas relative mx-auto min-h-full w-full max-w-2xl overflow-hidden rounded-[30px] px-1 pb-5 pt-[clamp(2.5rem,9vh,6.5rem)] sm:px-3">
-    <div className="home-ambient" aria-hidden="true"><i/><i/><i/></div>
-    <div className="home-hero relative z-10 max-w-xl">
-      <p className="mb-4 flex items-center gap-2 text-[9px] font-semibold tracking-[.2em] text-stone-400"><span className="h-px w-7 bg-stone-300"/>从一个问题开始</p>
-      <blockquote><div key={`quote-${quoteIndex}`} aria-live="polite" aria-atomic="true" className="quote-enter"><p className="home-quote max-w-[22rem] whitespace-pre-line text-[clamp(1.85rem,7vw,3.1rem)] font-semibold leading-[1.16] tracking-[-.06em] text-stone-950 sm:max-w-[34rem]">“{quote.text}”</p><cite className="mt-4 block text-right text-[11px] leading-4 not-italic text-stone-600">— {quote.source}</cite></div><button type="button" onClick={refreshQuote} className="mt-1 flex min-h-11 items-center gap-1 rounded-full px-2 text-[10px] font-medium text-stone-600 transition hover:bg-white/75 hover:text-stone-900" aria-label="换一句学习寄语"><RefreshIcon className="h-3 w-3"/>换一句</button></blockquote>
+  return <section className="empty-chat home-canvas relative mx-auto w-full max-w-2xl px-3 pb-6 pt-8 sm:px-4 sm:pb-8">
+    <div className="home-hero max-w-xl">
+      <h1 className="home-welcome text-stone-950">
+        <span className="home-welcome-greeting mb-3 block text-base font-medium tracking-normal text-emerald-800 sm:text-lg">Hey，</span>
+        <span className="home-welcome-title block text-[clamp(1.8rem,7.5vw,2.75rem)] font-semibold leading-[1.25] tracking-[-.04em]">来一起解题吧</span>
+      </h1>
+      <p className="home-welcome-hint mt-4 text-[13px] leading-6 text-stone-500 sm:text-sm">拍张照，或写下题目。我们一步步来。</p>
     </div>
     {(fileError || !ready) && <p className="relative z-10 mt-3 flex items-center gap-2 text-[9px] leading-5 text-red-700"><InfoIcon className="h-3.5 w-3.5 shrink-0"/>{fileError || "AI 服务正在准备"}</p>}
   </section>;
@@ -250,7 +240,7 @@ function MessageBubble({ message, solutionDisplay, activeSuggestionIds, onSugges
       {message.imageUrl && <img src={message.imageUrl} alt="学生发送的题目" className="mb-3 max-h-56 w-full rounded-xl object-contain"/>}
       {mine
         ? <p className="whitespace-pre-wrap text-[15px] leading-7">{message.text}</p>
-        : <RichLearningText text={message.text} streaming={message.status === "streaming"} trailing={(message.status === "streaming" || message.status === "finishing") ? <StreamingIndicator status={message.status}/> : undefined}/>}
+        : <CopyableLearningText text={message.text} status={message.status}/>}
       {message.status === "error" && <p className={`mt-2 text-[10px] ${mine ? "text-stone-300" : "text-red-700"}`}>本条处理未完成，可以重试或重新发送。</p>}
       {!mine && activeSuggestions.length > 0 && <SuggestedQuestionTrail suggestions={activeSuggestions} onSuggestion={onSuggestion}/>}
     </div>
@@ -306,7 +296,42 @@ function choiceDisplayText(choice: string, index: number): string {
 
 function RecognitionReview({ problem, onConfirm, busy }: { problem: ProblemSnapshot; onConfirm: (problem: ProblemSnapshot) => void; busy: boolean }) {
   const [text, setText] = useState(problem.text);
-  return <section className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-4"><p className="text-[10px] font-semibold tracking-[.12em] text-amber-800">识别结果需要你确认</p><textarea value={text} onChange={(event) => setText(event.target.value)} rows={5} className="mt-3 w-full resize-y rounded-2xl border border-amber-200 bg-white p-3 text-sm leading-6 outline-none focus:border-amber-500"/><button type="button" disabled={busy || text.trim().length < 3} onClick={() => onConfirm({ ...problem, text: text.trim(), userRevised: true })} className="mt-3 min-h-11 w-full rounded-xl bg-stone-950 text-sm font-semibold text-white disabled:opacity-35">确认题目，开始讲解</button></section>;
+  const [visualUse, setVisualUse] = useState<"solving" | "context" | "unrelated">(problem.visualContext?.related ? problem.visualContext.affectsSolving ? "solving" : "context" : "unrelated");
+  const [visualFacts, setVisualFacts] = useState(problem.visualContext?.facts.map((fact) => fact.text).join("\n") ?? "");
+  const factLines = visualFacts.split("\n").map((line) => line.trim()).filter(Boolean);
+  const missingRequiredVisualFacts = visualUse === "solving" && factLines.length === 0;
+  const confirm = () => onConfirm({
+    ...problem,
+    text: text.trim(),
+    userRevised: true,
+    visualContext: visualUse !== "unrelated" ? {
+      related: true,
+      affectsSolving: visualUse === "solving",
+      summary: visualUse === "solving" ? factLines.join("；") : "与当前题目相关的辅助图片",
+      facts: visualUse === "solving" ? factLines.map((fact, index) => ({ text: fact, source: problem.visualContext?.facts[index]?.source ?? "visual_relation", confidence: 1 })) : [],
+      confidence: 1,
+    } : { related: false, affectsSolving: false, summary: "", facts: [], confidence: 1 },
+  });
+  return <section className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-4">
+    <p className="text-[10px] font-semibold tracking-[.12em] text-amber-800">识别结果需要你确认</p>
+    <label className="mt-3 block text-[11px] font-semibold text-stone-600">题目文字</label>
+    <textarea value={text} onChange={(event) => setText(event.target.value)} rows={5} className="mt-2 w-full resize-y rounded-2xl border border-amber-200 bg-white p-3 text-sm leading-6 outline-none focus:border-amber-500"/>
+    {problem.visualContext ? <div className="mt-3 rounded-2xl border border-amber-200 bg-white p-3">
+      <p className="text-[11px] font-semibold text-stone-700">这道题需要看图吗？</p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <button type="button" aria-pressed={visualUse === "solving"} onClick={() => setVisualUse("solving")} className={`min-h-10 rounded-xl text-[11px] font-semibold ${visualUse === "solving" ? "bg-stone-950 text-white" : "border border-stone-200 text-stone-600"}`}>解题需要</button>
+        <button type="button" aria-pressed={visualUse === "context"} onClick={() => setVisualUse("context")} className={`min-h-10 rounded-xl text-[11px] font-semibold ${visualUse === "context" ? "bg-stone-950 text-white" : "border border-stone-200 text-stone-600"}`}>辅助理解</button>
+        <button type="button" aria-pressed={visualUse === "unrelated"} onClick={() => setVisualUse("unrelated")} className={`min-h-10 rounded-xl text-[11px] font-semibold ${visualUse === "unrelated" ? "bg-stone-950 text-white" : "border border-stone-200 text-stone-600"}`}>与题无关</button>
+      </div>
+      {visualUse === "solving" ? <>
+      <p className="mt-3 text-[11px] font-semibold text-stone-700">图中信息</p>
+      <p className="mt-1 text-[10px] leading-5 text-stone-500">每行一条，只保留属于这道题、且能从图中直接看到的条件。</p>
+      <textarea aria-label="图中信息" value={visualFacts} onChange={(event) => setVisualFacts(event.target.value)} rows={Math.max(3, Math.min(6, factLines.length + 1))} className="mt-2 w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs leading-6 outline-none focus:border-amber-500"/>
+      {missingRequiredVisualFacts ? <p className="mt-2 text-[10px] font-medium text-red-600">这道题依赖配图，请补全图中条件或重新拍摄。</p> : null}
+      </> : null}
+    </div> : null}
+    <button type="button" disabled={busy || text.trim().length < 3 || Boolean(missingRequiredVisualFacts)} onClick={confirm} className="mt-3 min-h-11 w-full rounded-xl bg-stone-950 text-sm font-semibold text-white disabled:opacity-35">确认题目，开始讲解</button>
+  </section>;
 }
 
 function LoadingWhisper({ label }: { label: string }) {
@@ -373,34 +398,6 @@ function currentTaskCopy(session: LearningSession | null, gate: LearningGate, qu
     case "needs_help":
       return { intent: "说清具体卡点，找到下一种讲法", placeholder: "告诉我具体卡在哪里…" };
   }
-}
-
-function formatCurrentTime(value: Date): string {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(value);
-  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${read("month")}月${read("day")}日 ${read("weekday")} · ${read("hour")}:${read("minute")}`;
-}
-
-function randomQuoteIndexExcept(current: number): number {
-  if (loadingLearningQuotes.length < 2) return 0;
-  const value = new Uint32Array(1);
-  crypto.getRandomValues(value);
-  const next = value[0] % (loadingLearningQuotes.length - 1);
-  return next >= current ? next + 1 : next;
-}
-
-function randomQuoteIndex(): number {
-  if (typeof crypto === "undefined") return 0;
-  const value = new Uint32Array(1);
-  crypto.getRandomValues(value);
-  return value[0] % loadingLearningQuotes.length;
 }
 
 function choicesFromSession(session: LearningSession | null, gate: LearningGate | null): string[] | undefined {

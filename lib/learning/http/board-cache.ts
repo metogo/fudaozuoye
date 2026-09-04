@@ -1,17 +1,19 @@
 import { restoreBoardLesson } from "../board-cache";
 import { ServiceError } from "../errors";
 import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
-import { openSession } from "../server-state";
+import { consentRateIdentity, openSession } from "../server-state";
+import { createInstantBoardLesson } from "../providers/board";
 
 export async function postBoardCache(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
-    assertRateLimit(request, 30);
+    assertRateLimit(request, 30, consentRateIdentity(request) ?? undefined);
     assertContentLength(request, 240_000);
     const body = await request.json() as Record<string, unknown>;
     const session = openSession(body.stateToken);
-    const lesson = restoreBoardLesson(session, body.lesson);
-    if (!lesson) throw new Error("保存的板书没有通过可靠性复检");
+    const lesson = restoreBoardLesson(session, body.lesson) ?? createInstantBoardLesson(session, session.flow.focus, {
+      recommended: true, reason: "保存的板书已失效，已按当前题目重建。", layout: "steps",
+    });
     return Response.json({ schemaVersion: "1.0", data: { lesson }, error: null });
   } catch (error) {
     const serviceError = error instanceof ServiceError ? error : null;

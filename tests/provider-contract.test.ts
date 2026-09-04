@@ -3,7 +3,8 @@ import { assertGraphInvariants } from "@/lib/learning/graph";
 import { LiveProviderAdapter, MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import { parseProblemGuide } from "@/lib/learning/providers/blueprint";
 import { getProviderConfig, listReasoningAvailability, type ProviderConfig } from "@/lib/learning/providers/config";
-import { parseProblemSolution } from "@/lib/learning/providers/provider-validation";
+import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution } from "@/lib/learning/providers/problem-image-analysis";
+import { parseProblem, parseProblemSolution, problemEvidenceSources } from "@/lib/learning/providers/provider-validation";
 import type { ProviderId } from "@/lib/learning/types";
 
 describe("三模型统一适配器契约", () => {
@@ -180,6 +181,20 @@ describe("真实供应商协议契约", () => {
     expect(requestBody).toContain(node.title);
     expect(requestBody).not.toContain(`\\"answer\\":\\"${session.nodes.find((item) => item.kind === "problem")?.check.answer}`);
     expect(reply).toBe("先看题干里的已知条件。");
+  });
+
+  it("后续上传的学生草图不会被误当成原题照片", async () => {
+    let requestBody = "";
+    const fetcher: typeof fetch = async (_input, init) => {
+      requestBody = String(init?.body);
+      return new Response('data: {"choices":[{"delta":{"content":"先看你刚上传的草图。"}}]}\n\ndata: [DONE]\n\n', { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    };
+    const mock = new MockProviderAdapter("doubao");
+    const original = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const session = { ...original, problem: { ...original.problem, visualContext: { related: true, affectsSolving: true, summary: "题图", confidence: 1, facts: [{ text: "图中标有12米", source: "printed_label" as const, confidence: 1 }] } } };
+    await new LiveProviderAdapter(liveConfig(), fetcher).streamTutorReply(session, { kind: "problem" }, "看我的草图", () => undefined, undefined, "data:image/png;base64,AA==", "student");
+    expect(requestBody).toContain("当前作答或草图");
+    expect(requestBody).not.toContain("附图是当前原题照片");
   });
 
   it("向下展开继续生成题目相关内容并只使用目录声明的直接前置", async () => {
@@ -386,7 +401,7 @@ describe("真实供应商协议契约", () => {
     let requestBody: Record<string, unknown> | undefined;
     const fetcher: typeof fetch = async (_input, init) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      const content = JSON.stringify({ recognized: true, failureReason: "", text: "解方程 x+1=2", childWork: "x=1", subject: "math", gradeBand: "junior", confidence: 0.98 });
+      const content = JSON.stringify({ recognized: true, failureReason: "", text: "解方程 x+1=2", childWork: "x=1", subject: "math", gradeBand: "junior", confidence: 0.98, visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 0.99 } });
       return new Response(JSON.stringify(protocol === "responses" ? { output_text: content } : { choices: [{ message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
     };
     const config: ProviderConfig = { id, label: id, apiKey: "test-key", modelId: "test-model", baseUrl: "https://provider.invalid", protocol, mock: false };
@@ -400,6 +415,153 @@ describe("真实供应商协议契约", () => {
       expect(requestBody?.response_format).toEqual({ type: "json_object" });
       expect(requestBody?.thinking).toEqual({ type: "disabled" });
     }
+  });
+
+  it("会把属于当前题目的配图条件保留为后续可信证据", () => {
+    const problem = parseProblem({
+      recognized: true,
+      failureReason: "",
+      text: "如图，一块正方形草地两侧铺路，求长方形周长。",
+      childWork: "",
+      subject: "math",
+      gradeBand: "primary",
+      confidence: 0.98,
+      visualContext: {
+        related: true,
+        affectsSolving: true,
+        summary: "正方形草地位于长方形右侧，另外两侧为道路。",
+        confidence: 0.97,
+        facts: [
+          { text: "长方形横向总长标为15米", source: "printed_label", confidence: 0.99 },
+          { text: "正方形草地边长标为12米", source: "printed_label", confidence: 0.99 },
+          { text: "道路位于正方形草地的左侧和下侧", source: "visual_relation", confidence: 0.96 },
+        ],
+      },
+    });
+    expect(problem.visualContext?.affectsSolving).toBe(true);
+    expect(problemEvidenceSources(problem).map((item) => item.text)).toContain("正方形草地边长标为12米");
+  });
+
+  it("接受模型返回的自然学段名称", () => {
+    const problem = parseProblem({
+      recognized: true,
+      failureReason: "",
+      text: "计算长方形周长。",
+      childWork: "",
+      subject: "mathematics",
+      gradeBand: "小学三年级",
+      confidence: 0.98,
+      visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 0.99 },
+    });
+    expect(problem.subject).toBe("math");
+    expect(problem.gradeBand).toBe("primary");
+  });
+
+  it("题图影响求解却没有可核验条件时拒绝继续", () => {
+    expect(() => parseProblem({
+      recognized: true,
+      failureReason: "",
+      text: "如图，求阴影部分面积。",
+      childWork: "",
+      subject: "math",
+      gradeBand: "primary",
+      confidence: 0.95,
+      visualContext: { related: true, affectsSolving: true, summary: "存在一个图形", facts: [], confidence: 0.9 },
+    })).toThrow("没有识别出可核验条件");
+  });
+
+  it("二次复核允许把说明性插图判为相关但不影响求解", () => {
+    const audited = parseAuditedProblemSolution({
+      originalAnswer: "中心思想是珍惜时间。",
+      originalExplanation: "根据文章中的人物行为与结尾点题句概括。",
+      visualContext: { related: true, affectsSolving: false, summary: "课文情境插图", facts: [], confidence: 0.96 },
+    });
+    expect(audited.visualContext.related).toBe(true);
+    expect(audited.visualContext.affectsSolving).toBe(false);
+  });
+
+  it("二次复核不接受未经人工确认的低置信度图中条件", () => {
+    expect(() => parseAuditedProblemSolution({
+      originalAnswer: "54米",
+      originalExplanation: "根据图中尺寸计算。",
+      visualContext: { related: true, affectsSolving: true, summary: "尺寸模糊", facts: [{ text: "长度疑似为12米", source: "printed_label", confidence: 0.4 }], confidence: 0.7 },
+    })).toThrow("关键条件仍不清楚");
+  });
+
+  it("首次识别已确认题图是解题必要条件时，二次复核不得降成普通插图", () => {
+    expect(() => parseAuditedProblemSolution({
+      originalAnswer: "54米",
+      originalExplanation: "根据图中尺寸计算。",
+      visualContext: { related: true, affectsSolving: false, summary: "普通插图", facts: [], confidence: 0.99 },
+    }, true, true)).toThrow("丢失了当前题目必需的题图条件");
+  });
+
+  it("未经人工确认的首次视觉判断允许由原图二次复核纠正", () => {
+    const audited = parseAuditedProblemSolution({
+      originalAnswer: "按题干作答",
+      originalExplanation: "右侧图片属于邻题，不参与当前题求解。",
+      visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 0.99 },
+    }, true, false);
+    expect(audited.visualContext.related).toBe(false);
+  });
+
+  it("用户确认的题图事实必须在二次复核中逐条保留", () => {
+    const problem = {
+      text: "如图求周长。", childWork: "", subject: "math" as const, gradeBand: "primary" as const, confidence: 1, userRevised: true,
+      visualContext: { related: true, affectsSolving: true, summary: "", confidence: 1, facts: [{ text: "15米标注线从外框左边界到正方形右边界", source: "printed_label" as const, confidence: 1 }] },
+    };
+    expect(() => assertConfirmedVisualFactsPreserved(problem, {
+      related: true, affectsSolving: true, summary: "", confidence: 1,
+      facts: [{ text: "整块长方形总长为15米", source: "printed_label", confidence: 1 }],
+    })).toThrow("与已确认的图中条件不一致");
+  });
+
+  it("用户确认后的二次复核不能在原事实之外追加条件", () => {
+    const problem = {
+      text: "如图求周长。", childWork: "", subject: "math" as const, gradeBand: "primary" as const, confidence: 1, userRevised: true,
+      visualContext: { related: true, affectsSolving: true, summary: "", confidence: 1, facts: [{ text: "正方形边长为12米", source: "printed_label" as const, confidence: 1 }] },
+    };
+    expect(() => assertConfirmedVisualFactsPreserved(problem, {
+      related: true, affectsSolving: true, summary: "", confidence: 1,
+      facts: [
+        { text: "正方形边长为12米", source: "printed_label", confidence: 1 },
+        { text: "整块长方形总长为17米", source: "printed_label", confidence: 1 },
+      ],
+    })).toThrow("与已确认的图中条件不一致");
+  });
+
+  it.each([
+    ["doubao", "chat-completions"],
+    ["openai", "responses"],
+  ] as const)("%s 首次标准答案生成会让原题图片参与 %s 多模态分析", async (id, protocol) => {
+    let requestBody: Record<string, unknown> = {};
+    const fetcher: typeof fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const content = JSON.stringify({
+        originalAnswer: "长方形周长为54米",
+        originalExplanation: "联合图中15米和12米可知另一边也是12米，周长为(15+12)×2。",
+        visualContext: {
+          related: true,
+          affectsSolving: true,
+          summary: "题图给出长方形与正方形的尺寸对应关系",
+          confidence: 0.99,
+          facts: [
+            { text: "整块长方形水平总长为15米", source: "printed_label", confidence: 0.99 },
+            { text: "正方形草地边长为12米且其高度等于长方形的宽", source: "visual_relation", confidence: 0.98 },
+          ],
+        },
+      });
+      return new Response(JSON.stringify(protocol === "responses" ? { output_text: content } : { choices: [{ message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+    const mock = new MockProviderAdapter("doubao");
+    const base = await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary");
+    const problem = { ...base, visualContext: { related: true, affectsSolving: true, summary: "题图包含必要尺寸", confidence: 0.99, facts: [{ text: "总长15米", source: "printed_label" as const, confidence: 0.99 }] } };
+    const pending = await mock.prepareChatSession(problem);
+    const config: ProviderConfig = { id, label: id, apiKey: "test-key", modelId: "test-model", baseUrl: "https://provider.invalid", protocol, mock: false };
+    await new LiveProviderAdapter(config, fetcher).completeChatSession(pending, "data:image/jpeg;base64,AA==");
+    const serialized = JSON.stringify(requestBody);
+    expect(serialized).toContain("data:image/jpeg;base64,AA==");
+    expect(serialized).toContain("visualContext");
   });
 
   it("无关或不可读照片必须拒绝，不能编造题目", async () => {
@@ -416,7 +578,7 @@ describe("真实供应商协议契约", () => {
 
   it("置信度低于门槛时拒绝进入知识路径", async () => {
     const fetcher: typeof fetch = async () => {
-      const content = JSON.stringify({ recognized: true, failureReason: "", text: "疑似题干", childWork: "", subject: "math", gradeBand: "primary", confidence: 0.31 });
+      const content = JSON.stringify({ recognized: true, failureReason: "", text: "疑似题干", childWork: "", subject: "math", gradeBand: "primary", confidence: 0.31, visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 0.9 } });
       return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
     };
     const config: ProviderConfig = { id: "doubao", label: "豆包", apiKey: "test-key", modelId: "test-model", baseUrl: "https://provider.invalid", protocol: "chat-completions", mock: false };
@@ -443,7 +605,8 @@ describe("真实供应商协议契约", () => {
       () => { output = ""; },
     );
     expect(requestedStream).toBe(true);
-    expect(protocol === "responses" ? requestBody.max_output_tokens : requestBody.max_tokens).toBe(3200);
+    expect(requestBody).not.toHaveProperty("max_output_tokens");
+    expect(requestBody).not.toHaveProperty("max_tokens");
     expect(JSON.stringify(protocol === "responses" ? requestBody.instructions : requestBody.messages)).toContain("分步推导");
     expect(output).toContain("### 分步推导");
   });
@@ -626,7 +789,7 @@ describe("真实供应商协议契约", () => {
     const mock = new MockProviderAdapter("doubao");
     const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
     const board = await new LiveProviderAdapter(liveConfig(), fetcher).generateBoardLesson(session, { kind: "problem", section: "keyClue" }, { recommended: true, reason: "多个条件关系适合结构化展示。", layout: "relation" });
-    expect(board.blocks.length).toBeGreaterThanOrEqual(4);
+    expect(board.blocks.length).toBeGreaterThanOrEqual(2);
     expect(board.annotations.length).toBeGreaterThanOrEqual(2);
     expect(board.blocks.map((block) => block.content).join(" ")).not.toContain(session.nodes.find((node) => node.id === session.rootNodeId)?.check.answer);
   });

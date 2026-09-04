@@ -37,7 +37,8 @@ class MockProviderAdapter {
             throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
         return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
-    async completeChatSession(session) {
+    async completeChatSession(session, imageDataUrl) {
+        void imageDataUrl;
         const root = session.nodes.find((node) => node.id === session.rootNodeId);
         return root?.check.answer === "等待后台核验" ? (0, provider_validation_1.rootOnlySession)((0, mock_engine_1.analyzeMock)(session.problem, this.id, this.reasoningLevel)) : session;
     }
@@ -78,8 +79,9 @@ class MockProviderAdapter {
             onDelta(part);
         }
     }
-    async streamTutorReply(session, scope, question, onDelta, signal, imageDataUrl) {
+    async streamTutorReply(session, scope, question, onDelta, signal, imageDataUrl, imageRole) {
         void imageDataUrl;
+        void imageRole;
         if (signal?.aborted)
             throw new DOMException("Aborted", "AbortError");
         const reply = (0, grade_pedagogy_1.adaptTeachingCopy)((0, tutor_1.tutorReplyMock)(session, scope, question), (0, grade_pedagogy_1.teachingBandOf)(session.problem));

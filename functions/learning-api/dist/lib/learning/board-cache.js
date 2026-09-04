@@ -61,9 +61,8 @@ function isStoredBoardPlan(value, blocks) {
         && plan.sourceMessageIds.length <= 12
         && plan.sourceMessageIds.every((id) => typeof id === "string")
         && Array.isArray(plan.scenes)
-        && plan.scenes.length >= 3 && plan.scenes.length <= 6
+        && plan.scenes.length >= 2 && plan.scenes.length <= 6
         && plan.scenes.length === blocks.length
-        && (!native || plan.scenes.length >= 5)
         && plan.scenes.every((scene, index) => Boolean(scene && scene.id === blocks[index]?.id && scene.title === blocks[index]?.label && scene.content === blocks[index]?.content && scene.tone === blocks[index]?.tone && scene.id.length <= 100 && scene.title.length <= 80 && scene.content.length <= 1_200 && ["extract", "connect", "derive", "compare", "verify"].includes(scene.intent) && Array.isArray(scene.sourceMessageIds) && scene.sourceMessageIds.length <= 4 && scene.sourceMessageIds.every((id) => typeof id === "string" && plan.sourceMessageIds.includes(id)) && (!native || isStoredNativeTeachingScene(scene)) && (!subjectNative || typeof scene.move === "string") && (scene.visual === undefined || scene.visual === null || isStoredSemanticVisual(scene.visual))))
         && (!native || hasCompleteNativeTeachingRoles(plan.scenes))
         && plan.sourceMessageIds.every((id) => plan.scenes.some((scene) => scene.sourceMessageIds.includes(id)));
@@ -72,8 +71,7 @@ function hasCompleteNativeTeachingRoles(scenes) {
     const roles = scenes.map((scene) => scene.role);
     const uniqueRoles = new Set(roles);
     return uniqueRoles.size === roles.length
-        && ["orient", "model", "reason", "recap"].every((role) => uniqueRoles.has(role))
-        && (uniqueRoles.has("misconception") || uniqueRoles.has("transfer"));
+        && ["orient", "reason"].every((role) => uniqueRoles.has(role));
 }
 function isStoredNativeTeachingScene(scene) {
     return ["orient", "model", "reason", "misconception", "transfer", "recap"].includes(String(scene.role))

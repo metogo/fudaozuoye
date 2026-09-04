@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stripLearningChoiceLabel = stripLearningChoiceLabel;
 exports.prepareLearningMarkdown = prepareLearningMarkdown;
+exports.finalizeLearningMarkdown = finalizeLearningMarkdown;
 exports.normalizeStandardLatexDelimiters = normalizeStandardLatexDelimiters;
 exports.assertBalancedLearningMarkup = assertBalancedLearningMarkup;
 exports.expandLearningMarkupRange = expandLearningMarkupRange;
@@ -26,6 +27,14 @@ function prepareLearningMarkdown(source, streaming = false) {
         .split(protectedMarkdownPattern)
         .map((part, index) => index % 2 === 1 ? part : preparePlainSegment(part))
         .join("");
+}
+/** Remove tokens that only make sense while the next streamed chunk is pending. */
+function finalizeLearningMarkdown(source) {
+    let finalized = source.trimEnd();
+    while (/(?:\r?\n|^)[ \t]{0,3}(?:[-+*]|\d{1,3}[.)])$/u.test(finalized)) {
+        finalized = finalized.replace(/(?:\r?\n|^)[ \t]{0,3}(?:[-+*]|\d{1,3}[.)])$/u, "").trimEnd();
+    }
+    return finalized;
 }
 function normalizeStandardLatexDelimiters(source, streaming = false) {
     if (streaming && hasUnclosedCodeFence(source))

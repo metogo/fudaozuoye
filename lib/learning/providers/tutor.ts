@@ -1,5 +1,6 @@
 import { flowScopeLabel } from "../flow";
 import { gradeTeachingInstruction, inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
+import { problemEvidenceText } from "../problem-evidence";
 import type { GradeBand, LearningSession, ProblemGuideSection, SuggestedQuestion, TutorScope } from "../types";
 import type { JsonObject } from "./model-support";
 
@@ -75,7 +76,7 @@ export function questionSuggestionsPrompt(session: LearningSession, scope: Tutor
   const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
   return JSON.stringify({
     task: "判断刚完成的讲解之后，是否存在值得学生顺手追问、但不会打断当前学习任务的问题。没有必要时返回 recommended=false。",
-    problem: session.problem.text,
+    problem: problemEvidenceText(session.problem),
     currentFocus: scope.kind === "problem"
       ? { label: flowScopeLabel(session, scope), guide: session.problemGuide }
       : { label: flowScopeLabel(session, scope), title: node?.title, evidence: node?.diagnosticEvidence, teaching: node?.teaching.explanation },

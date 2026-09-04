@@ -2,6 +2,7 @@ import { createSubjectNativeBlocks, subjectBoardProfileFor } from "./board-subje
 import { assertBalancedLearningMarkup } from "./presentation";
 import { extractBoardEvidenceClauses } from "./board-evidence";
 import { generatedTextContainsAnswer } from "./providers/answer-protection";
+import { problemEvidenceText } from "./problem-evidence";
 import type { BoardBlock, BoardPlan, BoardScene, BoardTeachingSubject, LearningSession, TutorScope } from "./types";
 
 export function inferBoardSubject(session: LearningSession): BoardTeachingSubject {
@@ -15,17 +16,17 @@ export function createNativeBoardFallbackPlan(session: LearningSession, blocks: 
   const profile = subjectBoardProfileFor(session);
   const evidence = boardEvidenceCandidates(session);
   const scenes = blocks.map((block, index): BoardScene => {
-    const move = profile.moves[index] ?? profile.moves.at(-1)!;
+    const move = profile.moves.find((candidate) => candidate.label === block.label) ?? profile.moves[index] ?? profile.moves.at(-1)!;
     return {
       id: block.id,
-      intent: (["extract", "connect", "derive", "compare", "verify"] as const)[index] ?? "verify",
+      intent: intentForRole(move.role),
       role: move.role,
       move: move.id,
       title: block.label,
       content: block.content,
       tone: block.tone,
       purpose: move.purpose,
-      evidence: evidence.find((candidate) => block.content.includes(candidate)) ?? evidence[0],
+      evidence: matchingEvidence(block.content, evidence, index),
       why: nativeMoveWhy(move.label, move.role),
       selfCheck: move.selfCheck,
       sourceMessageIds: [],
@@ -38,10 +39,23 @@ export function createNativeBoardFallbackPlan(session: LearningSession, blocks: 
     subject: inferBoardSubject(session),
     discipline: session.problem.subject,
     thesis: profile.thesis,
-    learningGoal: `${profile.moves[0].purpose}，再${profile.moves[2].purpose}。`,
+    learningGoal: scenes.map((scene) => scene.purpose).filter(Boolean).join("，"),
     sourceMessageIds: [],
     scenes,
   };
+}
+
+function intentForRole(role: BoardScene["role"]): BoardScene["intent"] {
+  if (role === "orient") return "extract";
+  if (role === "model") return "connect";
+  if (role === "reason") return "derive";
+  if (role === "misconception") return "compare";
+  return "verify";
+}
+
+function matchingEvidence(content: string, evidence: string[], index: number): string | undefined {
+  const matches = evidence.filter((candidate) => content.includes(candidate));
+  return matches[index % matches.length] ?? evidence[index % evidence.length];
 }
 
 export function createNativeBoardBlocks(session: LearningSession, scope: TutorScope): BoardBlock[] {
@@ -55,7 +69,7 @@ export function createNativeBoardTitle(session: LearningSession, scope: TutorSco
 }
 
 function boardEvidenceCandidates(session: LearningSession): string[] {
-  const values = [session.problem.text, ...session.nodes.flatMap((node) => node.kind === "concept" && node.diagnosticEvidence ? [node.diagnosticEvidence] : [])]
+  const values = [problemEvidenceText(session.problem), ...session.nodes.flatMap((node) => node.kind === "concept" && node.diagnosticEvidence ? [node.diagnosticEvidence] : [])]
     .flatMap(extractBoardEvidenceClauses).map((value) => value.trim().replace(/\s+/g, " ")).filter((value) => value.length >= 4);
   const unique = Array.from(new Set(values)).map((value) => safeSlice(value, 120));
   return unique;

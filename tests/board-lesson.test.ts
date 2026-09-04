@@ -7,6 +7,51 @@ import type { BoardSuggestion } from "@/lib/learning/types";
 const suggestion: BoardSuggestion = { recommended: true, reason: "条件之间存在多步关系，整理成板书更容易看清。", layout: "relation" };
 
 describe("模型板书结构校验", () => {
+  it("Director 只需要两个动作时安全板书也能正常生成", () => {
+    const current = session();
+    current.problem.text = "请作答。";
+    current.problemGuide.goal = "完成作答";
+    expect(() => createSafeBoardLesson(current, { kind: "problem" }, suggestion)).not.toThrow();
+    expect(createSafeBoardLesson(current, { kind: "problem" }, suggestion).blocks).toHaveLength(2);
+  });
+
+  it("题图条件进入安全板书证据而不是退回空泛模板", () => {
+    const current = session();
+    current.problem.text = "如图，一块正方形草地两侧铺路，求整块长方形地的周长。";
+    current.problem.visualContext = {
+      related: true,
+      affectsSolving: true,
+      summary: "草地和道路组成长方形",
+      confidence: 0.99,
+      facts: [
+        { text: "长方形横向总长标为15米", source: "printed_label", confidence: 0.99 },
+        { text: "正方形草地边长标为12米", source: "printed_label", confidence: 0.99 },
+      ],
+    };
+    const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
+    const visible = lesson.blocks.map((block) => block.content).join("\n");
+    expect(visible).toMatch(/15米|12米/);
+  });
+
+  it("模型必须逐项完成 Director 为当前题目选定的动作", () => {
+    const current = session();
+    const scope = { kind: "problem" as const };
+    const lesson = createSafeBoardLesson(current, scope, suggestion);
+    const output = {
+      title: lesson.title,
+      blocks: lesson.blocks.map((block, index) => ({
+        move: lesson.plan!.scenes[index].move,
+        label: block.label,
+        evidence: lesson.plan!.scenes[index].evidence,
+        content: block.content,
+        sourceMessageIds: [],
+        tone: block.tone,
+      })),
+    };
+    expect(recoverBoardContentPlan(output, current, suggestion, [], scope).blocks).toHaveLength(output.blocks.length);
+    expect(() => recoverBoardContentPlan({ ...output, blocks: output.blocks.slice(0, -1) }, current, suggestion, [], scope)).toThrow("Director 选定的教学动作");
+  });
+
   it("Chat 精简板书只能引用当前对话中的真实消息 id", () => {
     const current = session();
     const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
@@ -141,10 +186,10 @@ describe("模型板书结构校验", () => {
     })).toEqual({ passed: true, reason: "审校未提供详细说明" });
   });
 
-  it("拒绝只有四段的 Chat 式摘要冒充新版板书", () => {
+  it("迁移协议接受四段板书，不再把数量固定为五段", () => {
     const output = validOutput();
     output.blocks = (output.blocks as Array<Record<string, unknown>>).slice(0, 4);
-    expect(() => parseBoardLesson(output, session(), suggestion)).toThrow("5 个");
+    expect(parseBoardLesson(output, session(), suggestion).blocks).toHaveLength(4);
   });
 
   it("只接受能关联真实区块且附理由的精确重点", () => {
@@ -320,7 +365,7 @@ describe("模型板书结构校验", () => {
 
     expect(plan.version).toBe(2);
     expect(plan.subject).toBe("math");
-    expect(plan.scenes.map((scene) => scene.role)).toEqual(["orient", "model", "reason", "misconception", "recap"]);
+    expect(plan.scenes.map((scene) => scene.role)).toEqual((nativeTeachingPlan(lesson.blocks, evidence).scenes as Array<{ role: string }>).map((scene) => scene.role));
     expect(plan.scenes.every((scene) => scene.purpose && scene.evidence && scene.why && scene.selfCheck)).toBe(true);
 
     const missingRole = nativeTeachingPlan(lesson.blocks, evidence);
@@ -399,7 +444,8 @@ describe("模型板书结构校验", () => {
 
     expect(lesson.title).toBe("数学 · 找关系与推理");
     expect(lesson.quality?.status).toBe("safe_fallback");
-    expect(lesson.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
+    expect(lesson.blocks.length).toBeGreaterThanOrEqual(3);
+    expect(lesson.blocks.map((block) => block.label)).toEqual(lesson.plan?.scenes.map((scene) => scene.title));
     expect(lesson.annotations).toHaveLength(3);
     expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain(answer);
   });
@@ -411,9 +457,10 @@ describe("模型板书结构校验", () => {
 
     const lesson = createSafeBoardLesson(current, { kind: "problem" }, suggestion);
 
-    expect(lesson.title).toBe("数学 · 找关系与推理安全板书");
+    expect(lesson.title).toBe("数学 · 找关系与推理");
     expect(lesson.quality?.status).toBe("safe_fallback");
-    expect(lesson.blocks.map((block) => block.label)).toEqual(["看懂题目", "找出联系", "一步步推", "检查易错", "举一反三"]);
+    expect(lesson.blocks.length).toBeGreaterThanOrEqual(3);
+    expect(lesson.blocks.map((block) => block.label)).toEqual(lesson.plan?.scenes.map((scene) => scene.title));
     expect(lesson.blocks.map((block) => block.content).join(" ")).not.toContain("交换对象");
   });
 

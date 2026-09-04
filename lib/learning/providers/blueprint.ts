@@ -1,5 +1,6 @@
 import { getConcept, isCurriculumAncestor } from "../curriculum";
 import { assertBalancedLearningMarkup } from "../presentation";
+import { problemEvidenceText } from "../problem-evidence";
 import type { CheckItem, DiagnosticEvidenceSource, KnowledgeNode, ProblemGuide, ProblemSnapshot, TeachingContent } from "../types";
 
 type JsonObject = Record<string, unknown>;
@@ -236,7 +237,7 @@ export function createProblemRoot(problem: ProblemSnapshot, answer: string, expl
     atomic: false,
     curriculumVersion: problem.gradeBand === "senior" ? "cn-highschool-2017-2020" : "cn-compulsory-2022",
     simplification: "从原题倒推必须掌握的直接知识。",
-    diagnosticEvidence: problem.text,
+    diagnosticEvidence: problemEvidenceText(problem),
     state: "unchecked",
     attempts: 0,
     teaching: {
@@ -249,7 +250,7 @@ export function createProblemRoot(problem: ProblemSnapshot, answer: string, expl
     },
     check: {
       id: uid("original"),
-      prompt: `现在请你独立重做原题：\n\n${problem.text}`,
+      prompt: `现在请你独立重做原题：\n\n${problemEvidenceText(problem)}`,
       type: "short_text",
       answer: answer.trim(),
       explanation: explanation.trim(),

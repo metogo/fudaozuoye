@@ -6,6 +6,7 @@ exports.createSafeBoardPlan = createSafeBoardPlan;
 exports.boardPlanVisibleText = boardPlanVisibleText;
 const types_1 = require("../types");
 const board_aids_1 = require("../board-aids");
+const problem_evidence_1 = require("../problem-evidence");
 const board_chronology_1 = require("../board-chronology");
 const board_content_contract_1 = require("../board-content-contract");
 const board_evidence_1 = require("../board-evidence");
@@ -14,6 +15,7 @@ const board_subject_engine_1 = require("../board-subject-engine");
 const presentation_1 = require("../presentation");
 const answer_protection_1 = require("./answer-protection");
 const board_latex_1 = require("./board-latex");
+const board_plan_validation_1 = require("./board-plan-validation");
 const sceneIntents = ["extract", "connect", "derive", "compare", "verify"];
 const teachingSubjects = ["math", "science", "language", "humanities", "general"];
 const teachingRoles = ["orient", "model", "reason", "misconception", "transfer", "recap"];
@@ -42,7 +44,7 @@ function boardPlanSchema(options = {}) {
             learningGoal: { type: "string", maxLength: 80 },
             sourceMessageIds: { type: "array", maxItems: 12, items: { type: "string" } },
             scenes: {
-                type: "array", minItems: 5, maxItems: 5,
+                type: "array", minItems: 2, maxItems: 6,
                 items: {
                     type: "object",
                     properties: sceneProperties,
@@ -89,8 +91,12 @@ function parseBoardPlan(value, session, blocks, context) {
     const sceneIds = new Set(scenes.flatMap((scene) => scene.sourceMessageIds));
     if (sourceMessageIds.some((id) => !sceneIds.has(id)))
         throw new Error("板书总来源必须由具体场景实际引用");
-    if (native)
-        assertNativeTeachingPlan(scenes, context);
+    if (native) {
+        (0, board_plan_validation_1.assertNativeSceneSet)(scenes, context, subjectProfile);
+        const instructionSignatures = scenes.map((scene) => (0, board_content_contract_1.enhancedBoardInstructionSignature)(scene.content, scene.purpose ?? "", scene.evidence ?? ""));
+        if (new Set(instructionSignatures).size !== instructionSignatures.length)
+            throw new Error("新版板书不同动作不能复用同一段学科套话");
+    }
     const result = (0, board_aids_1.enrichBoardPlanWithSafeAids)(session, { ...(native ? { version: 2, contentRevision: revision } : {}), subject, discipline, thesis, learningGoal, sourceMessageIds, scenes });
     assertPlanNoAnswerLeak(session, [result.thesis, result.learningGoal].filter(Boolean).join("\n"), result.scenes);
     return result;
@@ -150,58 +156,14 @@ function parseNativeTeachingFields(item, evidenceSources, revision, discipline, 
         throw new Error("板书教学依据必须逐字来自原题、知识节点或已引用对话");
     for (const [label, value] of [["板书教学目的", purpose], ["板书成立原因", why], ["板书自查问题", selfCheck]])
         (0, presentation_1.assertBalancedLearningMarkup)(value, label);
-    const expectedMove = subjectProfile.discipline === discipline ? subjectProfile.moves[index] : (0, board_subject_engine_1.subjectBoardProfile)(discipline).moves[index];
-    const move = revision === 2 ? item.move : expectedMove?.id;
-    if (revision === 2 && (!expectedMove || move !== expectedMove.id || item.role !== expectedMove.role))
+    const moves = subjectProfile.discipline === discipline ? subjectProfile.moves : (0, board_subject_engine_1.subjectBoardProfile)(discipline).moves;
+    const move = revision === 2 ? item.move : moves[index]?.id;
+    const expectedMove = moves.find((candidate) => candidate.id === move);
+    if (revision === 2 && (!expectedMove || item.role !== expectedMove.role))
         throw new Error("板书教学动作必须遵循当前学科蓝图");
     if (revision === 2 && (purpose !== expectedMove.purpose || selfCheck !== expectedMove.selfCheck || why !== (0, board_native_fallback_1.nativeMoveWhy)(expectedMove.label, expectedMove.role)))
         throw new Error("板书教学目的、成立原因和自查问题必须逐项遵循当前学科蓝图");
     return { role: item.role, move, purpose, evidence, why, selfCheck };
-}
-function assertNativeTeachingPlan(scenes, context) {
-    if (scenes.length !== 5)
-        throw new Error("新版板书必须包含 5 个职责完整的教学单元");
-    const roles = scenes.map((scene) => scene.role);
-    for (const required of ["orient", "model", "reason", "recap"]) {
-        if (!roles.includes(required))
-            throw new Error(`新版板书缺少 ${required} 教学职责`);
-    }
-    if (!roles.includes("misconception") && !roles.includes("transfer"))
-        throw new Error("新版板书必须包含易错辨析或迁移应用");
-    if (new Set(roles).size !== roles.length)
-        throw new Error("新版板书教学职责不能重复");
-    const contents = scenes.map((scene) => compact(scene.content));
-    if (new Set(contents).size !== contents.length)
-        throw new Error("新版板书不能重复相同正文");
-    const instructionSignatures = scenes.map((scene) => (0, board_content_contract_1.enhancedBoardInstructionSignature)(scene.content, scene.purpose ?? "", scene.evidence ?? ""));
-    if (new Set(instructionSignatures).size !== instructionSignatures.length)
-        throw new Error("新版板书五个动作不能复用同一段学科套话");
-    for (const [label, values] of [
-        ["教学目的", scenes.map((scene) => compact(scene.purpose ?? ""))],
-        ["成立原因", scenes.map((scene) => compact(scene.why ?? ""))],
-        ["自查问题", scenes.map((scene) => compact(scene.selfCheck ?? ""))],
-    ]) {
-        if (new Set(values).size !== values.length)
-            throw new Error(`新版板书${label}不能重复`);
-    }
-    for (const scene of scenes) {
-        for (const message of context) {
-            if (copiesChatParagraph(scene.content, message.text) || copiesChatParagraph(scene.why ?? "", message.text))
-                throw new Error("新版板书不能整段搬运 Chat 内容");
-        }
-    }
-}
-function copiesChatParagraph(candidate, source) {
-    const normalizedCandidate = compact(candidate);
-    const normalizedSource = compact(source);
-    if (normalizedCandidate.length < 36 || normalizedSource.length < 36)
-        return false;
-    if (normalizedSource.includes(normalizedCandidate))
-        return true;
-    return candidate.split(/[。！？；\n]/).some((sentence) => {
-        const normalized = compact(sentence);
-        return normalized.length >= 36 && normalizedSource.includes(normalized);
-    });
 }
 function teachingSubject(value) {
     if (!teachingSubjects.includes(value))
@@ -537,14 +499,15 @@ function assertPlanNoAnswerLeak(session, learningGoal, scenes) {
     const explanation = compact(root?.check.explanation ?? "");
     const boardText = compact(visibleText);
     const normalizedMath = comparableMath(visibleText);
-    const answerAlreadyInProblem = answer.length >= 2 && compact(session.problem.text).includes(answer);
+    const problemEvidence = (0, problem_evidence_1.problemEvidenceText)(session.problem);
+    const answerAlreadyInProblem = answer.length >= 2 && compact(problemEvidence).includes(answer);
     if (!answerAlreadyInProblem && !(0, answer_protection_1.isShortTextAnswer)(root?.check.answer ?? "") && answer.length >= 2 && (boardText.includes(answer) || (0, answer_protection_1.protectedAnswerVariants)(root?.check.answer ?? "").some((variant) => normalizedMath.includes(variant))))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
     if ((0, answer_protection_1.explicitAnswerClaimLeak)(visibleText, root?.check.answer ?? ""))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
-    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, root?.check.answer ?? "", session.problem.text))
+    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, root?.check.answer ?? "", problemEvidence))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
-    if ((0, answer_protection_1.protectedShortAnswers)(root?.check.answer ?? "").some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, session.problem.text)))
+    if ((0, answer_protection_1.protectedShortAnswers)(root?.check.answer ?? "").some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, problemEvidence)))
         throw new Error("板书教学计划不能提前泄露原题最终答案");
     if (explanation.length >= 12 && boardText.includes(explanation))
         throw new Error("板书教学计划不能提前给出原题完整解法");
@@ -570,7 +533,7 @@ function semanticVisualText(visual) {
     return common.concat(visual.columns, visual.rows.flatMap((row) => [row.aspect, row.left, row.right]));
 }
 function visualEvidenceSources(session) {
-    return [session.problem.text, ...session.nodes.flatMap((node) => node.kind === "concept" ? [node.diagnosticEvidence] : [])]
+    return [(0, problem_evidence_1.problemEvidenceText)(session.problem), ...session.nodes.flatMap((node) => node.kind === "concept" ? [node.diagnosticEvidence] : [])]
         .filter((value) => typeof value === "string" && value.length > 0);
 }
 function sourceIds(value, allowed, maximum) {

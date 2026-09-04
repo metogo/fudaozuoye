@@ -10,6 +10,7 @@ exports.blueprintContentSignature = blueprintContentSignature;
 exports.blueprintCheckSignature = blueprintCheckSignature;
 const curriculum_1 = require("../curriculum");
 const presentation_1 = require("../presentation");
+const problem_evidence_1 = require("../problem-evidence");
 function parseProblemGuide(value, problemText, evidenceQuotes = [], originalAnswer = "", originalExplanation = "", safeFallback) {
     const guide = asObject(value, "原题引导");
     const parsed = {
@@ -225,7 +226,7 @@ function createProblemRoot(problem, answer, explanation) {
         atomic: false,
         curriculumVersion: problem.gradeBand === "senior" ? "cn-highschool-2017-2020" : "cn-compulsory-2022",
         simplification: "从原题倒推必须掌握的直接知识。",
-        diagnosticEvidence: problem.text,
+        diagnosticEvidence: (0, problem_evidence_1.problemEvidenceText)(problem),
         state: "unchecked",
         attempts: 0,
         teaching: {
@@ -238,7 +239,7 @@ function createProblemRoot(problem, answer, explanation) {
         },
         check: {
             id: uid("original"),
-            prompt: `现在请你独立重做原题：\n\n${problem.text}`,
+            prompt: `现在请你独立重做原题：\n\n${(0, problem_evidence_1.problemEvidenceText)(problem)}`,
             type: "short_text",
             answer: answer.trim(),
             explanation: explanation.trim(),

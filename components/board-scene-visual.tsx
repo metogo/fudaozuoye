@@ -7,13 +7,13 @@ import { RichLearningText } from "./rich-learning-text";
 const BoardDiagram = dynamic(() => import("./board-diagram").then((module) => module.BoardDiagram), { ssr: false });
 const BoardMathVisual = dynamic(() => import("./board-math-visual").then((module) => module.BoardMathVisual), { ssr: false });
 
-export function BoardSceneVisual({ visual, purpose }: { visual: BoardSemanticVisual; purpose?: string }) {
-  return <figure className="board-scene-visual">
-    <div className="board-scene-visual__heading"><div><p>把关系变得可见</p><h3>{visual.title}</h3></div><span>{visualLabel(visual.kind)}</span></div>
-    {purpose && <div className="board-scene-visual__purpose"><span>它帮助你</span><RichLearningText text={purpose} compact/></div>}
+export function BoardSceneVisual({ visual, purpose, primary = false }: { visual: BoardSemanticVisual; purpose?: string; primary?: boolean }) {
+  return <figure className={`board-scene-visual${primary ? " board-scene-visual--primary" : ""}`}>
+    <div className="board-scene-visual__heading"><div>{!primary && <p>把关系变得可见</p>}<h3>{visual.title}</h3></div><span>{visualLabel(visual.kind)}</span></div>
+    {!primary && purpose && <div className="board-scene-visual__purpose"><span>它帮助你</span><RichLearningText text={purpose} compact/></div>}
     <div className="board-scene-visual__canvas"><VisualCanvas visual={visual}/></div>
     <figcaption><RichLearningText text={visual.caption} compact/></figcaption>
-    <p className="board-scene-visual__evidence"><span>依据</span><RichLearningText text={visual.evidence} compact/></p>
+    <p className="board-scene-visual__evidence"><span>题目依据</span><RichLearningText text={visual.evidence} compact/></p>
   </figure>;
 }
 

@@ -1,0 +1,470 @@
+{
+  "generatedAt": "2026-09-03T06:58:54.614Z",
+  "summary": {
+    "cases": 20,
+    "passed": 20,
+    "failed": 0,
+    "subjects": [
+      "math",
+      "physics",
+      "chemistry",
+      "biology",
+      "chinese",
+      "english",
+      "history",
+      "geography",
+      "politics"
+    ],
+    "gradeBands": [
+      "primary",
+      "junior",
+      "senior"
+    ],
+    "boardOpenP95Ms": 16,
+    "semanticVisualCases": 6,
+    "semanticKinds": [
+      "geometry_model",
+      "formula_chain",
+      "comparison_matrix",
+      "evidence_chain",
+      "timeline"
+    ],
+    "primaryMediaCases": 2,
+    "primaryMediaKinds": [
+      "relation",
+      "derivation",
+      "source"
+    ],
+    "contextChangedBlueprint": true,
+    "boardQuestionPassed": true,
+    "cacheRestorePassed": true
+  },
+  "results": [
+    {
+      "id": "B01",
+      "subject": "math",
+      "gradeBand": "primary",
+      "analysisAttempts": 1,
+      "boardOpenMs": 13,
+      "sceneCount": 3,
+      "moves": [
+        "frame_relation",
+        "model_objects",
+        "transform_with_basis"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": true,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 12635,
+      "status": "passed"
+    },
+    {
+      "id": "B02",
+      "subject": "math",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 29,
+      "sceneCount": 4,
+      "moves": [
+        "frame_relation",
+        "model_objects",
+        "transform_with_basis",
+        "verify_invariant"
+      ],
+      "semanticVisuals": [
+        "geometry_model",
+        "formula_chain"
+      ],
+      "primaryMedia": [
+        "relation",
+        "derivation"
+      ],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": true,
+      "cacheRestorePassed": true,
+      "elapsedMs": 21781,
+      "status": "passed"
+    },
+    {
+      "id": "B03",
+      "subject": "math",
+      "gradeBand": "senior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 11,
+      "sceneCount": 3,
+      "moves": [
+        "frame_relation",
+        "model_objects",
+        "transform_with_basis"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 12799,
+      "status": "passed"
+    },
+    {
+      "id": "B04",
+      "subject": "math",
+      "gradeBand": "senior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 12,
+      "sceneCount": 4,
+      "moves": [
+        "frame_relation",
+        "model_objects",
+        "transform_with_basis",
+        "verify_invariant"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 31746,
+      "status": "passed"
+    },
+    {
+      "id": "B05",
+      "subject": "physics",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 10,
+      "sceneCount": 4,
+      "moves": [
+        "locate_lens_zones",
+        "trace_principal_rays",
+        "judge_ray_intersection",
+        "classify_lens_image"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 13578,
+      "status": "passed"
+    },
+    {
+      "id": "B06",
+      "subject": "physics",
+      "gradeBand": "senior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 6,
+      "sceneCount": 3,
+      "moves": [
+        "define_system",
+        "inventory_quantities",
+        "select_law"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 18318,
+      "status": "passed"
+    },
+    {
+      "id": "B07",
+      "subject": "chemistry",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 9,
+      "sceneCount": 4,
+      "moves": [
+        "count_reaction_sides",
+        "model_reaction_structure",
+        "classify_reaction_pattern",
+        "separate_reaction_concepts"
+      ],
+      "semanticVisuals": [
+        "comparison_matrix"
+      ],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 14806,
+      "status": "passed"
+    },
+    {
+      "id": "B08",
+      "subject": "chemistry",
+      "gradeBand": "senior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 7,
+      "sceneCount": 4,
+      "moves": [
+        "identify_substances",
+        "track_reaction",
+        "balance_conservation",
+        "connect_conditions"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 10479,
+      "status": "passed"
+    },
+    {
+      "id": "B09",
+      "subject": "biology",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 12,
+      "sceneCount": 4,
+      "moves": [
+        "define_research_question",
+        "identify_variables",
+        "design_control",
+        "read_experiment_evidence"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 18883,
+      "status": "passed"
+    },
+    {
+      "id": "B10",
+      "subject": "biology",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 11,
+      "sceneCount": 4,
+      "moves": [
+        "define_research_question",
+        "identify_variables",
+        "design_control",
+        "read_experiment_evidence"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 20667,
+      "status": "passed"
+    },
+    {
+      "id": "B11",
+      "subject": "chinese",
+      "gradeBand": "primary",
+      "analysisAttempts": 1,
+      "boardOpenMs": 11,
+      "sceneCount": 3,
+      "moves": [
+        "locate_text",
+        "analyze_language",
+        "explain_effect"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 11371,
+      "status": "passed"
+    },
+    {
+      "id": "B12",
+      "subject": "chinese",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 11,
+      "sceneCount": 3,
+      "moves": [
+        "locate_text",
+        "analyze_language",
+        "explain_effect"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 26043,
+      "status": "passed"
+    },
+    {
+      "id": "B13",
+      "subject": "english",
+      "gradeBand": "primary",
+      "analysisAttempts": 1,
+      "boardOpenMs": 15,
+      "sceneCount": 3,
+      "moves": [
+        "locate_evidence",
+        "parse_sentence",
+        "trace_discourse"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 7938,
+      "status": "passed"
+    },
+    {
+      "id": "B14",
+      "subject": "english",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 9,
+      "sceneCount": 3,
+      "moves": [
+        "locate_evidence",
+        "parse_sentence",
+        "trace_discourse"
+      ],
+      "semanticVisuals": [
+        "evidence_chain"
+      ],
+      "primaryMedia": [
+        "source"
+      ],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 11409,
+      "status": "passed"
+    },
+    {
+      "id": "B15",
+      "subject": "history",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 4,
+      "sceneCount": 4,
+      "moves": [
+        "locate_time_space",
+        "extract_historical_fact",
+        "build_cause_effect",
+        "evaluate_impact"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 14790,
+      "status": "passed"
+    },
+    {
+      "id": "B16",
+      "subject": "history",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 10,
+      "sceneCount": 3,
+      "moves": [
+        "locate_time_space",
+        "extract_historical_fact",
+        "build_cause_effect"
+      ],
+      "semanticVisuals": [
+        "timeline"
+      ],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 12313,
+      "status": "passed"
+    },
+    {
+      "id": "B17",
+      "subject": "geography",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 10,
+      "sceneCount": 3,
+      "moves": [
+        "locate_region",
+        "extract_geo_factors",
+        "connect_space"
+      ],
+      "semanticVisuals": [
+        "comparison_matrix"
+      ],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 17908,
+      "status": "passed"
+    },
+    {
+      "id": "B18",
+      "subject": "geography",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 7,
+      "sceneCount": 3,
+      "moves": [
+        "locate_region",
+        "extract_geo_factors",
+        "connect_space"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 13989,
+      "status": "passed"
+    },
+    {
+      "id": "B19",
+      "subject": "politics",
+      "gradeBand": "junior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 10,
+      "sceneCount": 3,
+      "moves": [
+        "read_question_direction",
+        "layer_material",
+        "match_concept"
+      ],
+      "semanticVisuals": [],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 13514,
+      "status": "passed"
+    },
+    {
+      "id": "B20",
+      "subject": "politics",
+      "gradeBand": "senior",
+      "analysisAttempts": 1,
+      "boardOpenMs": 16,
+      "sceneCount": 3,
+      "moves": [
+        "read_question_direction",
+        "layer_material",
+        "match_concept"
+      ],
+      "semanticVisuals": [
+        "comparison_matrix"
+      ],
+      "primaryMedia": [],
+      "contextChangedBlueprint": false,
+      "boardQuestionPassed": false,
+      "cacheRestorePassed": true,
+      "elapsedMs": 19361,
+      "status": "passed"
+    }
+  ]
+}

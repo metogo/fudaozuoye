@@ -5,6 +5,18 @@ import { MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import { sealSession } from "@/lib/learning/server-state";
 import { describeDetailedSolutionIssues, inspectDetailedSolution, isDetailedSolution } from "@/lib/learning/solution-quality";
 
+function completeSingleQuestionSolution(extraDerivation = "") {
+  return `### 解题思路
+先整理题目给出的条件和最终要解决的问题，再选择能够直接连接已知量与未知量的方法。这里说明方法为什么适用，避免只写答案。
+### 分步推导
+1. 把题目中的有效条件写成清楚的数量关系，并检查单位和对象是否一致。
+2. 按照数量关系逐步计算，再把结果代回题目条件进行核对。${extraDerivation}
+### 结论
+已经得到符合全部题目条件的结果，并完成单位与数量级检查。
+### 易错提醒
+不要把题号或已知条件的序号当成独立小问，也不要漏掉决定结果的关键关系。`;
+}
+
 describe("原题答案 SSE", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -46,6 +58,187 @@ describe("原题答案 SSE", () => {
     const problem = "已知条件。1. 求速度；2. 判断方向。";
     const missingSecond = "### 解题思路\n先分析两个要求之间的关系，并从已知条件中选择适用的方法。这里补充足够的背景说明，确保讲解本身不是只有一句结论。\n### 分步推导\n1. 求速度时先写出关系式，再代入题目给出的数值，并检查使用的单位是否统一。\n2. 对第一问的结果进行验算，确认它符合题目情境和数量级。\n### 结论\n第一问已经得到可核验结果。\n### 易错提醒\n还需要处理题目的其余小问，不能在这里只给一个结果。";
     expect(isDetailedSolution(missingSecond, problem)).toBe(false);
+  });
+
+  it.each([
+    "6. 如图，一块正方形草地两侧铺了石子路，求整块长方形地的周长。",
+    "1. 一辆汽车行驶120千米用了2小时，求平均速度。",
+  ])("单独整题题号不触发小问覆盖验收：%s", (problem) => {
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it("外层题号加内层小问时只验收内部小问", () => {
+    const problem = "6. 已知三角形ABC满足题设条件。（1）求边AB的长度；（2）说明三角形ABC为什么是直角三角形。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n（1）第一问先根据已知关系求出边AB，并代回原式检查。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+    expect(describeDetailedSolutionIssues(inspection)).toContain("第 2 问");
+    expect(describeDetailedSolutionIssues(inspection)).not.toContain("第 6 问");
+  });
+
+  it("外层题号加裸编号小问时只验收内部连续序列", () => {
+    const problem = "6. 已知三角形ABC满足题设条件。1. 求边AB的长度；2. 说明它为什么是直角三角形。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先根据已知关系求出边AB，并代回原式检查。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("外层题号为1且引出裸编号小问时仍识别内部序列", () => {
+    const problem = "1. 求下列各题：1. 速度；2. 方向。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先求出速度。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("编号条件清单不被识别为多个小问", () => {
+    const problem = "6. 已知长方形的条件：\n1. 长为15米；\n2. 宽为12米。\n问这个长方形的周长是多少？";
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it("括号编号的已知条件清单不被识别为多个小问", () => {
+    const problem = "已知下列条件：（1）长为15米；（2）宽为12米。问周长。";
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it.each([
+    "第1问：求物体的速度。第2问：判断物体的运动方向。",
+    "问题1：计算电路中的电流。问题2：说明电流变化的原因。",
+  ])("显式多问仍要求逐项覆盖：%s", (problem) => {
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先根据题目条件完成计算并核对结果。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+    expect(inspection.issues).toContain("missing_sub_questions");
+  });
+
+  it("回指前一问不会被当成新的小问编号", () => {
+    const problem = "第1问：证明等式成立。第2问：利用第1问的结论计算目标值。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先根据条件完成证明。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("显式小问与括号小问混排时仍按同一组验收", () => {
+    const problem = "第1问：求长方形的长。（2）再说明周长的计算方法。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先求出长方形的长。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("第二问回指第一问时不把引用编号重复计入结构", () => {
+    const problem = "第1问：求出x。第2问：利用上述第1问的结果，说明y的取值。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先求出x。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("显式或括号小问即使使用名词短语也保持严格验收", () => {
+    for (const problem of ["第1问：速度；第2问：方向。", "（1）速度；（2）方向。"]) {
+      const inspection = inspectDetailedSolution(
+        completeSingleQuestionSolution("\n第1问：先求出速度。"),
+        problem,
+      );
+
+      expect(inspection.missingSubQuestions).toEqual(["2"]);
+    }
+  });
+
+  it("方程编号不会被当成小问编号", () => {
+    const problem = "由方程（1）求出x，再由方程（2）求出y，最后求x与y的和。";
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it.each([
+    "可选项为：（1）甲；（2）乙。请选择正确选项。",
+    "由x+y=3（1），x-y=1（2），求x与y。",
+  ])("选项或公式编号不被当成多个小问：%s", (problem) => {
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it("常见任务动词仍能触发多小问验收", () => {
+    const problem = "（1）化简代数式；（2）解方程并验证结果。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：完成代数式化简并检查定义域。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("跨学科表述任务仍能触发裸编号多问验收", () => {
+    const problem = "1. 简述光合作用的意义；2. 阐述呼吸作用的过程。";
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：说明光合作用的意义。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it.each([
+    "解答下列各小题：1. 求物体的速度；2. 并说明运动方向。",
+    "解答下列各小题：（一）求物体的速度；（二）说明运动方向。",
+  ])("题组引导语和中文编号能够识别：%s", (problem) => {
+    const inspection = inspectDetailedSolution(
+      completeSingleQuestionSolution("\n第1问：先求出速度。"),
+      problem,
+    );
+
+    expect(inspection.missingSubQuestions).toEqual(["2"]);
+  });
+
+  it("任务术语出现在条件名称中时不误判成小问", () => {
+    const problem = "已知条件：\n1. 求和公式为Sn=n(a1+an)/2；\n2. 判断准则为判别式大于0。问参数范围。";
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
+  });
+
+  it.each([
+    "1. 求物体的速度；3. 判断物体的运动方向。",
+    "1. 求物体的速度；1. 判断物体的运动方向。",
+    "1. 求A；1. 求B；2. 求C。",
+  ])("跳号或重复编号不臆造多小问结构：%s", (problem) => {
+    const inspection = inspectDetailedSolution(completeSingleQuestionSolution(), problem);
+
+    expect(inspection.missingSubQuestions).toEqual([]);
+    expect(inspection.valid).toBe(true);
   });
 
   it("多小问标题允许 Markdown 加粗和中文序号，不把完整讲解误判为漏题", () => {

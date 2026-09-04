@@ -1,4 +1,5 @@
 import { teachingBandOf } from "../grade-pedagogy";
+import { assertDirectedBoardMoves } from "../board-director";
 import type { BoardConversationMessage, BoardLesson, BoardSuggestion, LearningSession, TutorScope } from "../types";
 import {
   addSafeBoardAnnotations,
@@ -68,13 +69,13 @@ async function generateCandidate(
   if (client.protocol === "chat-completions") {
     const first = await client.toolRequest(
       boardCoreContentSystemPrompt(learnerBand),
-      `${prompt}\n优先使用 5 个教学单元，直接调用指定函数。`,
+      `${prompt}\n严格使用 boardBlueprint 给出的教学单元数量和顺序，直接调用指定函数。`,
       boardContentTool(),
       2400,
       candidateTimeoutMs,
     );
     try {
-      return addSafeBoardAnnotations(recoverBoardContentPlan(parseJsonObject(first), session, suggestion, context), session);
+      return addSafeBoardAnnotations(recoverBoardContentPlan(parseJsonObject(first), session, suggestion, context, scope), session);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "结构不合法";
       if (isAbortError(error) || /超时|timeout/i.test(reason)) throw error;
@@ -85,7 +86,7 @@ async function generateCandidate(
         2400,
         candidateRepairTimeoutMs,
       );
-      return addSafeBoardAnnotations(recoverBoardContentPlan(parseJsonObject(repaired), session, suggestion, context), session);
+      return addSafeBoardAnnotations(recoverBoardContentPlan(parseJsonObject(repaired), session, suggestion, context, scope), session);
     }
   }
   const content = parseBoardContent(parseJsonObject(await client.textRequest(
@@ -95,6 +96,7 @@ async function generateCandidate(
     true,
     candidateTimeoutMs,
   )), session, suggestion, context);
+  assertDirectedBoardMoves(session, scope, context, content.plan?.scenes.map((scene) => scene.move ?? "") ?? []);
   return addSafeBoardAnnotations(content, session);
 }
 

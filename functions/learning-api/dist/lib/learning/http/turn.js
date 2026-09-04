@@ -5,10 +5,13 @@ const api_1 = require("../api");
 const flow_1 = require("../flow");
 const graph_1 = require("../graph");
 const grade_pedagogy_1 = require("../grade-pedagogy");
+const problem_evidence_1 = require("../problem-evidence");
 const providers_1 = require("../providers");
-const provider_validation_1 = require("../providers/provider-validation");
+const board_1 = require("../providers/board");
 const assessment_1 = require("../providers/assessment");
+const provider_validation_1 = require("../providers/provider-validation");
 const request_guards_1 = require("../request-guards");
+const session_preparation_1 = require("../session-preparation");
 const server_state_1 = require("../server-state");
 const solution_recall_1 = require("../solution-recall");
 const solution_quality_1 = require("../solution-quality");
@@ -18,7 +21,7 @@ const turn_support_1 = require("./turn-support");
 async function postTurn(request) {
     try {
         (0, request_guards_1.assertSameOrigin)(request);
-        (0, request_guards_1.assertRateLimit)(request, 40);
+        (0, request_guards_1.assertRateLimit)(request, 40, (0, server_state_1.consentRateIdentity)(request) ?? undefined);
         const multipart = request.headers.get("content-type")?.includes("multipart/form-data") ?? false;
         (0, request_guards_1.assertContentLength)(request, multipart ? 7 * 1024 * 1024 : 210_000);
         const parsed = await (0, turn_request_1.parseTurnRequest)(request, multipart);
@@ -26,6 +29,8 @@ async function postTurn(request) {
         const input = parsed.input;
         const adapter = (0, providers_1.getSessionProviderAdapter)(session, request.signal);
         assertTurnAllowed(session, input);
+        if (input.type === "start" && (0, problem_evidence_1.requiresProblemImage)(session.problem) && !parsed.imageDataUrl)
+            throw new Error("这道题需要结合原图分析，请重新提交题目照片");
         return (0, sse_1.sse)(async (send) => {
             send("meta", { schemaVersion: "1.0", provider: session.provider, modelId: adapter.modelId, requestId: session.requestId });
             await dispatchTurn(session, input, adapter, send, request.signal, parsed.imageDataUrl);
@@ -37,6 +42,8 @@ async function postTurn(request) {
     }
 }
 function assertTurnAllowed(session, input) {
+    if (session.flow.stage === "intake" && input.type !== "start")
+        throw new Error((0, problem_evidence_1.requiresProblemImage)(session.problem) ? "请重新提交原题照片，完成图文联合分析" : "请先开始这道题");
     if (input.type === "start" && (session.flow.stage !== "intake" || session.flow.activeGate))
         throw new Error("本题已经开始学习");
     if (input.type === "choose_suggestion" && !session.flow.suggestedQuestions.some((item) => item.id === input.suggestionId))
@@ -71,7 +78,7 @@ function assertOfferedAnswer(session, answer) {
 }
 async function dispatchTurn(session, input, adapter, send, signal, imageDataUrl) {
     if (input.type === "start")
-        return startLearning(session, adapter, send, signal);
+        return startLearning(session, adapter, send, signal, (0, problem_evidence_1.requiresProblemImage)(session.problem) ? (0, turn_support_1.requireImage)(imageDataUrl) : undefined);
     const working = needsPreparedAnswer(input) ? await ensurePreparedAnswer(session, adapter) : session;
     if (input.type === "choose_suggestion")
         return answerSuggestedQuestion(working, input.suggestionId, adapter, send, signal);
@@ -113,15 +120,21 @@ async function handleImageAnswer(session, gateId, imageDataUrl, adapter, send, s
     }
     await handleAnswer(session, gateId, transcription.text, adapter, send, signal);
 }
-async function startLearning(session, adapter, send, signal) {
+async function startLearning(session, adapter, send, signal, imageDataUrl) {
     if (session.flow.stage !== "intake" || session.flow.activeGate)
         throw new Error("本题已经开始学习");
     send("flow.milestone", { key: "problem_understood", label: "先抓住这道题的核心" });
-    const completion = adapter.completeChatSession(session).then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
-    const sourceText = await streamReply(session, { kind: "problem", section: "keyClue" }, "这是本题首次讲解。请依次说明题目要解决什么、最关键的已知条件、第一突破口；不要公布最终答案，也不要完整代做。内容要有清晰层次，最后只问一个帮助学生迈出第一步的问题。", adapter, send, signal);
+    let teachingSession = session;
+    const completion = imageDataUrl ? null : adapter.completeChatSession(session).then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
+    if (imageDataUrl)
+        teachingSession = (0, session_preparation_1.mergePreparedAnswer)(session, await adapter.completeChatSession(session, imageDataUrl));
+    if (signal.aborted)
+        throw new DOMException("Aborted", "AbortError");
+    const teachingImage = teachingSession.problem.visualContext?.related && teachingSession.problem.visualContext.affectsSolving ? imageDataUrl : undefined;
+    const sourceText = await streamReply(teachingSession, { kind: "problem", section: "keyClue" }, "这是本题首次讲解。请依次说明题目要解决什么、最关键的已知条件、第一突破口；不要公布最终答案，也不要完整代做。内容要有清晰层次，最后只问一个帮助学生迈出第一步的问题。", adapter, send, signal, teachingImage, "problem");
     const provisional = updateFlow({
-        ...session,
-        problemGuide: { ...session.problemGuide, approach: sourceText },
+        ...teachingSession,
+        problemGuide: { ...teachingSession.problemGuide, approach: sourceText },
     }, {
         stage: "core_explanation",
         focus: { kind: "problem", section: "keyClue" },
@@ -131,6 +144,8 @@ async function startLearning(session, adapter, send, signal) {
     emitState(provisional, send);
     send("flow.ready", { stage: provisional.flow.stage, gateId: provisional.flow.activeGate?.id });
     const withSuggestions = await offerSuggestions(provisional, provisional.flow.focus, sourceText, adapter, send, signal);
+    if (!completion)
+        return;
     const result = await completion;
     if (signal.aborted)
         throw new DOMException("Aborted", "AbortError");
@@ -139,7 +154,7 @@ async function startLearning(session, adapter, send, signal) {
             throw result.error;
         return;
     }
-    const prepared = mergePreparedAnswer(withSuggestions, result.value);
+    const prepared = (0, session_preparation_1.mergePreparedAnswer)(withSuggestions, result.value);
     emitState(prepared, send);
 }
 async function answerQuestion(session, text, adapter, send, signal) {
@@ -188,9 +203,9 @@ async function handleChoice(session, gateId, choice, boardContext, adapter, send
     if (choice === "view_board") {
         requireGate(session, gateId);
         const suggestion = requestedBoardSuggestion(session);
-        const lesson = await adapter.generateBoardLesson(session, session.flow.focus, suggestion, boardContext);
+        const lesson = (0, board_1.createInstantBoardLesson)(session, session.flow.focus, suggestion, boardContext);
         send("board.lesson", lesson);
-        send("flow.progress", { key: "board", label: "学科原生板书已整理完成" });
+        send("flow.progress", { key: "board", label: "板书已整理完成" });
         emitState(touch(session), send);
         return;
     }
@@ -558,12 +573,12 @@ function canRequestTransfer(session) {
         return session.originalPassed || session.transferPassed;
     return session.flow.solutionRecallPassed && ["solution_recall", "reviewed_complete"].includes(session.flow.stage);
 }
-async function streamReply(session, scope, question, adapter, send, signal, imageDataUrl) {
+async function streamReply(session, scope, question, adapter, send, signal, imageDataUrl, imageRole = "student") {
     let emitted = false;
     const heading = `### ${(0, flow_1.flowScopeLabel)(session, scope)}\n\n`;
     let content = heading;
     send("message.delta", { text: heading });
-    await adapter.streamTutorReply(session, scope, question, (text) => { emitted = emitted || Boolean(text); content += text; send("message.delta", { text }); }, signal, imageDataUrl);
+    await adapter.streamTutorReply(session, scope, question, (text) => { emitted = emitted || Boolean(text); content += text; send("message.delta", { text }); }, signal, imageDataUrl, imageRole);
     if (!emitted)
         throw new Error("模型没有返回有效讲解");
     send("message.complete", { scopeLabel: (0, flow_1.flowScopeLabel)(session, scope) });
@@ -675,25 +690,9 @@ async function ensurePreparedAnswer(session, adapter) {
         throw new Error("学习会话缺少原题节点");
     if (root.check.answer !== provider_validation_1.PENDING_ORIGINAL_ANSWER)
         return session;
-    return mergePreparedAnswer(session, await adapter.completeChatSession(session));
-}
-function mergePreparedAnswer(session, prepared) {
-    const currentRoot = session.nodes.find((node) => node.id === session.rootNodeId);
-    const preparedRoot = prepared.nodes.find((node) => node.id === prepared.rootNodeId);
-    if (!currentRoot)
-        throw new Error("学习会话缺少原题节点");
-    if (!preparedRoot || !preparedRoot.check.answer.trim() || preparedRoot.check.answer === provider_validation_1.PENDING_ORIGINAL_ANSWER)
-        throw new Error("原题标准答案尚未准备完成，请重试当前操作");
-    const stableRoot = {
-        ...currentRoot,
-        check: {
-            ...currentRoot.check,
-            answer: preparedRoot.check.answer,
-            explanation: preparedRoot.check.explanation,
-        },
-    };
-    const nodes = session.nodes.map((node) => node.id === session.rootNodeId ? stableRoot : node);
-    return touch({ ...session, nodes });
+    if ((0, problem_evidence_1.requiresProblemImage)(session.problem))
+        throw new Error("原题图片尚未完成联合分析，请重新提交题目照片");
+    return (0, session_preparation_1.mergePreparedAnswer)(session, await adapter.completeChatSession(session));
 }
 function updateFlow(session, patch) {
     return touch({ ...session, flow: (0, flow_1.removeRepeatedSolutionAction)({ ...session.flow, suggestedQuestions: [], ...patch }) });

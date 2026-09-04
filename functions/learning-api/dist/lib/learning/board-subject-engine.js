@@ -9,6 +9,7 @@ const presentation_1 = require("./presentation");
 const board_evidence_1 = require("./board-evidence");
 const answer_protection_1 = require("./providers/answer-protection");
 const board_math_content_1 = require("./board-math-content");
+const problem_evidence_1 = require("./problem-evidence");
 const profiles = {
     math: profile("math", "数学 · 建模与推导", "把条件翻译成关系，在每次变换中保留依据与不变量。", [
         move("frame_relation", "题意成模", "orient", "明确对象、已知和待求", "题目真正要求哪个量或结论？"),
@@ -160,7 +161,7 @@ function allSubjectBoardMoves() {
     return Array.from(new Set([...Object.values(profiles), biologyExperimentProfile, biologyExpressionProfile, biologyGeneticsProfile, biologyLinkageProfile, chemistryClassificationProfile, chemistryReactionTypeProfile, englishVocabularyProfile, englishGrammarProfile, physicsPinholeProfile, physicsLensProfile, physicsOpticsProfile].flatMap((item) => item.moves.map((move) => move.id))));
 }
 function subjectBoardProfileFor(session) {
-    const problemText = session.problem.text;
+    const problemText = (0, problem_evidence_1.problemEvidenceText)(session.problem);
     const taskText = session.problemGuide.goal;
     const text = `${problemText} ${taskText}`;
     const biologyExperimentTask = /(?:设计实验|探究|变量|对照|实验组|control group|experiment)/i.test(text);
@@ -205,7 +206,7 @@ function createSubjectNativeBlocks(session, scope) {
     const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
     const selected = subjectBoardProfileFor(session);
     const context = boardContext(session, selected, node);
-    const mathContent = session.problem.subject === "math" ? (0, board_math_content_1.createMathBoardContent)(session.problem.text) : null;
+    const mathContent = session.problem.subject === "math" ? (0, board_math_content_1.createMathBoardContent)((0, problem_evidence_1.problemEvidenceText)(session.problem)) : null;
     if (mathContent)
         return (0, board_math_content_1.createMathBoardBlocks)(mathContent);
     const generated = selected === biologyExperimentProfile ? biologyExperimentBlocks(context)
@@ -292,18 +293,19 @@ function physicsOpticsBlocks(c) {
     return blocks(["光学系统", `${c.task} 先标出光源、介质、界面与观察者，明确光实际从哪里进入眼睛。`], ["光路追踪", `${c.clue} 沿传播方向画入射光，在界面处作法线，再标反射光或折射光。`], ["规律应用", `${c.approach} 根据光从哪种介质进入哪种介质，判断相对法线的偏折方向，不凭图形外观猜测。`], ["边界辨析", boundary], ["现象回译", recap]);
 }
 function physicsMirrorImageBlocks(c) {
-    return blocks(["物像对象", `${c.task} 先区分镜前物体、镜面和镜后像的位置，像不是镜面上的光斑。`], ["对称关系", `${c.clue} 以镜面为对称轴，物与像到镜面的垂直距离相等，连线垂直镜面。`], ["成像性质", `${c.approach} 平面镜所成的像与物等大、正立，并位于镜后；实际光线不会在像的位置会聚。`], ["虚像辨析", "眼睛根据反射光的反向延长线判断像的位置，因此像可以被看到，但不能用光屏承接。"], ["位置复核", `${c.question} 最后按“物距—等距对称—像的位置—虚像性质”逐项检查。`]);
+    return blocks(["物像对象", `${c.task} 先区分镜前物体、镜面和镜后像的位置，像不是镜面上的光斑。`], ["对称关系", `${c.clue} 以镜面为对称轴，物与像到镜面的垂直距离相等，连线垂直镜面。`], ["成像性质", `${c.approach} 平面镜成的是虚像：像与物等大、正立，并位于镜后；实际光线不会在像的位置会聚。`], ["虚像辨析", "眼睛根据反射光的反向延长线判断像的位置，因此像可以被看到，但不能用光屏承接。"], ["位置复核", `${c.question} 最后按“物距—等距对称—像的位置—虚像性质”逐项检查。`]);
 }
 function physicsReflectionBlocks(c) {
     return blocks(["反射系统", `${c.task} 先标出入射光、反射面与入射点，确定光实际到达平面镜的位置。`], ["法线基准", `${c.clue} 过入射点作垂直镜面的法线，入射角和反射角都必须相对法线测量。`], ["反射定律", `${c.approach} 反射光线与入射光线分居法线两侧，反射角等于入射角。`], ["角度辨析", "题目若给的是光线与镜面的夹角，必须先换成它与法线的夹角；不能把镜面夹角直接当作入射角。"], ["光路复核", `${c.question} 按“入射光—入射点—法线—等角反射”逐段核对方向和角度。`]);
 }
 function boardContext(session, profile, node) {
-    const evidences = evidenceClauses(session.problem.text);
+    const sourceText = (0, problem_evidence_1.problemEvidenceText)(session.problem);
+    const evidences = evidenceClauses(sourceText);
     const evidence = evidences[0] ?? "";
     const root = session.nodes.find((item) => item.id === session.rootNodeId);
     const answer = root?.check.answer ?? "";
     const focus = clean(safeGeneratedField(node?.title, answer, profile.moves[0].purpose), 54);
-    const task = safeGeneratedField(node?.simplification, answer, `${profile.moves[0].purpose}：${clean(session.problem.text, 100)}`);
+    const task = safeGeneratedField(node?.simplification, answer, `${profile.moves[0].purpose}：${clean(sourceText, 100)}`);
     const diagnostic = safeGeneratedField(node?.diagnosticEvidence, answer, "");
     const clue = diagnostic && !(0, board_evidence_1.isTaskInstructionText)(diagnostic) ? diagnostic : evidence || profile.thesis;
     const nodeExplanation = node?.teaching.explanation ?? "";
@@ -316,7 +318,7 @@ function boardContext(session, profile, node) {
         focus,
         evidence,
         evidences,
-        source: session.problem.text,
+        source: sourceText,
         answer,
     };
 }

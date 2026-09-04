@@ -7,6 +7,8 @@ const answer_protection_1 = require("./providers/answer-protection");
 const board_chronology_1 = require("./board-chronology");
 const board_evidence_1 = require("./board-evidence");
 const board_math_content_1 = require("./board-math-content");
+const provider_validation_1 = require("./providers/provider-validation");
+const problem_evidence_1 = require("./problem-evidence");
 function enrichBoardPlanWithSafeAids(session, plan, options = {}) {
     const scenes = plan.scenes.map((scene) => ({ ...scene }));
     let visualCount = scenes.filter((scene) => scene.visual).length;
@@ -56,14 +58,15 @@ function isBoardLessonSafeForRestore(session, lesson) {
     const visibleText = boardLessonVisibleText(lesson);
     const visibleMath = (0, answer_protection_1.normalizedAnswerMath)(visibleText);
     const normalizedAnswer = (0, answer_protection_1.normalizedAnswerMath)(answer);
-    const answerAlreadyInProblem = normalizedAnswer.length >= 2 && (0, answer_protection_1.normalizedAnswerMath)(session.problem.text).includes(normalizedAnswer);
+    const problemEvidence = (0, problem_evidence_1.problemEvidenceText)(session.problem);
+    const answerAlreadyInProblem = normalizedAnswer.length >= 2 && (0, answer_protection_1.normalizedAnswerMath)(problemEvidence).includes(normalizedAnswer);
     if (!answerAlreadyInProblem && !(0, answer_protection_1.isShortTextAnswer)(answer) && normalizedAnswer.length >= 2 && (0, answer_protection_1.protectedAnswerVariants)(answer).some((variant) => visibleMath.includes(variant)))
         return false;
     if ((0, answer_protection_1.explicitAnswerClaimLeak)(visibleText, answer))
         return false;
-    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, answer, session.problem.text))
+    if ((0, answer_protection_1.shortTextAnswerLeak)(visibleText, answer, problemEvidence))
         return false;
-    if ((0, answer_protection_1.protectedShortAnswers)(answer).some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, session.problem.text)))
+    if ((0, answer_protection_1.protectedShortAnswers)(answer).some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, problemEvidence)))
         return false;
     const explanation = (0, answer_protection_1.normalizedAnswerMath)(root?.check.explanation ?? "");
     return explanation.length < 12 || !visibleMath.includes(explanation);
@@ -77,8 +80,9 @@ function safePlanFromLegacyLesson(lesson) {
     };
 }
 function safeAidCandidates(session, plan) {
-    const mathContent = session.problem.subject === "math" ? (0, board_math_content_1.createMathBoardContent)(session.problem.text) : null;
-    const triangle = rightTriangleContext(session.problem.text);
+    const evidence = (0, problem_evidence_1.problemEvidenceText)(session.problem);
+    const mathContent = session.problem.subject === "math" ? (0, board_math_content_1.createMathBoardContent)(evidence) : null;
+    const triangle = rightTriangleContext(evidence);
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
     if (!root?.check.answer.trim())
         return [];
@@ -89,11 +93,14 @@ function safeAidCandidates(session, plan) {
     return candidates.filter((visual) => Boolean(visual) && !semanticVisualLeaksAnswer(session, visual));
 }
 function subjectNativeAid(session, plan) {
-    const comparison = comparisonFromProblem(session.problem.text);
+    const evidence = (0, problem_evidence_1.problemEvidenceText)(session.problem);
+    const comparison = comparisonFromProblem(evidence);
     if (comparison)
         return comparison;
+    if (session.problem.subject === "math")
+        return processFlowFromPlan(plan);
     if (session.problem.subject === "history")
-        return timelineFromProblem(session.problem.text) ?? evidenceChainFromPlan(plan);
+        return timelineFromProblem(evidence) ?? evidenceChainFromPlan(plan);
     if (session.problem.subject === "chinese" || session.problem.subject === "english" || session.problem.subject === "politics")
         return evidenceChainFromPlan(plan);
     return processFlowFromPlan(plan);
@@ -102,7 +109,8 @@ function comparisonFromProblem(problem) {
     const clause = problem.split(/[。！？!?；;\n]/).map((item) => item.trim()).find((item) => /(?:比较|对比|异同|difference|compare)/i.test(item));
     if (!clause)
         return null;
-    const match = clause.match(/(?:比较|对比)\s*([^，。；]{1,18}?)\s*(?:与|和)\s*([^，。；]{1,18}?)(?:的)?(?:异同|区别|共同点|$)/) ?? clause.match(/compare\s+(.{1,18}?)\s+(?:with|and)\s+(.{1,18}?)(?:[.。]|$)/i);
+    const scoped = clause.match(/(?:比较|对比)\s*([^，。；]{1,24}?)\s*(?:与|和)\s*([^，。；]{1,24}?)\s*在[^，。；]{1,32}?(?:上|中)(?:的)?(?:异同|区别|共同点|作用)/);
+    const match = scoped ?? clause.match(/(?:比较|对比)\s*([^，。；]{1,18}?)\s*(?:与|和)\s*([^，。；]{1,18}?)(?:的)?(?:异同|区别|共同点|$)/) ?? clause.match(/compare\s+(.{1,18}?)\s+(?:with|and)\s+(.{1,18}?)(?:[.。]|$)/i);
     if (!match)
         return null;
     const left = match[1].trim();
@@ -164,12 +172,16 @@ function compactEvidence(value) { return value.normalize("NFKC").replace(/[\s，
 function semanticVisualLeaksAnswer(session, visual) {
     const root = session.nodes.find((node) => node.id === session.rootNodeId);
     const answer = root?.check.answer ?? "";
+    // 安全辅助图只使用原题和确定性板书结构。首讲仍在后台准备标准答案时，
+    // 没有隐藏答案可被带入图中，不能因此关闭整个视觉内容引擎。
+    if (answer === provider_validation_1.PENDING_ORIGINAL_ANSWER)
+        return false;
     const visibleText = semanticVisualText(visual).join("\n");
     const visibleMath = (0, answer_protection_1.normalizedAnswerMath)(visibleText);
     const normalizedAnswer = (0, answer_protection_1.normalizedAnswerMath)(answer);
     if (normalizedAnswer.length >= 2 && (0, answer_protection_1.protectedAnswerVariants)(answer).some((variant) => visibleMath.includes(variant)))
         return true;
-    if ((0, answer_protection_1.protectedShortAnswers)(answer).some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, session.problem.text)))
+    if ((0, answer_protection_1.protectedShortAnswers)(answer).some((candidate) => (0, answer_protection_1.shortProtectedAnswerLeak)(visibleText, candidate, (0, problem_evidence_1.problemEvidenceText)(session.problem))))
         return true;
     const explanation = (0, answer_protection_1.normalizedAnswerMath)(root?.check.explanation ?? "");
     return explanation.length >= 12 && visibleMath.includes(explanation);

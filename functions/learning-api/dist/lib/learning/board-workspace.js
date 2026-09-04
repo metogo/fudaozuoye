@@ -7,20 +7,8 @@ exports.isStoredBoardWorkspaceState = isStoredBoardWorkspaceState;
 exports.boardNodeRecallState = boardNodeRecallState;
 const WORKSPACE_VERSION = 1;
 const modes = new Set(["overview", "derive", "recall"]);
-function compileBoardDocument(lesson) {
-    const scenes = lesson.plan?.scenes ?? lesson.blocks.map((block, index) => ({
-        id: block.id,
-        title: block.label,
-        content: block.content,
-        tone: block.tone,
-        intent: fallbackIntent(index),
-        sourceMessageIds: [],
-        visual: null,
-    }));
-    if (scenes.length === 0)
-        throw new Error("板书没有可编排的学习节点");
-    if (new Set(scenes.map((scene) => scene.id)).size !== scenes.length)
-        throw new Error("板书学习节点不能重复");
+function compileBoardDocument(experience) {
+    const scenes = experience.scenes;
     const nodes = scenes.map((scene, sceneIndex) => ({
         id: scene.id,
         sceneIndex,
@@ -36,12 +24,12 @@ function compileBoardDocument(lesson) {
         for (const prerequisiteId of node.prerequisiteIds)
             byId.get(prerequisiteId)?.dependentIds.push(node.id);
     }
-    const learningGoal = lesson.plan?.learningGoal ?? lesson.subtitle;
     return {
         version: WORKSPACE_VERSION,
-        key: `board-${stableHash([lesson.title, lesson.plan?.contentRevision ?? 0, lesson.plan?.discipline ?? lesson.plan?.subject ?? "", lesson.plan?.thesis ?? "", learningGoal, ...scenes.flatMap((scene) => [scene.id, scene.title, scene.content, scene.role ?? "", scene.move ?? "", scene.purpose ?? "", scene.evidence ?? "", scene.why ?? "", scene.selfCheck ?? ""])].join("\u241f"))}`,
-        title: lesson.title,
-        learningGoal,
+        key: `board-${experience.key}`,
+        legacyWorkspaceKey: experience.legacyWorkspaceKey,
+        title: experience.title,
+        learningGoal: experience.learningGoal,
         nodes,
     };
 }
@@ -55,9 +43,29 @@ function createBoardWorkspaceState(document) {
     };
 }
 function restoreBoardWorkspaceState(document, value) {
-    if (!isStoredBoardWorkspaceState(value, document))
-        return createBoardWorkspaceState(document);
-    return cloneWorkspaceState(value);
+    if (isStoredBoardWorkspaceState(value, document))
+        return cloneWorkspaceState(value);
+    return migrateLegacyWorkspaceState(document, value) ?? createBoardWorkspaceState(document);
+}
+function migrateLegacyWorkspaceState(document, value) {
+    if (!isRecord(value) || value.version !== WORKSPACE_VERSION || typeof value.documentKey !== "string"
+        || value.documentKey !== document.legacyWorkspaceKey
+        || !modes.has(String(value.mode)) || !Array.isArray(value.nodes))
+        return null;
+    const oldNodes = new Map();
+    for (const raw of value.nodes) {
+        if (!isRecord(raw) || typeof raw.nodeId !== "string" || typeof raw.revealed !== "boolean")
+            return null;
+        oldNodes.set(raw.nodeId, { nodeId: raw.nodeId, revealed: raw.revealed });
+    }
+    if (!document.nodes.every((node) => oldNodes.has(node.id)))
+        return null;
+    const activeStillExists = typeof value.activeNodeId === "string" && document.nodes.some((node) => node.id === value.activeNodeId);
+    const activeNodeId = activeStillExists ? value.activeNodeId : document.nodes[0]?.id ?? "";
+    return {
+        version: WORKSPACE_VERSION, documentKey: document.key, mode: activeStillExists ? value.mode : "overview", activeNodeId,
+        nodes: document.nodes.map((node) => ({ ...oldNodes.get(node.id) })),
+    };
 }
 function isStoredBoardWorkspaceState(value, document) {
     if (!isRecord(value) || value.version !== WORKSPACE_VERSION || value.documentKey !== document.key)
@@ -90,21 +98,10 @@ function prerequisiteIds(scenes, index) {
             : [];
     return Array.from(new Set([scenes[index - 1].id, ...semantic.map((scene) => scene.id)]));
 }
-function fallbackIntent(index) {
-    return ["extract", "connect", "derive", "verify", "compare"][index] ?? "verify";
-}
 function emptyNodeState(node) {
     return { nodeId: node.id, revealed: false };
 }
 function cloneWorkspaceState(state) {
     return { ...state, nodes: state.nodes.map((node) => ({ ...node })) };
-}
-function stableHash(value) {
-    let hash = 0x811c9dc5;
-    for (let index = 0; index < value.length; index += 1) {
-        hash ^= value.charCodeAt(index);
-        hash = Math.imul(hash, 0x01000193);
-    }
-    return (hash >>> 0).toString(36);
 }
 function isRecord(value) { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }

@@ -4,7 +4,7 @@ import { answerGate, understandingGate } from "@/lib/learning/flow";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import { openSession, sealSession } from "@/lib/learning/server-state";
-import type { ClientSessionState, LearningTurnInput } from "@/lib/learning/types";
+import type { ClientSessionState, GradeBand, LearningTurnInput, Subject } from "@/lib/learning/types";
 
 let requestIndex = 0;
 
@@ -32,6 +32,81 @@ describe("教育 Chat 学习回合", () => {
     const names = eventNames(body);
     expect(names.indexOf("flow.update")).toBeLessThan(names.indexOf("flow.ready"));
     expect(names.indexOf("flow.ready")).toBeLessThan(names.indexOf("flow.suggestions"));
+  });
+
+  it("属于当前题目的原图会同时进入首次讲解和后台标准答案分析", async () => {
+    let auditDone = false;
+    const completion = vi.spyOn(MockProviderAdapter.prototype, "completeChatSession").mockImplementation(async (session) => {
+      auditDone = true;
+      return analyzeMock(session.problem, "doubao");
+    });
+    const tutor = vi.spyOn(MockProviderAdapter.prototype, "streamTutorReply").mockImplementation(async (_session, _scope, _question, onDelta) => {
+      expect(auditDone).toBe(true);
+      onDelta("先看图中已经复核的条件。");
+    });
+    const mock = new MockProviderAdapter("doubao");
+    const problem = {
+      ...recognizeMock("math", "primary"),
+      visualContext: {
+        related: true,
+        affectsSolving: true,
+        summary: "题图包含必要尺寸",
+        confidence: 0.99,
+        facts: [{ text: "正方形边长标为12米", source: "printed_label" as const, confidence: 0.99 }],
+      },
+    };
+    const session = await mock.prepareChatSession(problem);
+    const response = await postTurn(imageRequest(sealSession(session), { type: "start" }));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(String(completion.mock.calls[0]?.[1])).toContain("data:image/png;base64");
+    expect(String(tutor.mock.calls[0]?.[5])).toContain("data:image/png;base64");
+    expect(tutor.mock.calls[0]?.[6]).toBe("problem");
+    expect(body).not.toContain("data:image/png;base64");
+  });
+
+  it("题目依赖原图时不允许退化成纯文字首次分析", async () => {
+    const mock = new MockProviderAdapter("doubao");
+    const problem = {
+      ...recognizeMock("math", "primary"),
+      visualContext: {
+        related: true,
+        affectsSolving: true,
+        summary: "题图包含必要尺寸",
+        confidence: 0.99,
+        facts: [{ text: "总长标为15米", source: "printed_label" as const, confidence: 0.99 }],
+      },
+    };
+    const session = await mock.prepareChatSession(problem);
+    const response = await postTurn(request(sealSession(session), { type: "start" }));
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("需要结合原图分析");
+  });
+
+  it("首次多模态复核判定图片不影响求解后，不再把原图交给教学模型", async () => {
+    const mock = new MockProviderAdapter("doubao");
+    const problem = {
+      ...recognizeMock("chinese", "primary"),
+      visualContext: { related: true, affectsSolving: false, summary: "课文插图", confidence: 0.99, facts: [] },
+    };
+    const pending = await mock.prepareChatSession(problem);
+    vi.spyOn(MockProviderAdapter.prototype, "completeChatSession").mockImplementation(async (session) => ({
+      ...analyzeMock(session.problem, "doubao"),
+      problem: { ...session.problem, visualContext: { related: false, affectsSolving: false, summary: "", confidence: 0.99, facts: [] } },
+    }));
+    const tutor = vi.spyOn(MockProviderAdapter.prototype, "streamTutorReply");
+    const response = await postTurn(imageRequest(sealSession(pending), { type: "start" }));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(tutor.mock.calls[0]?.[5]).toBeUndefined();
+  });
+
+  it("题目尚未完成首次分析时不能绕过 start 直接提问", async () => {
+    const mock = new MockProviderAdapter("doubao");
+    const pending = await mock.prepareChatSession(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const response = await postTurn(request(sealSession(pending), { type: "question", text: "直接告诉我怎么做" }));
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("请先开始这道题");
   });
 
   it("后台标准解尚未完成时，首讲结束已经开放互动选项", async () => {
@@ -154,7 +229,8 @@ describe("教育 Chat 学习回合", () => {
     const board = event<{ title: string; blocks: Array<{ id: string; content: string }>; annotations: Array<{ blockId: string; target: string; reason: string }> }>(body, "board.lesson");
 
     expect(board.title).toBeTruthy();
-    expect(board.blocks).toHaveLength(5);
+    expect(board.blocks.length).toBeGreaterThanOrEqual(2);
+    expect(board.blocks.length).toBeLessThanOrEqual(6);
     expect(board.annotations.length).toBeGreaterThanOrEqual(3);
     expect(board.annotations.every((annotation) => board.blocks.find((block) => block.id === annotation.blockId)?.content.includes(annotation.target))).toBe(true);
     expect(board.annotations.every((annotation) => annotation.reason.length >= 8)).toBe(true);
@@ -162,16 +238,21 @@ describe("教育 Chat 学习回合", () => {
     expect(next.session.flow.stage).toBe("core_explanation");
   });
 
-  it("板书通过适配器生成并携带当前对话上下文", async () => {
+  it("板书即时生成，并按当前对话卡点选择教学内容", async () => {
     const generator = vi.spyOn(MockProviderAdapter.prototype, "generateBoardLesson");
-    const started = await startState("math", "primary");
+    const started = await startState("history", "junior");
     const gate = started.session.flow.activeGate!;
-    const boardContext = [{ id: "assistant-current", role: "assistant" as const, text: "学生刚才卡在总量和每天工作量的关系。" }];
+    const baselineBody = await turn(started.stateToken, { type: "choose", gateId: gate.id, choice: "view_board" });
+    const baseline = event<{ blocks: unknown[] }>(baselineBody, "board.lesson");
+    const boardContext = [{ id: "assistant-current", role: "assistant" as const, text: "学生还是不懂为什么要这样做，也不知道从哪一步开始。" }];
     const body = await turn(started.stateToken, { type: "choose", gateId: gate.id, choice: "view_board", boardContext });
-    const instant = event<{ quality?: unknown; blocks: unknown[] }>(body, "board.lesson");
-    expect(instant.blocks).toHaveLength(5);
-    expect(body).toContain("学科原生板书已整理完成");
-    expect(generator).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), boardContext);
+    const instant = event<{ quality?: unknown; blocks: unknown[]; plan?: { scenes?: Array<{ visual?: unknown }> } }>(body, "board.lesson");
+    expect(instant.blocks.length).toBeGreaterThan(baseline.blocks.length);
+    expect(instant.plan?.scenes?.some((scene) => Boolean(scene.visual))).toBe(true);
+    expect(body.indexOf("event: board.lesson")).toBeLessThan(body.indexOf("event: flow.update"));
+    expect(body).toContain("板书已整理完成");
+    expect(eventNames(body).filter((name) => name === "board.lesson")).toHaveLength(1);
+    expect(generator).not.toHaveBeenCalled();
   });
 
   it("模型板书生成失败时保留即时板书，当前互动与学习进度保持不变", async () => {
@@ -541,7 +622,7 @@ describe("教育 Chat 学习回合", () => {
   });
 });
 
-async function startState(subject: "math" | "physics" | "chemistry", gradeBand: "primary" | "junior" | "senior") {
+async function startState(subject: Subject, gradeBand: GradeBand) {
   const session = analyzeMock(recognizeMock(subject, gradeBand), "doubao");
   return event<ClientSessionState>(await turn(sealSession(session), { type: "start" }), "flow.update");
 }

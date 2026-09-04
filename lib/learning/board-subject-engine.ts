@@ -3,6 +3,7 @@ import { assertBalancedLearningMarkup } from "./presentation";
 import { extractBoardEvidenceClauses, isTaskInstructionText } from "./board-evidence";
 import { generatedTextContainsAnswer } from "./providers/answer-protection";
 import { createMathBoardBlocks, createMathBoardContent } from "./board-math-content";
+import { problemEvidenceText } from "./problem-evidence";
 
 export interface SubjectBoardProfile {
   discipline: Subject;
@@ -177,7 +178,7 @@ export function allSubjectBoardMoves(): BoardDisciplineMove[] {
 }
 
 export function subjectBoardProfileFor(session: LearningSession): SubjectBoardProfile {
-  const problemText = session.problem.text;
+  const problemText = problemEvidenceText(session.problem);
   const taskText = session.problemGuide.goal;
   const text = `${problemText} ${taskText}`;
   const biologyExperimentTask = /(?:设计实验|探究|变量|对照|实验组|control group|experiment)/i.test(text);
@@ -210,7 +211,7 @@ export function createSubjectNativeBlocks(session: LearningSession, scope: Tutor
   const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : undefined;
   const selected = subjectBoardProfileFor(session);
   const context = boardContext(session, selected, node);
-  const mathContent = session.problem.subject === "math" ? createMathBoardContent(session.problem.text) : null;
+  const mathContent = session.problem.subject === "math" ? createMathBoardContent(problemEvidenceText(session.problem)) : null;
   if (mathContent) return createMathBoardBlocks(mathContent);
   const generated = selected === biologyExperimentProfile ? biologyExperimentBlocks(context)
     : selected === biologyExpressionProfile ? biologyExpressionBlocks(context)
@@ -352,7 +353,7 @@ function physicsOpticsBlocks(c: BoardContext): BoardBlock[] {
 }
 
 function physicsMirrorImageBlocks(c: BoardContext): BoardBlock[] {
-  return blocks(["物像对象", `${c.task} 先区分镜前物体、镜面和镜后像的位置，像不是镜面上的光斑。`], ["对称关系", `${c.clue} 以镜面为对称轴，物与像到镜面的垂直距离相等，连线垂直镜面。`], ["成像性质", `${c.approach} 平面镜所成的像与物等大、正立，并位于镜后；实际光线不会在像的位置会聚。`], ["虚像辨析", "眼睛根据反射光的反向延长线判断像的位置，因此像可以被看到，但不能用光屏承接。"], ["位置复核", `${c.question} 最后按“物距—等距对称—像的位置—虚像性质”逐项检查。`]);
+  return blocks(["物像对象", `${c.task} 先区分镜前物体、镜面和镜后像的位置，像不是镜面上的光斑。`], ["对称关系", `${c.clue} 以镜面为对称轴，物与像到镜面的垂直距离相等，连线垂直镜面。`], ["成像性质", `${c.approach} 平面镜成的是虚像：像与物等大、正立，并位于镜后；实际光线不会在像的位置会聚。`], ["虚像辨析", "眼睛根据反射光的反向延长线判断像的位置，因此像可以被看到，但不能用光屏承接。"], ["位置复核", `${c.question} 最后按“物距—等距对称—像的位置—虚像性质”逐项检查。`]);
 }
 
 function physicsReflectionBlocks(c: BoardContext): BoardBlock[] {
@@ -360,12 +361,13 @@ function physicsReflectionBlocks(c: BoardContext): BoardBlock[] {
 }
 
 function boardContext(session: LearningSession, profile: SubjectBoardProfile, node?: KnowledgeNode): BoardContext {
-  const evidences = evidenceClauses(session.problem.text);
+  const sourceText = problemEvidenceText(session.problem);
+  const evidences = evidenceClauses(sourceText);
   const evidence = evidences[0] ?? "";
   const root = session.nodes.find((item) => item.id === session.rootNodeId);
   const answer = root?.check.answer ?? "";
   const focus = clean(safeGeneratedField(node?.title, answer, profile.moves[0].purpose), 54);
-  const task = safeGeneratedField(node?.simplification, answer, `${profile.moves[0].purpose}：${clean(session.problem.text, 100)}`);
+  const task = safeGeneratedField(node?.simplification, answer, `${profile.moves[0].purpose}：${clean(sourceText, 100)}`);
   const diagnostic = safeGeneratedField(node?.diagnosticEvidence, answer, "");
   const clue = diagnostic && !isTaskInstructionText(diagnostic) ? diagnostic : evidence || profile.thesis;
   const nodeExplanation = node?.teaching.explanation ?? "";
@@ -378,7 +380,7 @@ function boardContext(session: LearningSession, profile: SubjectBoardProfile, no
     focus,
     evidence,
     evidences,
-    source: session.problem.text,
+    source: sourceText,
     answer,
   };
 }
