@@ -19,9 +19,7 @@ const labels: Record<ProviderId, { label: string; description: string }> = {
 export function isMockMode(): boolean {
   const raw = process.env.AI_MOCK_MODE?.trim().toLowerCase();
   if (raw && raw !== "true" && raw !== "false") throw new Error("AI_MOCK_MODE 只能设置为 true 或 false");
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  return process.env.NODE_ENV !== "production";
+  return raw === "true";
 }
 
 export function getProviderConfig(id: ProviderId, reasoningLevel: ReasoningLevel = "light"): ProviderConfig {

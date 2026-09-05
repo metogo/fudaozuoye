@@ -62,6 +62,8 @@ describe("Mock 学习引擎", () => {
 
   it("演示模式拒绝用固定答案伪装处理任意自定义题", async () => {
     const adapter = new MockProviderAdapter("doubao");
+    await expect(adapter.recognizeProblem("data:image/png;base64,iVBORw0KGgo="))
+      .rejects.toThrow("演示模式只支持内置代表题");
     await expect(adapter.recognizeTextProblem("这是一道历史题：请分析一项未收录改革的影响。"))
       .rejects.toThrow("只支持内置代表题");
     const custom = { ...recognizeMock("math", "junior"), text: "解方程 x+1=2。", userRevised: true };

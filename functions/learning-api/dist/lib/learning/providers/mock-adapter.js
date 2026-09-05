@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MockProviderAdapter = void 0;
+exports.MockProviderAdapter = exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = exports.BUILT_IN_MOCK_IMAGE_DATA_URL = void 0;
 const mock_engine_1 = require("../mock-engine");
 const curriculum_1 = require("../curriculum");
 const grade_pedagogy_1 = require("../grade-pedagogy");
@@ -10,6 +10,8 @@ const assessment_1 = require("./assessment");
 const board_1 = require("./board");
 const provider_validation_1 = require("./provider-validation");
 const tutor_1 = require("./tutor");
+exports.BUILT_IN_MOCK_IMAGE_DATA_URL = "data:image/jpeg;base64,demo";
+exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代表题，不支持自定义图片或文字题；请在 .env.local 中设置 AI_MOCK_MODE=false 并配置真实 AI 服务后再试";
 class MockProviderAdapter {
     id;
     reasoningLevel;
@@ -20,7 +22,9 @@ class MockProviderAdapter {
         this.reasoningLevel = reasoningLevel;
         this.modelId = `${id}-demo`;
     }
-    async recognizeProblem(_imageDataUrl, subject = "math", gradeBand = "primary") {
+    async recognizeProblem(imageDataUrl, subject = "math", gradeBand = "primary") {
+        if (imageDataUrl !== exports.BUILT_IN_MOCK_IMAGE_DATA_URL)
+            throw new Error(exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
         return (0, mock_engine_1.recognizeMock)(subject, gradeBand);
     }
     async recognizeTextProblem(text) {
@@ -29,12 +33,12 @@ class MockProviderAdapter {
         const sample = types_1.subjects.flatMap((subject) => bands.filter((band) => (0, curriculum_1.isSupportedSubjectBand)(subject, band)).map((band) => (0, mock_engine_1.recognizeMock)(subject, band)))
             .find((candidate) => compactProblemText(candidate.text) === compact);
         if (!sample)
-            throw new Error("演示模式只支持内置代表题，自定义题请配置真实 AI 服务后再试");
+            throw new Error(exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
         return { ...sample, text: text.trim(), childWork: "", confidence: 0.9, userRevised: true };
     }
     async prepareChatSession(problem) {
         if (!(0, mock_engine_1.isBuiltInMockProblem)(problem))
-            throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
+            throw new Error(exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
         return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
     async completeChatSession(session, imageDataUrl) {

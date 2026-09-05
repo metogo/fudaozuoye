@@ -9,6 +9,9 @@ import { createSafeBoardLesson, finalizeBoardLesson } from "./board";
 import { pendingChatSession, rootOnlySession } from "./provider-validation";
 import { questionSuggestionsMock, tutorReplyMock } from "./tutor";
 
+export const BUILT_IN_MOCK_IMAGE_DATA_URL = "data:image/jpeg;base64,demo";
+export const DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代表题，不支持自定义图片或文字题；请在 .env.local 中设置 AI_MOCK_MODE=false 并配置真实 AI 服务后再试";
+
 export class MockProviderAdapter implements ProviderAdapter {
   readonly modelId: string;
   readonly mode = "demo" as const;
@@ -17,7 +20,8 @@ export class MockProviderAdapter implements ProviderAdapter {
     this.modelId = `${id}-demo`;
   }
 
-  async recognizeProblem(_imageDataUrl: string, subject: ProblemSnapshot["subject"] = "math", gradeBand: ProblemSnapshot["gradeBand"] = "primary") {
+  async recognizeProblem(imageDataUrl: string, subject: ProblemSnapshot["subject"] = "math", gradeBand: ProblemSnapshot["gradeBand"] = "primary") {
+    if (imageDataUrl !== BUILT_IN_MOCK_IMAGE_DATA_URL) throw new Error(DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
     return recognizeMock(subject, gradeBand);
   }
 
@@ -26,12 +30,12 @@ export class MockProviderAdapter implements ProviderAdapter {
     const bands: GradeBand[] = ["primary", "junior", "senior"];
     const sample = subjects.flatMap((subject) => bands.filter((band) => isSupportedSubjectBand(subject, band)).map((band) => recognizeMock(subject, band)))
       .find((candidate) => compactProblemText(candidate.text) === compact);
-    if (!sample) throw new Error("演示模式只支持内置代表题，自定义题请配置真实 AI 服务后再试");
+    if (!sample) throw new Error(DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
     return { ...sample, text: text.trim(), childWork: "", confidence: 0.9, userRevised: true } as ProblemSnapshot;
   }
 
   async prepareChatSession(problem: ProblemSnapshot) {
-    if (!isBuiltInMockProblem(problem)) throw new Error("演示模式只支持内置代表题，请返回重新识别题目");
+    if (!isBuiltInMockProblem(problem)) throw new Error(DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE);
     return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
   }
   async completeChatSession(session: LearningSession, imageDataUrl?: string) {

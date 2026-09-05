@@ -3,6 +3,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    env: {
+      AI_MOCK_MODE: "true",
+      SESSION_STATE_SECRET: "test-only-session-state-secret-32",
+    },
     include: ["tests/**/*.test.ts"],
     coverage: { reporter: ["text", "json-summary"] },
   },

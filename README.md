@@ -10,11 +10,25 @@ cp .env.example .env.local
 npm run dev
 ```
 
-`npm run dev` 会同时启动 H5（`http://localhost:3000`）和本地学习 API（`http://localhost:9000`），并自动读取项目根目录的 `.env.local`。不配置 `.env.local` 时会进入 Mock 模式。
+`npm run dev` 会同时启动 H5（`http://localhost:3000`）和本地学习 API（`http://localhost:9000`），并自动读取项目根目录的 `.env.local`。Next.js 负责页面热更新，本地 API 会在 TypeScript 编译后自动重启。
+
+如果 `.env.local` 缺失，启动会在监听端口前直接失败，不会默认进入演示模式。`AI_MOCK_MODE` 也必须在 `.env.local` 中显式设为 `true` 或 `false`。
+
+## 演示模式
+
+将 `AI_MOCK_MODE=true` 可使用内置代表题验证确定性学习流程。启动后可在文字输入框粘贴下面这道内置小学数学题：
+
+```text
+一辆车 3 小时行驶 180 千米，照这样的速度，5 小时行驶多少千米？
+```
+
+演示模式不支持自定义文字题，也不支持上传或拍摄自定义题目图片；请求会明确返回限制说明，不会把内置固定题当成识别结果。需要识别真实题目时，请切换到真实模型模式。
+
+自动化测试通过 `vitest.config.ts` 显式启用 Mock，测试代码可直接构造内置代表题，无需真实模型密钥。
 
 ## 真实模型
 
-将 `AI_MOCK_MODE=false`，填写 `DOUBAO_API_KEY`，并为三档推理强度配置火山方舟推理接入点/模型 ID：
+将 `AI_MOCK_MODE=false`，填写 `DOUBAO_API_KEY` 和至少一个轻度模型 ID 后再运行 `npm run dev`。三档推理强度对应以下火山方舟推理接入点/模型 ID：
 
 ```bash
 # 轻度（当前默认）

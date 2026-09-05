@@ -13,11 +13,7 @@ function isMockMode() {
     const raw = process.env.AI_MOCK_MODE?.trim().toLowerCase();
     if (raw && raw !== "true" && raw !== "false")
         throw new Error("AI_MOCK_MODE 只能设置为 true 或 false");
-    if (raw === "true")
-        return true;
-    if (raw === "false")
-        return false;
-    return process.env.NODE_ENV !== "production";
+    return raw === "true";
 }
 function getProviderConfig(id, reasoningLevel = "light") {
     const mock = isMockMode();

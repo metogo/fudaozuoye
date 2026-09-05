@@ -2,13 +2,27 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertGraphInvariants } from "@/lib/learning/graph";
 import { LiveProviderAdapter, MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import { parseProblemGuide } from "@/lib/learning/providers/blueprint";
-import { getProviderConfig, listReasoningAvailability, type ProviderConfig } from "@/lib/learning/providers/config";
+import { getProviderConfig, isMockMode, listReasoningAvailability, type ProviderConfig } from "@/lib/learning/providers/config";
 import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution } from "@/lib/learning/providers/problem-image-analysis";
 import { parseProblem, parseProblemSolution, problemEvidenceSources } from "@/lib/learning/providers/provider-validation";
 import type { ProviderId } from "@/lib/learning/types";
 
 describe("三模型统一适配器契约", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+  it("未设置 AI_MOCK_MODE 时不会因开发环境静默进入演示", () => {
+    vi.stubEnv("AI_MOCK_MODE", "");
+    vi.stubEnv("NODE_ENV", "development");
+    expect(isMockMode()).toBe(false);
+    expect(getProviderConfig("doubao").mock).toBe(false);
+  });
+
+  it("Mock 只能由严格的 true 显式启用", () => {
+    vi.stubEnv("AI_MOCK_MODE", "true");
+    expect(isMockMode()).toBe(true);
+    vi.stubEnv("AI_MOCK_MODE", "yes");
+    expect(() => isMockMode()).toThrow("AI_MOCK_MODE 只能设置为 true 或 false");
+  });
 
   it("三档推理强度使用各自的豆包模型 ID", () => {
     vi.stubEnv("AI_MOCK_MODE", "false");

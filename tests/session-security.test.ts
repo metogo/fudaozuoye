@@ -17,6 +17,7 @@ describe("无状态学习会话边界", () => {
   });
 
   it("监护人同意与模型状态在同一次启动请求返回", async () => {
+    vi.stubEnv("AI_MOCK_MODE", "true");
     const response = await postConsent(new Request("http://localhost/api/consent", { method: "POST" }));
     const data = await response.json() as { accepted?: boolean; providers?: Array<{ id: string; available: boolean }>; reasoningLevels?: Array<{ id: string; label: string; available: boolean }> };
     expect(response.status).toBe(200);

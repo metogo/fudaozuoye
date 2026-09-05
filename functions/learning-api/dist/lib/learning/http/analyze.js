@@ -7,6 +7,7 @@ const mock_engine_1 = require("../mock-engine");
 const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
 const problem_evidence_1 = require("../problem-evidence");
+const mock_adapter_1 = require("../providers/mock-adapter");
 const types_1 = require("../types");
 const sse_1 = require("./sse");
 const subjects = new Set(types_1.subjects);
@@ -37,7 +38,7 @@ async function postAnalyze(request) {
             return new Response("缺少已确认的题目", { status: 400 });
         const problem = parseProblemSnapshot(JSON.parse(raw));
         if (adapter.mode === "demo" && !(0, mock_engine_1.isBuiltInMockProblem)(problem))
-            return new Response("演示模式只支持内置代表题，请返回重新识别题目", { status: 400 });
+            return new Response(mock_adapter_1.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
         return (0, sse_1.sse)(async (send) => {
             const startedAt = Date.now();
             send("phase", { key: "mapping", label: "正在理解题目要解决什么" });
@@ -69,6 +70,8 @@ async function recognize(form, provider, adapter) {
     if (!(file instanceof File))
         return new Response("请先选择一道题的照片", { status: 400 });
     await (0, request_guards_1.assertImageFile)(file);
+    if (adapter.mode === "demo")
+        return new Response(mock_adapter_1.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
     return (0, sse_1.sse)(async (send) => {
         const startedAt = Date.now();
         send("phase", { key: "recognizing", label: "正在识别题干与你的作答" });

@@ -8,24 +8,34 @@ api_port="${API_PORT:-9000}"
 api_pid=""
 web_pid=""
 compiler_pid=""
+
+if [ ! -f "$project_dir/.env.local" ]; then
+  printf '%s\n' "缺少 .env.local，本地服务未启动。请先运行：cp .env.example .env.local" >&2
+  exit 1
+fi
+
+# Validate the local mode before starting any watcher or listener. Node loads the
+# same env file used by the API process, without printing secret values.
+node --env-file="$project_dir/.env.local" -e '
+  const raw = process.env.AI_MOCK_MODE?.trim().toLowerCase();
+  if (raw !== "true" && raw !== "false") {
+    console.error("请在 .env.local 中显式设置 AI_MOCK_MODE=true（演示）或 AI_MOCK_MODE=false（真实模型）。");
+    process.exit(1);
+  }
+  if (raw === "false" && (!process.env.DOUBAO_API_KEY?.trim() || !process.env.DOUBAO_MODEL_ID?.trim())) {
+    console.error("真实模型配置不完整：请填写 DOUBAO_API_KEY 和轻度推理使用的 DOUBAO_MODEL_ID。");
+    process.exit(1);
+  }
+'
+
 api_watch_stamp="$(mktemp "${TMPDIR:-/tmp}/learning-api-watch.XXXXXX")"
 
 start_api() {
-  if [ -f "$project_dir/.env.local" ]; then
-    PORT="$api_port" \
-    HOST=localhost \
-    PUBLIC_APP_ORIGIN="http://localhost:$web_port" \
-    NODE_ENV=development \
-    node --env-file="$project_dir/.env.local" "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
-  else
-    PORT="$api_port" \
-    HOST=localhost \
-    PUBLIC_APP_ORIGIN="http://localhost:$web_port" \
-    NODE_ENV=development \
-    AI_MOCK_MODE=true \
-    SESSION_STATE_SECRET=local-development-session-secret-32 \
-    node "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
-  fi
+  PORT="$api_port" \
+  HOST=localhost \
+  PUBLIC_APP_ORIGIN="http://localhost:$web_port" \
+  NODE_ENV=development \
+  node --env-file="$project_dir/.env.local" "$project_dir/functions/learning-api/dist/functions/learning-api/src/index.js" &
   api_pid=$!
 }
 
