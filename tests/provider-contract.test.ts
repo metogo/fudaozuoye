@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertGraphInvariants } from "@/lib/learning/graph";
 import { LiveProviderAdapter, MockProviderAdapter } from "@/lib/learning/providers/adapter";
 import { parseProblemGuide } from "@/lib/learning/providers/blueprint";
-import { getProviderConfig, isMockMode, listReasoningAvailability, type ProviderConfig } from "@/lib/learning/providers/config";
+import { getIllustrationAvailability, getProviderConfig, isMockMode, listReasoningAvailability, type ProviderConfig } from "@/lib/learning/providers/config";
 import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution } from "@/lib/learning/providers/problem-image-analysis";
 import { parseProblem, parseProblemSolution, problemEvidenceSources } from "@/lib/learning/providers/provider-validation";
 import type { ProviderId } from "@/lib/learning/types";
@@ -53,6 +53,15 @@ describe("三模型统一适配器契约", () => {
       { id: "medium", available: false },
       { id: "high", available: false },
     ]);
+  });
+
+  it("图片模型独立配置，缺失时只禁用插画入口", () => {
+    vi.stubEnv("AI_MOCK_MODE", "false");
+    vi.stubEnv("DOUBAO_API_KEY", "test-key");
+    vi.stubEnv("DOUBAO_IMAGE_MODEL_ID", "");
+    expect(getIllustrationAvailability()).toEqual({ available: false, reason: "尚未配置图片模型 DOUBAO_IMAGE_MODEL_ID" });
+    vi.stubEnv("DOUBAO_IMAGE_MODEL_ID", "seedream-test");
+    expect(getIllustrationAvailability()).toEqual({ available: true });
   });
 
   it("推理强度会写入会话并在后续轮次保持不变", async () => {

@@ -10,6 +10,7 @@ const assessment_1 = require("./assessment");
 const board_1 = require("./board");
 const provider_validation_1 = require("./provider-validation");
 const tutor_1 = require("./tutor");
+const illustration_1 = require("./illustration");
 exports.BUILT_IN_MOCK_IMAGE_DATA_URL = "data:image/jpeg;base64,demo";
 exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代表题，不支持自定义图片或文字题；请在 .env.local 中设置 AI_MOCK_MODE=false 并配置真实 AI 服务后再试";
 class MockProviderAdapter {
@@ -103,6 +104,13 @@ class MockProviderAdapter {
     }
     async generateBoardLesson(session, scope, suggestion, context = []) {
         return contextualizeMockBoard((0, board_1.createSafeBoardLesson)(session, scope, suggestion), session, context);
+    }
+    async generateIllustrationLesson(session, onFrame, signal) {
+        if (signal?.aborted)
+            throw new DOMException("请求已取消", "AbortError");
+        const lesson = (0, illustration_1.createMockIllustrationLesson)(session);
+        lesson.frames.forEach((frame) => onFrame(frame, lesson.frameCount));
+        return lesson;
     }
     cancelPendingRequests() { }
 }

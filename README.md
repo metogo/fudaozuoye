@@ -41,6 +41,15 @@ DOUBAO_MODEL_ID_HIGH=
 
 前端只显示“轻度 / 中 / 高”，不显示模型或供应商名称。没有配置模型 ID 的强度会保持不可选，不会静默借用其他档位；开始分析后，本题的推理强度和模型 ID 都会锁定。
 
+如需在“轮到你了”中启用按需生成的“插画演示”，再配置图片模型：
+
+```bash
+DOUBAO_IMAGE_MODEL_ID=
+DOUBAO_IMAGE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3/images/generations
+```
+
+图片模型复用 `DOUBAO_API_KEY`。点击入口后，文本模型会按原题的有效演算结构自由决定 2–6 幅连续分镜，再由图片模型生成组图；演算公式和答案只以页面中的校验文字显示。生成未完整完成或主动关闭时不会改变学习进度；同一题在本页重开会复用结果，只有点击“重新生成”才会再次调用并计费。图片 URL 为供应商临时地址，首版不做跨设备保存。
+
 项目已提供本地文件 `.env.local`，可直接填值；该文件已被 `.gitignore` 排除。生产环境还必须设置至少 32 位随机 `SESSION_STATE_SECRET`，用于加密浏览器保存的无数据库会话。客户端只能看到题目，不会收到标准答案或可篡改的掌握状态。
 
 图片仅在当前请求内转发，不写入对象存储、数据库或日志；浏览器只在当前标签页的 `sessionStorage` 保存结构化单题进度，服务端不持久化题目正文或学生作答。
@@ -66,4 +75,4 @@ tcb fn deploy learning-api --dir functions/learning-api --httpFn
 tcb app deploy fudaozuoye --env-id mini-0324-100046523669-03b06729f --framework next --build-command "npm run build:cloudbase" --output-dir out --deploy-path /fudaozuoye --enable-git-ignore
 ```
 
-不要将模型密钥放到静态应用的构建变量。请只在 `learning-api` 云函数环境变量中设置 `DOUBAO_API_KEY`、`DOUBAO_MODEL_ID`、`DOUBAO_MODEL_ID_MEDIUM`、`DOUBAO_MODEL_ID_HIGH`、`DOUBAO_BASE_URL` 和至少 32 位的 `SESSION_STATE_SECRET`；本仓库不保存这些值。
+不要将模型密钥放到静态应用的构建变量。请只在 `learning-api` 云函数环境变量中设置 `DOUBAO_API_KEY`、`DOUBAO_MODEL_ID`、`DOUBAO_MODEL_ID_MEDIUM`、`DOUBAO_MODEL_ID_HIGH`、`DOUBAO_BASE_URL`、可选的 `DOUBAO_IMAGE_MODEL_ID`、`DOUBAO_IMAGE_BASE_URL` 和至少 32 位的 `SESSION_STATE_SECRET`；本仓库不保存这些值。

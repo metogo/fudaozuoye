@@ -5,12 +5,15 @@ exports.sealSession = sealSession;
 exports.openSession = openSession;
 exports.toClientState = toClientState;
 exports.createConsentValue = createConsentValue;
+exports.createIllustrationReceipt = createIllustrationReceipt;
+exports.hasValidIllustrationReceipt = hasValidIllustrationReceipt;
 exports.hasValidConsent = hasValidConsent;
 exports.consentRateIdentity = consentRateIdentity;
 const node_crypto_1 = require("node:crypto");
 const api_1 = require("./api");
 const TOKEN_VERSION = "v1";
 const CONSENT_VERSION = "guardian-v1";
+const ILLUSTRATION_RECEIPT_VERSION = "illustration-v1";
 exports.CONSENT_COOKIE = "guardian_consent_v1";
 function secret() {
     const configured = process.env.SESSION_STATE_SECRET?.trim();
@@ -61,6 +64,24 @@ function createConsentValue() {
     const payload = `${CONSENT_VERSION}.${timestamp}.${nonce}`;
     const signature = (0, node_crypto_1.createHmac)("sha256", secret()).update(payload).digest("base64url");
     return `${payload}.${signature}`;
+}
+function createIllustrationReceipt(requestId, problemFingerprint) {
+    const timestamp = String(Date.now());
+    const payload = `${ILLUSTRATION_RECEIPT_VERSION}.${timestamp}.${requestId}.${problemFingerprint}`;
+    return `${payload}.${(0, node_crypto_1.createHmac)("sha256", secret()).update(payload).digest("base64url")}`;
+}
+function hasValidIllustrationReceipt(raw, requestId, problemFingerprint) {
+    if (typeof raw !== "string")
+        return false;
+    const [version, timestamp, receiptRequestId, receiptFingerprint, signature, ...rest] = raw.split(".");
+    if (version !== ILLUSTRATION_RECEIPT_VERSION || !timestamp || receiptRequestId !== requestId || receiptFingerprint !== problemFingerprint || !signature || rest.length)
+        return false;
+    if (!Number.isFinite(Number(timestamp)) || Date.now() - Number(timestamp) > 24 * 60 * 60 * 1000 || Number(timestamp) > Date.now() + 60_000)
+        return false;
+    const payload = `${version}.${timestamp}.${receiptRequestId}.${receiptFingerprint}`;
+    const expected = (0, node_crypto_1.createHmac)("sha256", secret()).update(payload).digest();
+    const actual = Buffer.from(signature, "base64url");
+    return actual.length === expected.length && (0, node_crypto_1.timingSafeEqual)(actual, expected);
 }
 function hasValidConsent(request) {
     return validatedConsentValue(request) !== null;

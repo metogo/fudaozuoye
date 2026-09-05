@@ -3,7 +3,7 @@ import { providerError, ServiceError } from "../errors";
 import { assertGradeLanguage, gradeTeachingInstruction, inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
 import { isConcreteRecallAnswer, matchesTrustedRecallReference } from "../solution-recall";
 import { problemEvidenceText } from "../problem-evidence";
-import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
+import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem, IllustrationFrame, IllustrationLesson, KnowledgeEdge, KnowledgeNode, LearningSession, ProblemSnapshot, ProviderId, ReasoningLevel, SuggestedQuestion, TutorScope } from "../types";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
@@ -15,7 +15,7 @@ import {
   type KnowledgeSelection,
   type EvidenceSource,
 } from "./blueprint";
-import type { ProviderConfig } from "./config";
+import { getIllustrationAvailability, getIllustrationConfig, type ProviderConfig } from "./config";
 import { generateContextualBoardLesson } from "./board-generation";
 import {
   boardSuggestionTool,
@@ -44,6 +44,7 @@ import { fetchWithTransientRetry } from "./transient-fetch";
 import { assertBlueprintBatchUnique, buildSession, edgeReason, evidenceCandidates, expansionEvidenceSources, expansionSelectionOptions, isRecoverableReasonGroundingError, NonRepairableValidationError, normalizeBlueprintDetail, parseBoardSuggestion, parseInitialAnalysisSelection, parseProblem, parseProblemSolution, parseTextProblem, pendingChatSession, problemEvidenceSources } from "./provider-validation";
 import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution, problemRecognitionPrompt, problemSolutionRequest, tutorImageInstruction } from "./problem-image-analysis";
 import { generateValidatedSolution, streamValidatedSolution } from "./solution";
+import { assembleIllustrationLesson, illustrationSolutionEvidence, illustrationStoryboardPrompt, imageGenerationPrompt, parseGeneratedImages, parseIllustrationStoryboard } from "./illustration";
 export type AnalysisPhaseReporter = (key: string, label: string) => void;
 export interface ProviderAdapter {
   readonly id: ProviderId;
@@ -67,6 +68,7 @@ export interface ProviderAdapter {
   transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }>;
   decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion>;
   generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context?: BoardConversationMessage[]): Promise<BoardLesson>;
+  generateIllustrationLesson(session: LearningSession, onFrame: (frame: IllustrationFrame, frameCount: number) => void, signal?: AbortSignal): Promise<IllustrationLesson>;
   cancelPendingRequests(): void;
 }
 export { MockProviderAdapter } from "./mock-adapter";
@@ -538,8 +540,80 @@ export class LiveProviderAdapter implements ProviderAdapter {
       textRequest: (system, prompt, imageDataUrl, jsonMode, timeoutMs) => this.textRequest(system, prompt, imageDataUrl, jsonMode, timeoutMs),
     }, session, scope, suggestion, context);
   }
-  private async validatedJsonRequest<T>(system: string, prompt: string, parse: (value: JsonObject) => T, imageDataUrl?: string, recover?: (value: JsonObject, error: unknown) => T): Promise<T> {
-    const first = await this.textRequest(system, prompt, imageDataUrl, true);
+  async generateIllustrationLesson(session: LearningSession, onFrame: (frame: IllustrationFrame, frameCount: number) => void, signal?: AbortSignal): Promise<IllustrationLesson> {
+    const imageConfig = getIllustrationConfig();
+    const availability = getIllustrationAvailability();
+    if (!availability.available) throw new Error(availability.reason ?? "插画演示尚未配置图片模型");
+    const solutionEvidence = illustrationSolutionEvidence(session);
+    const request = illustrationStoryboardPrompt(session, solutionEvidence);
+    const storyboard = await this.validatedJsonRequest(request.system, request.prompt, (value) => parseIllustrationStoryboard(value, solutionEvidence), undefined, undefined, 25_000);
+    const controller = new AbortController();
+    const release = this.requests.track(controller);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    this.requestSignal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted || this.requestSignal?.aborted) controller.abort();
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 95_000);
+    try {
+      const response = await fetchWithTransientRetry(this.fetcher, imageConfig.baseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${imageConfig.apiKey}` },
+        body: JSON.stringify({
+          model: imageConfig.modelId,
+          prompt: imageGenerationPrompt(storyboard),
+          size: "2K",
+          sequential_image_generation: "auto",
+          sequential_image_generation_options: { max_images: storyboard.frames.length },
+          stream: false,
+          response_format: "url",
+          watermark: false,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw providerError(`图片模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
+      const images = parseGeneratedImages(await response.json(), storyboard.frames.length);
+      if (images.some((image) => !image)) return assembleIllustrationLesson(session, storyboard, images);
+      const audited = await Promise.all(images.map(async (imageUrl, index) => {
+        if (!imageUrl) return null;
+        const frame = storyboard.frames[index];
+        const raw = await this.textRequest(
+          "你是儿童教学插画安全与一致性审核器。检查图片本身，只输出严格 JSON。任何可见文字、字母、数字、公式、算式、水印，或与预期场景明显矛盾的数量关系，都必须判定 safe=false。",
+          JSON.stringify({ expectedScene: frame.visualPrompt, expectedMeaning: frame.alt, output: { safe: true, reason: "简短审核理由" } }),
+          imageUrl,
+          true,
+          20_000,
+        );
+        const result = parseJsonObject(raw);
+        if (result.safe !== true || typeof result.reason !== "string" || !result.reason.trim()) return null;
+        return imageUrl;
+      }));
+      audited.forEach((imageUrl, index) => {
+        if (!imageUrl) return;
+        onFrame({
+        id: storyboard.frames[index].id,
+        index: index + 1,
+        title: storyboard.frames[index].title,
+        calculation: storyboard.frames[index].calculationEvidence,
+        transition: storyboard.frames[index].transition,
+        alt: storyboard.frames[index].alt,
+          imageUrl,
+        }, storyboard.frames.length);
+      });
+      return assembleIllustrationLesson(session, storyboard, audited);
+    } catch (error) {
+      if ((signal?.aborted || this.requestSignal?.aborted) && error instanceof Error) throw new DOMException("请求已取消", "AbortError");
+      if (error instanceof DOMException && error.name === "AbortError" && timedOut) throw providerError("插画生成超时，学习进度未改变", 504);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      this.requestSignal?.removeEventListener("abort", abort);
+      release();
+    }
+  }
+  private async validatedJsonRequest<T>(system: string, prompt: string, parse: (value: JsonObject) => T, imageDataUrl?: string, recover?: (value: JsonObject, error: unknown) => T, timeoutMs = 60_000): Promise<T> {
+    const first = await this.textRequest(system, prompt, imageDataUrl, true, timeoutMs);
     try { return parse(parseJsonObject(first)); } catch (error) {
       if (error instanceof NonRepairableValidationError) throw error;
       const repaired = await this.textRequest(
@@ -547,6 +621,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
         `${repairContext(prompt)}\n\n上一次输出未通过校验：${error instanceof Error ? error.message : "结构不合法"}\n上一次输出：${first.slice(0, 8000)}\n请重新完成原任务并输出完整 JSON。`,
         imageDataUrl,
         true,
+        timeoutMs,
       );
       const repairedValue = parseJsonObject(repaired);
       try { return parse(repairedValue); } catch (repairError) {

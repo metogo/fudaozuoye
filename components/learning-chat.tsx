@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/presentation";
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { gradeBandLabels } from "@/lib/learning/grade-pedagogy";
-import type { ChatMessage, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
+import type { ChatMessage, IllustrationAvailability, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
 import { ArrowIcon, CameraIcon, CheckIcon, ImageIcon, InfoIcon, NetworkIcon, PencilIcon, SparkIcon } from "./icons";
 import { RichLearningText } from "./rich-learning-text";
 import { CopyableLearningText } from "./copyable-learning-text";
@@ -17,6 +17,7 @@ interface LearningChatProps {
   session: LearningSession | null;
   reasoningLevels: ReasoningAvailability[];
   reasoningLevel: ReasoningLevel;
+  illustrationAvailability?: IllustrationAvailability;
   ready: boolean;
   busy: boolean;
   loadingLabel: string;
@@ -172,7 +173,7 @@ export function LearningChat(props: LearningChatProps) {
         {props.reviewProblem && <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>}
         {props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn && <LoadingWhisper label={props.loadingLabel}/>}
         {isPreparingNextTurn && <NextTurnPlaceholder/>}
-        {!props.busy && !hasPendingRetry && gate && <GateCard gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} onChoice={props.onChoice} onAnswer={props.onSend}/>}
+        {!props.busy && !hasPendingRetry && gate && <GateCard gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}/>}
         {!props.busy && !hasPendingRetry && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>再次查看刚才的板书</span><span className="text-[9px] font-normal text-stone-400">不改变当前任务</span></button>}
         {!props.busy && props.session?.flow.stage === "complete" && !gate && <CompletionActions session={props.session} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {!props.busy && props.session?.flow.stage === "reviewed_complete" && !gate && <ReviewCompletionActions onRetryOriginal={props.onRetryOriginal} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
@@ -266,7 +267,7 @@ function SuggestedQuestionTrail({ suggestions, onSuggestion }: { suggestions: Su
   </section>;
 }
 
-function GateCard({ gate, answerChoices, choicesDerivedFromPrompt, allowFullSolution, onChoice, onAnswer }: { gate: LearningGate; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void }) {
+function GateCard({ gate, answerChoices, choicesDerivedFromPrompt, allowFullSolution, illustrationAvailability, onChoice, onAnswer }: { gate: LearningGate; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; illustrationAvailability: IllustrationAvailability; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void }) {
   const visibleOptions = allowFullSolution ? gate.options : gate.options?.filter((option) => option.id !== "full_solution");
   const parsedPrompt = gate.prompt ? parseLearningPrompt(gate.prompt) : null;
   const isAnswerGate = gate.kind === "node_answer" || gate.kind === "solution_recall_answer" || gate.kind === "original_answer" || gate.kind === "transfer_answer";
@@ -277,8 +278,9 @@ function GateCard({ gate, answerChoices, choicesDerivedFromPrompt, allowFullSolu
       <AnswerChoices choices={answerChoices} stripLabels={choicesDerivedFromPrompt} onAnswer={onAnswer}/>
       {!answerChoices?.length && <p className="text-[11px] leading-5 text-stone-500">请在下方输入你的答案并发送。</p>}
       {visibleOptions?.some((option) => option.id === "view_board") && <button type="button" onClick={() => onChoice(gate, "view_board")} className="mt-3 min-h-11 w-full rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 transition hover:border-stone-400">用板书讲清楚</button>}
+      {visibleOptions?.some((option) => option.id === "view_illustration") && <button type="button" disabled={!illustrationAvailability.available} title={illustrationAvailability.available ? "用连续插画演示原题步骤" : illustrationAvailability.reason} onClick={() => onChoice(gate, "view_illustration")} className="mt-2 min-h-11 w-full rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-900 transition hover:border-amber-400 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-50 disabled:text-stone-400">{illustrationAvailability.available ? "插画演示" : `插画演示 · ${illustrationAvailability.reason ?? "暂不可用"}`}</button>}
       {visibleOptions?.some((option) => option.id === "full_solution") && <button type="button" onClick={() => onChoice(gate, "full_solution")} className="mt-3 min-h-11 w-full rounded-xl text-[11px] font-semibold text-stone-400 underline decoration-stone-300 underline-offset-4">先看完整讲解</button>}
-    </> : visibleOptions?.length ? <div className="grid grid-cols-2 gap-2">{visibleOptions.map((option) => <button type="button" key={option.id} onClick={() => onChoice(gate, option.id)} className={`min-h-11 rounded-xl px-3 text-xs font-semibold transition active:scale-[.98] ${gate.kind === "solution_review" ? "col-span-2" : ""} ${option.emphasis === "primary" ? "bg-stone-950 text-white" : option.emphasis === "quiet" ? "col-span-2 text-stone-400 underline decoration-stone-300 underline-offset-4" : "border border-stone-200 text-stone-700 hover:border-stone-400"}`}>{option.label}</button>)}</div> : <p className="text-[11px] leading-5 text-stone-500">可以在下方继续描述哪里不懂。</p>}
+    </> : visibleOptions?.length ? <div className="grid grid-cols-2 gap-2">{visibleOptions.map((option) => { const illustrationDisabled = option.id === "view_illustration" && !illustrationAvailability.available; return <button type="button" key={option.id} disabled={illustrationDisabled} title={option.id === "view_illustration" ? illustrationDisabled ? illustrationAvailability.reason : "用连续插画演示原题步骤" : undefined} onClick={() => onChoice(gate, option.id)} className={`min-h-11 rounded-xl px-3 text-xs font-semibold transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40 ${gate.kind === "solution_review" ? "col-span-2" : ""} ${option.emphasis === "primary" ? "bg-stone-950 text-white" : option.emphasis === "quiet" ? "col-span-2 text-stone-400 underline decoration-stone-300 underline-offset-4" : "border border-stone-200 text-stone-700 hover:border-stone-400"}`}>{illustrationDisabled ? `${option.label} · ${illustrationAvailability.reason ?? "暂不可用"}` : option.label}</button>; })}</div> : <p className="text-[11px] leading-5 text-stone-500">可以在下方继续描述哪里不懂。</p>}
   </section>;
 }
 

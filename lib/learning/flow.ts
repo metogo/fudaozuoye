@@ -8,6 +8,7 @@ const understandingOptions = [
 ] as const;
 
 const boardOption = { id: "view_board", label: "用板书讲清楚", emphasis: "secondary" } as const;
+const illustrationOption = { id: "view_illustration", label: "插画演示", emphasis: "secondary" } as const;
 
 export function createInitialFlow(): LearningFlowState {
   return {
@@ -33,6 +34,7 @@ export function understandingGate(title = "这一段听懂了吗？", nodeId?: s
     options: [
       ...understandingOptions.slice(0, 3).map((item) => ({ ...item })),
       { ...boardOption },
+      { ...illustrationOption },
       { ...understandingOptions[3] },
     ],
   };
@@ -42,7 +44,7 @@ export function answerGate(kind: "node_answer" | "solution_recall_answer" | "ori
   return {
     id: gateId(kind), kind, title, prompt, nodeId,
     ...(answerChoices?.length ? { answerChoices: [...answerChoices] } : {}),
-    ...(kind === "transfer_answer" ? {} : { options: [{ ...boardOption }, { ...understandingOptions[3] }] }),
+    ...(kind === "transfer_answer" ? {} : { options: [{ ...boardOption }, { ...illustrationOption }, { ...understandingOptions[3] }] }),
   };
 }
 
@@ -55,6 +57,7 @@ export function postSolutionGate(title = "关键步骤已经理解。接下来�
       { id: "retry_original", label: "遮住讲解，重做原题", emphasis: "primary" },
       { id: "practice_similar", label: "换一道同知识点题", emphasis: "secondary" },
       { ...boardOption },
+      { ...illustrationOption },
       { id: "finish_review", label: "先结束，稍后再练", emphasis: "quiet" },
     ],
   };
@@ -68,12 +71,13 @@ export function solutionReviewGate(): LearningGate {
     options: [
       { id: "start_recall", label: "我看完了，收起讲解", emphasis: "primary" },
       { ...boardOption },
+      { ...illustrationOption },
     ],
   };
 }
 
 export function needsHelpGate(title: string): LearningGate {
-  return { id: gateId("needs-help"), kind: "needs_help", title, options: [{ ...boardOption }, { ...understandingOptions[3] }] };
+  return { id: gateId("needs-help"), kind: "needs_help", title, options: [{ ...boardOption }, { ...illustrationOption }, { ...understandingOptions[3] }] };
 }
 
 export function removeRepeatedSolutionAction(flow: LearningFlowState): LearningFlowState {
@@ -121,7 +125,7 @@ export function assertFlowState(value: unknown, nodes: KnowledgeNode[], transfer
   if (flow.stage === "reviewed_complete" && (flow.activeGate !== null || !flow.viewedSolution || !flow.solutionRecallPassed)) throw new Error("学习结束状态不一致");
   if (flow.activeGate?.options !== undefined) {
     const options = flow.activeGate.options;
-    const allowed = new Set(["continue", "try", "not_understood", "full_solution", "view_board", "start_recall", "retry_original", "practice_similar", "finish_review"]);
+    const allowed = new Set(["continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"]);
     if (!Array.isArray(options) || options.length < 1 || new Set(options.map((option) => option.id)).size !== options.length || options.some((option) => !allowed.has(option.id) || typeof option.label !== "string" || !option.label.trim())) throw new Error("当前学习任务的操作不合法");
     if (flow.activeGate.kind === "transfer_answer" && options.some((option) => option.id === "full_solution")) throw new Error("同类练习不能提供原题完整讲解");
   }

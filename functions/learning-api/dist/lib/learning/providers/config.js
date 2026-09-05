@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isMockMode = isMockMode;
 exports.getProviderConfig = getProviderConfig;
 exports.listReasoningAvailability = listReasoningAvailability;
+exports.getIllustrationConfig = getIllustrationConfig;
+exports.getIllustrationAvailability = getIllustrationAvailability;
 exports.listProviderAvailability = listProviderAvailability;
 const labels = {
     doubao: { label: "豆包", description: "默认模型，适合中文题目与讲解" },
@@ -47,6 +49,32 @@ function listReasoningAvailability() {
         label: id === "light" ? "轻度" : id === "medium" ? "中" : "高",
         available: mock || Boolean(apiKey && doubaoModelId(id)),
     }));
+}
+function getIllustrationConfig() {
+    return {
+        apiKey: process.env.DOUBAO_API_KEY?.trim() ?? "",
+        modelId: process.env.DOUBAO_IMAGE_MODEL_ID?.trim() ?? "",
+        baseUrl: process.env.DOUBAO_IMAGE_BASE_URL?.trim() || "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+        mock: isMockMode(),
+    };
+}
+function getIllustrationAvailability() {
+    const config = getIllustrationConfig();
+    if (config.mock)
+        return { available: true };
+    if (!config.modelId)
+        return { available: false, reason: "尚未配置图片模型 DOUBAO_IMAGE_MODEL_ID" };
+    if (!config.apiKey)
+        return { available: false, reason: "尚未配置豆包 API Key" };
+    try {
+        const url = new URL(config.baseUrl);
+        if (url.protocol !== "https:" || !url.hostname || url.username || url.password)
+            throw new Error();
+    }
+    catch {
+        return { available: false, reason: "图片模型地址必须是有效的 HTTPS 地址" };
+    }
+    return { available: true };
 }
 function doubaoModelId(level) {
     if (level === "medium")

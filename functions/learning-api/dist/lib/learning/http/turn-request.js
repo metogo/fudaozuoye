@@ -55,11 +55,13 @@ function parseTurnInput(value) {
         return { type: "image_question" };
     if (input.type === "choose_suggestion")
         return { type: "choose_suggestion", suggestionId: cleanText(input.suggestionId, "推荐问题不存在", 100) };
+    if (input.type === "acknowledge_illustration")
+        return { type: "acknowledge_illustration", gateId: cleanText(input.gateId, "学习任务不存在", 100), receipt: cleanText(input.receipt, "插画完成凭证不存在", 500) };
     if (input.type === "answer")
         return { type: "answer", gateId: cleanText(input.gateId, "学习任务不存在", 100), answer: cleanText(input.answer, "请先写下答案", 2_000) };
     if (input.type === "image_answer")
         return { type: "image_answer", gateId: cleanText(input.gateId, "学习任务不存在", 100) };
-    if (input.type === "choose" && ["continue", "try", "not_understood", "full_solution", "view_board", "start_recall", "retry_original", "practice_similar", "finish_review"].includes(String(input.choice))) {
+    if (input.type === "choose" && ["continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"].includes(String(input.choice))) {
         const choice = input.choice;
         if (choice !== "view_board" && input.boardContext !== undefined)
             throw new Error("当前操作不能携带板书上下文");

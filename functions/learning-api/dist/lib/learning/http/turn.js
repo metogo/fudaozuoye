@@ -8,6 +8,8 @@ const grade_pedagogy_1 = require("../grade-pedagogy");
 const problem_evidence_1 = require("../problem-evidence");
 const providers_1 = require("../providers");
 const board_1 = require("../providers/board");
+const config_1 = require("../providers/config");
+const illustration_1 = require("../providers/illustration");
 const assessment_1 = require("../providers/assessment");
 const provider_validation_1 = require("../providers/provider-validation");
 const request_guards_1 = require("../request-guards");
@@ -27,6 +29,8 @@ async function postTurn(request) {
         const parsed = await (0, turn_request_1.parseTurnRequest)(request, multipart);
         const session = (0, server_state_1.openSession)(parsed.stateToken);
         const input = parsed.input;
+        if (input.type === "choose" && input.choice === "view_illustration")
+            (0, request_guards_1.assertRateLimit)(request, 4, `illustration:${(0, server_state_1.consentRateIdentity)(request) ?? "local"}`);
         const adapter = (0, providers_1.getSessionProviderAdapter)(session, request.signal);
         assertTurnAllowed(session, input);
         if (input.type === "start" && (0, problem_evidence_1.requiresProblemImage)(session.problem) && !parsed.imageDataUrl)
@@ -48,12 +52,17 @@ function assertTurnAllowed(session, input) {
         throw new Error("本题已经开始学习");
     if (input.type === "choose_suggestion" && !session.flow.suggestedQuestions.some((item) => item.id === input.suggestionId))
         throw new Error("这组推荐问题已更新，请按页面最新内容继续");
-    if ((input.type === "choose" || input.type === "answer" || input.type === "image_answer") && session.flow.activeGate?.id !== input.gateId)
+    if ((input.type === "choose" || input.type === "answer" || input.type === "image_answer" || input.type === "acknowledge_illustration") && session.flow.activeGate?.id !== input.gateId)
         throw new Error("当前学习任务已变化，请按页面最新提示继续");
     if (input.type === "choose" && input.choice === "full_solution" && session.flow.viewedSolution)
         throw new Error("完整讲解已经看过了，现在请独立完成原题");
     if (input.type === "choose" && !session.flow.activeGate?.options?.some((option) => option.id === input.choice))
         throw new Error("当前学习任务没有提供这个操作");
+    if (input.type === "choose" && input.choice === "view_illustration") {
+        const availability = (0, config_1.getIllustrationAvailability)();
+        if (!availability.available)
+            throw new Error(`${availability.reason ?? "插画演示暂不可用"}，主学习流程仍可继续`);
+    }
     if (input.type === "answer" && !["node_answer", "solution_recall_answer", "original_answer", "transfer_answer"].includes(session.flow.activeGate?.kind ?? ""))
         throw new Error("当前学习任务不接受文字答案");
     if (input.type === "image_answer" && !["node_answer", "solution_recall_answer", "original_answer", "transfer_answer"].includes(session.flow.activeGate?.kind ?? ""))
@@ -92,6 +101,8 @@ async function dispatchTurn(session, input, adapter, send, signal, imageDataUrl)
         return offerOriginalAnswer(working, send, "继续验证：遮住讲解，重做同一道原题");
     if (input.type === "request_transfer")
         return offerTransfer(working, adapter, send, signal);
+    if (input.type === "acknowledge_illustration")
+        return acknowledgeIllustration(working, input.receipt, send);
     if (input.type === "choose")
         return handleChoice(working, input.gateId, input.choice, input.boardContext ?? [], adapter, send, signal);
     return handleAnswer(working, input.gateId, input.answer, adapter, send, signal);
@@ -175,6 +186,27 @@ async function answerSuggestedQuestion(session, suggestionId, adapter, send, sig
     emitState(next, send);
 }
 async function handleChoice(session, gateId, choice, boardContext, adapter, send, signal) {
+    if (choice === "view_illustration") {
+        requireGate(session, gateId);
+        send("illustration.progress", { requestId: session.requestId, key: "storyboard", label: "正在按这道题的演算结构安排分镜" });
+        let elapsedSeconds = 0;
+        const progress = setInterval(() => {
+            elapsedSeconds += 12;
+            send("illustration.progress", { requestId: session.requestId, key: "generating", label: `正在生成连续插画，已等待约 ${elapsedSeconds} 秒` });
+        }, 12_000);
+        try {
+            const lesson = await adapter.generateIllustrationLesson(session, (frame, frameCount) => {
+                send("illustration.frame", { requestId: session.requestId, problemFingerprint: (0, illustration_1.illustrationFingerprint)(session), frameCount, frame });
+                send("illustration.progress", { requestId: session.requestId, key: "image", label: `已完成 ${frame.index}/${frameCount} 幅插画` });
+            }, signal);
+            send("illustration.complete", { ...lesson, receipt: (0, server_state_1.createIllustrationReceipt)(session.requestId, lesson.problemFingerprint) });
+            emitState(touch(session), send);
+        }
+        finally {
+            clearInterval(progress);
+        }
+        return;
+    }
     if (choice === "start_recall") {
         requireGate(session, gateId, "solution_review");
         const check = (0, solution_recall_1.solutionRecallCheck)(session);
@@ -220,6 +252,23 @@ async function handleChoice(session, gateId, choice, boardContext, adapter, send
     if (choice === "try")
         return offerCurrentAnswer(session, send);
     return continueTeaching(session, adapter, send, signal);
+}
+function acknowledgeIllustration(session, receipt, send) {
+    const fingerprint = (0, illustration_1.illustrationFingerprint)(session);
+    if (!(0, server_state_1.hasValidIllustrationReceipt)(receipt, session.requestId, fingerprint))
+        throw new Error("插画完成凭证无效，请重新生成");
+    if (session.flow.viewedSolution) {
+        emitState(touch(session), send);
+        return;
+    }
+    emitState(updateFlow(session, {
+        stage: "solution_recall",
+        focus: { kind: "problem", section: "approach" },
+        viewedSolution: true,
+        solutionRecallPassed: false,
+        activeGate: (0, flow_1.solutionReviewGate)(),
+        remediationCount: 0,
+    }), send);
 }
 async function continueTeaching(session, adapter, send, signal) {
     if (session.flow.focus.kind === "problem") {
@@ -682,7 +731,7 @@ function emitState(session, send) {
 function needsPreparedAnswer(input) {
     if (input.type === "answer" || input.type === "image_answer" || input.type === "retry_original")
         return true;
-    return input.type === "choose" && (input.choice === "try" || input.choice === "retry_original");
+    return input.type === "choose" && (input.choice === "try" || input.choice === "retry_original" || input.choice === "view_illustration");
 }
 async function ensurePreparedAnswer(session, adapter) {
     const root = session.nodes.find((node) => node.id === session.rootNodeId);

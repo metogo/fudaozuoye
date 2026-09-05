@@ -4,6 +4,7 @@ import type { ClientSessionState, LearningSession } from "./types";
 
 const TOKEN_VERSION = "v1";
 const CONSENT_VERSION = "guardian-v1";
+const ILLUSTRATION_RECEIPT_VERSION = "illustration-v1";
 export const CONSENT_COOKIE = "guardian_consent_v1";
 
 function secret(): Buffer {
@@ -53,6 +54,23 @@ export function createConsentValue(): string {
   const payload = `${CONSENT_VERSION}.${timestamp}.${nonce}`;
   const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
+}
+
+export function createIllustrationReceipt(requestId: string, problemFingerprint: string): string {
+  const timestamp = String(Date.now());
+  const payload = `${ILLUSTRATION_RECEIPT_VERSION}.${timestamp}.${requestId}.${problemFingerprint}`;
+  return `${payload}.${createHmac("sha256", secret()).update(payload).digest("base64url")}`;
+}
+
+export function hasValidIllustrationReceipt(raw: unknown, requestId: string, problemFingerprint: string): boolean {
+  if (typeof raw !== "string") return false;
+  const [version, timestamp, receiptRequestId, receiptFingerprint, signature, ...rest] = raw.split(".");
+  if (version !== ILLUSTRATION_RECEIPT_VERSION || !timestamp || receiptRequestId !== requestId || receiptFingerprint !== problemFingerprint || !signature || rest.length) return false;
+  if (!Number.isFinite(Number(timestamp)) || Date.now() - Number(timestamp) > 24 * 60 * 60 * 1000 || Number(timestamp) > Date.now() + 60_000) return false;
+  const payload = `${version}.${timestamp}.${receiptRequestId}.${receiptFingerprint}`;
+  const expected = createHmac("sha256", secret()).update(payload).digest();
+  const actual = Buffer.from(signature, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 export function hasValidConsent(request: Request): boolean {

@@ -50,6 +50,7 @@ export type LearningChoice =
   | "not_understood"
   | "full_solution"
   | "view_board"
+  | "view_illustration"
   | "start_recall"
   | "retry_original"
   | "practice_similar"
@@ -285,6 +286,31 @@ export interface BoardLesson {
   returnLabel: string;
 }
 
+export interface IllustrationFrame {
+  id: string;
+  index: number;
+  title: string;
+  calculation: string;
+  transition: string;
+  alt: string;
+  imageUrl: string;
+}
+
+export interface IllustrationLesson {
+  version: 1;
+  requestId: string;
+  problemFingerprint: string;
+  receipt?: string;
+  title: string;
+  frameCount: number;
+  frames: IllustrationFrame[];
+}
+
+export interface IllustrationAvailability {
+  available: boolean;
+  reason?: string;
+}
+
 export type BoardSceneMedium = "text" | "derivation" | "relation" | "source";
 
 export type BoardExperienceElement =
@@ -409,6 +435,7 @@ export type LearningTurnInput =
   | { type: "answer"; gateId: string; answer: string }
   | { type: "image_answer"; gateId: string }
   | { type: "choose_suggestion"; suggestionId: string }
+  | { type: "acknowledge_illustration"; gateId: string; receipt: string }
   | { type: "retry_original" }
   | { type: "request_transfer" };
 

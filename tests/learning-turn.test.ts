@@ -25,7 +25,7 @@ describe("教育 Chat 学习回合", () => {
     expect(body).toContain("event: flow.milestone");
     expect(next.session.flow.stage).toBe("core_explanation");
     expect(next.session.flow.activeGate?.kind).toBe("understanding");
-    expect(next.session.flow.activeGate?.options?.map((item) => item.id)).toEqual(["continue", "try", "not_understood", "view_board", "full_solution"]);
+    expect(next.session.flow.activeGate?.options?.map((item) => item.id)).toEqual(["continue", "try", "not_understood", "view_board", "view_illustration", "full_solution"]);
     expect(next.session.flow.boardSuggestion).toBeNull();
     expect(body).toContain("event: flow.suggestions");
     expect(next.session.flow.suggestedQuestions).toHaveLength(2);
@@ -131,7 +131,7 @@ describe("教育 Chat 学习回合", () => {
     expect(earlyBody).toContain("event: flow.update");
     expect(earlyBody).toContain("event: flow.ready");
     expect(earlyBody).toContain("event: flow.suggestions");
-    expect(event<ClientSessionState>(earlyBody, "flow.update").session.flow.activeGate?.options?.map((item) => item.id)).toEqual(["continue", "try", "not_understood", "view_board", "full_solution"]);
+    expect(event<ClientSessionState>(earlyBody, "flow.update").session.flow.activeGate?.options?.map((item) => item.id)).toEqual(["continue", "try", "not_understood", "view_board", "view_illustration", "full_solution"]);
     releasePreparation?.();
     while (!(await reader.read()).done) { /* drain */ }
   });
@@ -195,7 +195,7 @@ describe("教育 Chat 学习回合", () => {
     expect(body).toContain("event: flow.ready");
     expect(body).not.toContain("event: error");
     expect(next.session.flow.activeGate?.kind).toBe("understanding");
-    expect(next.session.flow.activeGate?.options).toHaveLength(5);
+    expect(next.session.flow.activeGate?.options).toHaveLength(6);
 
     const boardBody = await turn(next.stateToken, { type: "choose", gateId: next.session.flow.activeGate!.id, choice: "view_board" });
     expect(boardBody).toContain("event: board.lesson");
@@ -467,13 +467,13 @@ describe("教育 Chat 学习回合", () => {
 
     const recallState = await passSolutionRecall(afterWrong);
     expect(recallState.session.flow.activeGate?.kind).toBe("post_solution");
-    expect(recallState.session.flow.activeGate?.options?.map((option) => option.id)).toEqual(["retry_original", "practice_similar", "view_board", "finish_review"]);
+    expect(recallState.session.flow.activeGate?.options?.map((option) => option.id)).toEqual(["retry_original", "practice_similar", "view_board", "view_illustration", "finish_review"]);
 
     const retryBody = await turn(recallState.stateToken, { type: "choose", gateId: recallState.session.flow.activeGate!.id, choice: "retry_original" });
     const retryState = event<ClientSessionState>(retryBody, "flow.update");
     expect(retryState.session.flow.activeGate?.kind).toBe("original_answer");
     expect(retryState.session.flow.activeGate?.title).toContain("刚才的原题");
-    expect(retryState.session.flow.activeGate?.options?.map((option) => option.id)).toEqual(["view_board"]);
+    expect(retryState.session.flow.activeGate?.options?.map((option) => option.id)).toEqual(["view_board", "view_illustration"]);
     const correctBody = await turn(retryState.stateToken, { type: "answer", gateId: retryState.session.flow.activeGate!.id, answer: "300" });
     const complete = event<ClientSessionState>(correctBody, "flow.update");
     expect(complete.session.flow.stage).toBe("complete");

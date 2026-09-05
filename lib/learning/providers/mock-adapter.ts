@@ -2,12 +2,13 @@ import { analyzeMock, expandMock, isBuiltInMockProblem, recognizeMock, similarCh
 import { isSupportedSubjectBand } from "../curriculum";
 import { adaptTeachingCopy, teachingBandOf } from "../grade-pedagogy";
 import { isConcreteRecallAnswer } from "../solution-recall";
-import { subjects, type BoardConversationMessage, type BoardLesson, type BoardSuggestion, type CheckItem, type GradeBand, type LearningSession, type ProblemSnapshot, type ProviderId, type ReasoningLevel, type SuggestedQuestion, type TutorScope } from "../types";
+import { subjects, type BoardConversationMessage, type BoardLesson, type BoardSuggestion, type CheckItem, type GradeBand, type IllustrationFrame, type IllustrationLesson, type LearningSession, type ProblemSnapshot, type ProviderId, type ReasoningLevel, type SuggestedQuestion, type TutorScope } from "../types";
 import type { AnalysisPhaseReporter, ProviderAdapter } from "./adapter";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
 import { createSafeBoardLesson, finalizeBoardLesson } from "./board";
 import { pendingChatSession, rootOnlySession } from "./provider-validation";
 import { questionSuggestionsMock, tutorReplyMock } from "./tutor";
+import { createMockIllustrationLesson } from "./illustration";
 
 export const BUILT_IN_MOCK_IMAGE_DATA_URL = "data:image/jpeg;base64,demo";
 export const DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代表题，不支持自定义图片或文字题；请在 .env.local 中设置 AI_MOCK_MODE=false 并配置真实 AI 服务后再试";
@@ -90,6 +91,12 @@ export class MockProviderAdapter implements ProviderAdapter {
   }
   async generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context: BoardConversationMessage[] = []): Promise<BoardLesson> {
     return contextualizeMockBoard(createSafeBoardLesson(session, scope, suggestion), session, context);
+  }
+  async generateIllustrationLesson(session: LearningSession, onFrame: (frame: IllustrationFrame, frameCount: number) => void, signal?: AbortSignal): Promise<IllustrationLesson> {
+    if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
+    const lesson = createMockIllustrationLesson(session);
+    lesson.frames.forEach((frame) => onFrame(frame, lesson.frameCount));
+    return lesson;
   }
   cancelPendingRequests() {}
 }

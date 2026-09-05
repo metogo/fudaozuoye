@@ -391,6 +391,8 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain("当前环节");
     expect(html).toContain("确认你是否理解核心思路");
     expect(html).toContain("懂了、没懂，或直接问…");
+    expect(html).toContain("插画演示");
+    expect(html).toContain("用连续插画演示原题步骤");
     expect(html).not.toContain("当前任务：核心思路听懂了吗？");
     expect(html).not.toContain("提问方式");
     expect(understandingChoiceFromText("我懂了。 ")).toBe("continue");
