@@ -2,6 +2,7 @@
   "name": "learning-api",
   "private": true,
   "type": "commonjs",
+  "dependencies": { "mathjs": "15.2.0", "katex": "0.18.4" },
   "scripts": {
     "start": "node dist/functions/learning-api/src/index.js"
   }

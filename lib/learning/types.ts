@@ -294,6 +294,7 @@ export interface IllustrationFrame {
   transition: string;
   alt: string;
   imageUrl: string;
+  scene?: import("./teaching-scene").TeachingScene;
 }
 
 export interface IllustrationLesson {

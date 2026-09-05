@@ -8,6 +8,7 @@ import type {
   IllustrationLesson,
 } from "@/lib/learning/types";
 import { RichLearningText } from "./rich-learning-text";
+import { TeachingScene } from "./teaching-scene";
 
 interface LearningIllustrationProps {
   lesson: IllustrationLesson | null;
@@ -108,7 +109,7 @@ export function LearningIllustration({
           {frame ? (
             <article className="overflow-hidden rounded-[28px] border border-stone-200 bg-white shadow-[0_18px_50px_rgba(41,37,36,.1)]">
               <div className="aspect-[4/3] bg-stone-100">
-                {brokenFrames.has(frame.id) ? (
+                {frame.scene ? <TeachingScene scene={frame.scene} fallbackUrl={frame.imageUrl} alt={frame.alt} /> : brokenFrames.has(frame.id) ? (
                   <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                     <p className="text-sm font-semibold text-stone-800">
                       这幅临时图片已失效
@@ -144,7 +145,7 @@ export function LearningIllustration({
                     步骤 {frame.index}/{lesson?.frameCount ?? expectedCount}
                   </span>
                   <span className="text-[10px] font-medium text-stone-400">
-                    AI 插画 · 演算以文字为准
+                    题目关系 · 分步演示
                   </span>
                 </div>
                 <h3 className="mt-4 text-lg font-bold text-stone-950">
@@ -165,7 +166,7 @@ export function LearningIllustration({
             <div className="flex min-h-[55vh] flex-col items-center justify-center rounded-[28px] border border-stone-200 bg-white px-6 text-center">
               <span className="h-9 w-9 animate-pulse rounded-full bg-amber-400" />
               <h3 className="mt-5 text-base font-bold text-stone-900">
-                正在判断这道题需要几幅插画
+                正在核对数量关系并安排步骤
               </h3>
               <p className="mt-2 text-xs leading-6 text-stone-500">
                 {loadingLabel || "模型会按有效演算步骤决定，不会为凑数量拆分。"}

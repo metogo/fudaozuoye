@@ -112,6 +112,7 @@ export function EducationChatApp() {
   const [pendingImage, setPendingImage] = useState<Blob | null>(null);
   const [illustrationLesson, setIllustrationLesson] =
     useState<IllustrationLesson | null>(null);
+  const illustrationLessonRef = useRef<IllustrationLesson | null>(null);
   const [illustrationFrames, setIllustrationFrames] = useState<
     IllustrationFrame[]
   >([]);
@@ -427,8 +428,9 @@ export function EducationChatApp() {
     if (!session || busy) return;
     if (
       choice === "view_illustration" &&
-      canReuseIllustration(illustrationLesson, session)
+      canReuseIllustration(illustrationLessonRef.current ?? illustrationLesson, session)
     ) {
+      setIllustrationLesson(illustrationLessonRef.current ?? illustrationLesson);
       setIllustrationOpen(true);
       return;
     }
@@ -437,6 +439,7 @@ export function EducationChatApp() {
       choiceLabel(choice);
     addMessage(userMessage(label));
     if (choice === "view_illustration") {
+      illustrationLessonRef.current = null;
       setIllustrationLesson(null);
       setIllustrationFrames([]);
       setIllustrationExpectedCount(0);
@@ -802,7 +805,7 @@ export function EducationChatApp() {
           setIllustrationFrames((existing) =>
             existing.some((frame) => frame.id === result.frame?.id)
               ? existing
-              : existing.concat(result.frame as IllustrationFrame),
+              : existing.concat(result.frame as IllustrationFrame).sort((left, right) => left.index - right.index),
           );
         }
         if (event === "illustration.complete") {
@@ -814,6 +817,7 @@ export function EducationChatApp() {
           )
             return;
           setIllustrationLesson(lesson);
+          illustrationLessonRef.current = lesson;
           setIllustrationFrames(lesson.frames);
           setIllustrationExpectedCount(lesson.frameCount);
           setIllustrationError("");
@@ -891,11 +895,14 @@ export function EducationChatApp() {
             setCachedBoardLesson(null);
             setBoardDocument(null);
             setBoardWorkspaceState(null);
-            setIllustrationLesson(null);
-            setIllustrationFrames([]);
-            setIllustrationExpectedCount(0);
-            setIllustrationError("");
-            setIllustrationOpen(false);
+            if (!canReuseIllustration(illustrationLessonRef.current, next.session)) {
+              illustrationLessonRef.current = null;
+              setIllustrationLesson(null);
+              setIllustrationFrames([]);
+              setIllustrationExpectedCount(0);
+              setIllustrationError("");
+              setIllustrationOpen(false);
+            }
           }
           boardRestoreRequestIdRef.current = next.session.requestId;
           setSession(next.session);
@@ -1002,6 +1009,7 @@ export function EducationChatApp() {
     setResponseCrop(null);
     setWhiteboardIntent(null);
     setIllustrationLesson(null);
+    illustrationLessonRef.current = null;
     setIllustrationFrames([]);
     setIllustrationExpectedCount(0);
     setIllustrationOpen(false);
@@ -1101,6 +1109,7 @@ export function EducationChatApp() {
     )
       return;
     setIllustrationLesson(null);
+    illustrationLessonRef.current = null;
     setIllustrationFrames([]);
     setIllustrationExpectedCount(0);
     setIllustrationError("");
@@ -1606,14 +1615,7 @@ export function canReuseIllustration(
     if (frame.imageUrl.startsWith("data:image/svg+xml;base64,")) return true;
     try {
       const url = new URL(frame.imageUrl);
-      return (
-        url.protocol === "https:" &&
-        Boolean(url.hostname) &&
-        !url.username &&
-        !url.password
-      );
-    } catch {
-      return false;
-    }
+      return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+    } catch { return false; }
   });
 }

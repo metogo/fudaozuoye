@@ -1,7 +1,7 @@
 import type { LearningSession } from "./types";
 
 export function illustrationFingerprint(session: Pick<LearningSession, "requestId" | "problem">): string {
-  const source = `${session.requestId}\n${stableStringify(session.problem)}`;
+  const source = `verified-teaching-v1\n${session.requestId}\n${stableStringify(session.problem)}`;
   let first = 0x811c9dc5;
   let second = 0x9e3779b9;
   for (let index = 0; index < source.length; index += 1) {
@@ -15,7 +15,7 @@ export function illustrationFingerprint(session: Pick<LearningSession, "requestI
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
+    return `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
 }

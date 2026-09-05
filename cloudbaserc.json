@@ -11,7 +11,7 @@
       "runtime": "Nodejs20.19",
       "timeout": 180,
       "memorySize": 512,
-      "installDependency": false,
+      "installDependency": true,
       "public": true,
       "gatewayPath": "/api",
       "envVariables": {

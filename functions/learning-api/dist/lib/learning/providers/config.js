@@ -59,21 +59,6 @@ function getIllustrationConfig() {
     };
 }
 function getIllustrationAvailability() {
-    const config = getIllustrationConfig();
-    if (config.mock)
-        return { available: true };
-    if (!config.modelId)
-        return { available: false, reason: "尚未配置图片模型 DOUBAO_IMAGE_MODEL_ID" };
-    if (!config.apiKey)
-        return { available: false, reason: "尚未配置豆包 API Key" };
-    try {
-        const url = new URL(config.baseUrl);
-        if (url.protocol !== "https:" || !url.hostname || url.username || url.password)
-            throw new Error();
-    }
-    catch {
-        return { available: false, reason: "图片模型地址必须是有效的 HTTPS 地址" };
-    }
     return { available: true };
 }
 function doubaoModelId(level) {

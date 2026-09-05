@@ -55,11 +55,11 @@ describe("三模型统一适配器契约", () => {
     ]);
   });
 
-  it("图片模型独立配置，缺失时只禁用插画入口", () => {
+  it("线框插画不依赖图片模型配置", () => {
     vi.stubEnv("AI_MOCK_MODE", "false");
     vi.stubEnv("DOUBAO_API_KEY", "test-key");
     vi.stubEnv("DOUBAO_IMAGE_MODEL_ID", "");
-    expect(getIllustrationAvailability()).toEqual({ available: false, reason: "尚未配置图片模型 DOUBAO_IMAGE_MODEL_ID" });
+    expect(getIllustrationAvailability()).toEqual({ available: true });
     vi.stubEnv("DOUBAO_IMAGE_MODEL_ID", "seedream-test");
     expect(getIllustrationAvailability()).toEqual({ available: true });
   });

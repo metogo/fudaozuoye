@@ -18,6 +18,7 @@
     "test:real-model": "node scripts/real-model-regression.mjs",
     "test:e2e:real-users": "node --env-file=.env.local scripts/real-user-e2e.mjs",
     "test:e2e:board": "node --env-file=.env.local scripts/board-stage-a-e2e.mjs",
+    "test:e2e:illustration": "npm run build:function && node --env-file=.env.local scripts/illustration-e2e.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "html-to-image": "^1.11.13",
     "jsxgraph": "^1.13.2",
     "katex": "^0.18.4",
+    "mathjs": "15.2.0",
     "mermaid": "^11.17.2",
     "motion": "^13.1.1",
     "next": "16.3.2",
@@ -38,6 +40,7 @@
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

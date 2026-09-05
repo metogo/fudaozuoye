@@ -180,7 +180,7 @@ async function answerSuggestedQuestion(session: LearningSession, suggestionId: s
 async function handleChoice(session: LearningSession, gateId: string, choice: LearningChoice, boardContext: NonNullable<Extract<LearningTurnInput, { type: "choose" }>["boardContext"]>, adapter: Adapter, send: Send, signal: AbortSignal) {
   if (choice === "view_illustration") {
     requireGate(session, gateId);
-    send("illustration.progress", { requestId: session.requestId, key: "storyboard", label: "正在按这道题的演算结构安排分镜" });
+    send("illustration.progress", { requestId: session.requestId, key: "storyboard", label: "正在核对题目数量并安排演示步骤" });
     let elapsedSeconds = 0;
     const progress = setInterval(() => {
       elapsedSeconds += 12;

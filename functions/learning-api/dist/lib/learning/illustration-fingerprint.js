@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.illustrationFingerprint = illustrationFingerprint;
 function illustrationFingerprint(session) {
-    const source = `${session.requestId}\n${stableStringify(session.problem)}`;
+    const source = `verified-teaching-v1\n${session.requestId}\n${stableStringify(session.problem)}`;
     let first = 0x811c9dc5;
     let second = 0x9e3779b9;
     for (let index = 0; index < source.length; index += 1) {
@@ -16,7 +16,7 @@ function stableStringify(value) {
     if (Array.isArray(value))
         return `[${value.map(stableStringify).join(",")}]`;
     if (value && typeof value === "object") {
-        return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
+        return `{${Object.entries(value).filter(([, item]) => item !== undefined).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
     }
     return JSON.stringify(value) ?? "null";
 }

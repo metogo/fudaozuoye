@@ -7,7 +7,6 @@ const grade_pedagogy_1 = require("../grade-pedagogy");
 const solution_recall_1 = require("../solution-recall");
 const problem_evidence_1 = require("../problem-evidence");
 const blueprint_1 = require("./blueprint");
-const config_1 = require("./config");
 const board_generation_1 = require("./board-generation");
 const model_support_1 = require("./model-support");
 const tutor_1 = require("./tutor");
@@ -18,7 +17,7 @@ const transient_fetch_1 = require("./transient-fetch");
 const provider_validation_1 = require("./provider-validation");
 const problem_image_analysis_1 = require("./problem-image-analysis");
 const solution_1 = require("./solution");
-const illustration_1 = require("./illustration");
+const teaching_compiler_1 = require("./teaching-compiler");
 var mock_adapter_1 = require("./mock-adapter");
 Object.defineProperty(exports, "MockProviderAdapter", { enumerable: true, get: function () { return mock_adapter_1.MockProviderAdapter; } });
 class LiveProviderAdapter {
@@ -395,81 +394,24 @@ class LiveProviderAdapter {
         }, session, scope, suggestion, context);
     }
     async generateIllustrationLesson(session, onFrame, signal) {
-        const imageConfig = (0, config_1.getIllustrationConfig)();
-        const availability = (0, config_1.getIllustrationAvailability)();
-        if (!availability.available)
-            throw new Error(availability.reason ?? "插画演示尚未配置图片模型");
-        const solutionEvidence = (0, illustration_1.illustrationSolutionEvidence)(session);
-        const request = (0, illustration_1.illustrationStoryboardPrompt)(session, solutionEvidence);
-        const storyboard = await this.validatedJsonRequest(request.system, request.prompt, (value) => (0, illustration_1.parseIllustrationStoryboard)(value, solutionEvidence), undefined, undefined, 25_000);
-        const controller = new AbortController();
-        const release = this.requests.track(controller);
-        const abort = () => controller.abort();
-        signal?.addEventListener("abort", abort, { once: true });
-        this.requestSignal?.addEventListener("abort", abort, { once: true });
         if (signal?.aborted || this.requestSignal?.aborted)
-            controller.abort();
-        let timedOut = false;
-        const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 95_000);
+            throw new DOMException("请求已取消", "AbortError");
+        const program = (0, teaching_compiler_1.compileTeachingProgram)(session);
+        const request = (0, teaching_compiler_1.teachingPlannerPrompt)(program);
+        let lesson;
         try {
-            const response = await (0, transient_fetch_1.fetchWithTransientRetry)(this.fetcher, imageConfig.baseUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${imageConfig.apiKey}` },
-                body: JSON.stringify({
-                    model: imageConfig.modelId,
-                    prompt: (0, illustration_1.imageGenerationPrompt)(storyboard),
-                    size: "2K",
-                    sequential_image_generation: "auto",
-                    sequential_image_generation_options: { max_images: storyboard.frames.length },
-                    stream: false,
-                    response_format: "url",
-                    watermark: false,
-                }),
-                signal: controller.signal,
-            });
-            if (!response.ok)
-                throw (0, errors_1.providerError)(`图片模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
-            const images = (0, illustration_1.parseGeneratedImages)(await response.json(), storyboard.frames.length);
-            if (images.some((image) => !image))
-                return (0, illustration_1.assembleIllustrationLesson)(session, storyboard, images);
-            const audited = await Promise.all(images.map(async (imageUrl, index) => {
-                if (!imageUrl)
-                    return null;
-                const frame = storyboard.frames[index];
-                const raw = await this.textRequest("你是儿童教学插画安全与一致性审核器。检查图片本身，只输出严格 JSON。任何可见文字、字母、数字、公式、算式、水印，或与预期场景明显矛盾的数量关系，都必须判定 safe=false。", JSON.stringify({ expectedScene: frame.visualPrompt, expectedMeaning: frame.alt, output: { safe: true, reason: "简短审核理由" } }), imageUrl, true, 20_000);
-                const result = (0, model_support_1.parseJsonObject)(raw);
-                if (result.safe !== true || typeof result.reason !== "string" || !result.reason.trim())
-                    return null;
-                return imageUrl;
-            }));
-            audited.forEach((imageUrl, index) => {
-                if (!imageUrl)
-                    return;
-                onFrame({
-                    id: storyboard.frames[index].id,
-                    index: index + 1,
-                    title: storyboard.frames[index].title,
-                    calculation: storyboard.frames[index].calculationEvidence,
-                    transition: storyboard.frames[index].transition,
-                    alt: storyboard.frames[index].alt,
-                    imageUrl,
-                }, storyboard.frames.length);
-            });
-            return (0, illustration_1.assembleIllustrationLesson)(session, storyboard, audited);
+            const raw = await this.textRequest(request.system, request.prompt, undefined, true, 5_000, signal);
+            lesson = (0, teaching_compiler_1.assembleTeachingLesson)(session, program, (0, model_support_1.parseJsonObject)(raw));
         }
         catch (error) {
-            if ((signal?.aborted || this.requestSignal?.aborted) && error instanceof Error)
+            if (signal?.aborted || this.requestSignal?.aborted || (error instanceof DOMException && error.name === "AbortError"))
                 throw new DOMException("请求已取消", "AbortError");
-            if (error instanceof DOMException && error.name === "AbortError" && timedOut)
-                throw (0, errors_1.providerError)("插画生成超时，学习进度未改变", 504);
-            throw error;
+            lesson = (0, teaching_compiler_1.assembleTeachingLesson)(session, program);
         }
-        finally {
-            clearTimeout(timeout);
-            signal?.removeEventListener("abort", abort);
-            this.requestSignal?.removeEventListener("abort", abort);
-            release();
-        }
+        if (signal?.aborted || this.requestSignal?.aborted)
+            throw new DOMException("请求已取消", "AbortError");
+        lesson.frames.forEach((frame) => onFrame(frame, lesson.frameCount));
+        return lesson;
     }
     async validatedJsonRequest(system, prompt, parse, imageDataUrl, recover, timeoutMs = 60_000) {
         const first = await this.textRequest(system, prompt, imageDataUrl, true, timeoutMs);
@@ -550,12 +492,13 @@ class LiveProviderAdapter {
             release();
         }
     }
-    async textRequest(system, prompt, imageDataUrl, jsonMode = false, timeoutMs = 60_000) {
+    async textRequest(system, prompt, imageDataUrl, jsonMode = false, timeoutMs = 60_000, externalSignal) {
         const controller = new AbortController();
         const release = this.requests.track(controller);
         const abort = () => controller.abort();
+        externalSignal?.addEventListener("abort", abort, { once: true });
         this.requestSignal?.addEventListener("abort", abort, { once: true });
-        if (this.requestSignal?.aborted)
+        if (externalSignal?.aborted || this.requestSignal?.aborted)
             controller.abort();
         let timedOut = false;
         const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
@@ -580,6 +523,7 @@ class LiveProviderAdapter {
         }
         finally {
             clearTimeout(timeout);
+            externalSignal?.removeEventListener("abort", abort);
             this.requestSignal?.removeEventListener("abort", abort);
             release();
         }
