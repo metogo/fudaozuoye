@@ -35,6 +35,18 @@ describe("原题分步插画", () => {
     expect(() => parseIllustrationStoryboard({ title: "连续演算插画", frames: [base, { ...base, id: "frame-2", calculationEvidence: "另一个可信步骤。", visualPrompt: "校车移动到第2段并显示x=3" }] }, "这是可信步骤。另一个可信步骤。")).toThrow("不允许");
   });
 
+  it("接受已核验解答中的短公式和换行片段，但拒绝空泛短语", () => {
+    const solution = "先求长边。\n18+4\n所以继续求周长。";
+    const frame = { id: "frame-1", title: "先增加长边", calculationEvidence: "18+4", transition: "从增加后的长边开始", visualPrompt: "同一个长方形花园沿长边向外延伸一小段", alt: "花园长边向外延伸的示意图" };
+    const second = { id: "frame-2", title: "再求出周长", calculationEvidence: "所以继续求周长。", transition: "承接长边变化再观察四周", visualPrompt: "同一个长方形花园保持宽边不变并突出四周边界", alt: "花园四周边界的示意图" };
+    expect(parseIllustrationStoryboard({ title: "花园变化演示", frames: [frame, second] }, solution).frames[0].calculationEvidence).toBe("18+4");
+    expect(parseIllustrationStoryboard({ title: "花园变化演示", frames: [{ ...frame, calculationEvidence: "18+\n4" }, second] }, solution).frames[0].calculationEvidence).toBe("18+\n4");
+    expect(() => parseIllustrationStoryboard({ title: "花园变化演示", frames: [{ ...frame, calculationEvidence: "所以" }, second] }, "所以继续求周长。")).toThrow("有效步骤");
+    expect(() => parseIllustrationStoryboard({ title: "花园变化演示", frames: [{ ...frame, calculationEvidence: "1+" }, second] }, "1+2。所以继续求周长。")).toThrow("有效步骤");
+    expect(() => parseIllustrationStoryboard({ title: "花园变化演示", frames: [{ ...frame, calculationEvidence: "1+2" }, second] }, "11+2。所以继续求周长。")).toThrow("已核验解答");
+    expect(() => parseIllustrationStoryboard({ title: "花园变化演示", frames: [{ ...frame, calculationEvidence: "１＋２" }, second] }, "1+2。所以继续求周长。")).toThrow("已核验解答");
+  });
+
   it("完整生成先保留 Gate，关闭确认后才进入既有关键步骤回忆入口", async () => {
     const session = startedSession();
     const body = await turn(session, "view_illustration");

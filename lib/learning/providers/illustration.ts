@@ -29,7 +29,7 @@ export function illustrationStoryboardPrompt(session: LearningSession, solutionE
     system: [
       "你是 K12 分步演算插画导演。只输出严格 JSON，不输出 Markdown。",
       "根据真实有效演算步骤自由决定最合适的 2 到 6 帧；不能为凑数量拆分、复述或增加无教学作用的帧。",
-      "每帧 calculationEvidence 必须逐字复制下方已核验解答中的一段，不能改写、补算或发明数值。",
+      "每帧 calculationEvidence 必须是单个字符串，逐字复制下方已核验解答中的一段；短公式可以原样保留，不能改写、补算或发明数值。",
       "visualPrompt 只描述无文字、无公式、无数字标注的具象场景；数学文字由网页另行显示。",
       "相邻帧必须保持对象、颜色、视角和场景一致，transition 说明这一步如何承接上一帧。",
     ].join("\n"),
@@ -56,9 +56,9 @@ export function parseIllustrationStoryboard(value: JsonObject, solutionEvidence:
     const item = raw as JsonObject;
     const id = boundedText(item.id, "分镜标识", 3, 32);
     if (!/^frame-[1-6]$/.test(id) || ids.has(id)) throw new Error("插画分镜标识不合法或重复");
-    const calculationEvidence = boundedText(item.calculationEvidence, "演算依据", 6, 500);
+    const calculationEvidence = boundedEvidence(item.calculationEvidence);
     const evidenceSignature = normalizedEvidence(calculationEvidence);
-    if (!normalizedEvidence(solutionEvidence).includes(evidenceSignature)) throw new Error("插画演算文字没有逐字来自已核验解答");
+    if (!containsGroundedEvidence(solutionEvidence, calculationEvidence)) throw new Error("插画演算文字没有逐字来自已核验解答");
     if (evidenceSignatures.has(evidenceSignature)) throw new Error("插画演算依据不能重复或用于凑帧");
     const visualPrompt = boundedText(item.visualPrompt, "画面描述", 12, 800);
     const promptSignature = visualPrompt.replace(/\s/g, "").toLowerCase();
@@ -147,8 +147,37 @@ function boundedText(value: unknown, label: string, minimum: number, maximum: nu
   return text;
 }
 
+function boundedEvidence(value: unknown): string {
+  if (typeof value !== "string") throw new Error("演算依据不合法：必须是单个字符串");
+  if (value.length > 500) throw new Error("演算依据不合法");
+  const text = value.normalize("NFC").trim();
+  if (text.length < 2 || text.length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) throw new Error("演算依据不合法");
+  const normalized = normalizedEvidence(text);
+  const generic = /^(所以|因此|可知|得到|计算|答案|结论)[：:。.]?$/;
+  const operand = "[\\p{L}\\p{N}（）()小数分数百分数周长面积速度时间路程宽长量]+";
+  const shortFormula = new RegExp(`^(?:${operand}(?:[=+＋−－\\-×÷*/^≤≥≈≠]${operand})+|${operand}(?:%|％|²|³))$`, "u").test(normalized);
+  const shortAction = /^(?:(?:求|算)(?:出)?|计算|代入|比较|检验|检查|相加|相减|相乘|相除|加上|减去|乘以|除以)(?!答案|一下).+$/u.test(normalized) && normalized.length >= 3;
+  if (generic.test(normalized) || (normalized.length < 6 && !shortFormula && !shortAction)) throw new Error("演算依据过短，不能表达有效步骤");
+  return text;
+}
+
 function normalizedEvidence(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/g, "");
+  return value.normalize("NFC").replace(/\s+/g, "");
+}
+
+function containsGroundedEvidence(source: string, evidence: string): boolean {
+  const haystack = normalizedEvidence(source);
+  const needle = normalizedEvidence(evidence);
+  let offset = haystack.indexOf(needle);
+  while (offset >= 0) {
+    const before = haystack[offset - 1] ?? "";
+    const after = haystack[offset + needle.length] ?? "";
+    const startsWithDigit = /^[0-9０-９]/.test(needle);
+    const endsWithDigit = /[0-9０-９]$/.test(needle);
+    if ((!startsWithDigit || !/[0-9０-９]/.test(before)) && (!endsWithDigit || !/[0-9０-９]/.test(after))) return true;
+    offset = haystack.indexOf(needle, offset + 1);
+  }
+  return false;
 }
 
 function mockSvgDataUrl(index: number, total: number): string {
