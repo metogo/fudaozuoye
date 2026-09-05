@@ -10,9 +10,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-`npm run dev` 会同时启动 H5（`http://localhost:3000`）和本地学习 API（`http://localhost:9000`），并自动读取项目根目录的 `.env.local`。Next.js 负责页面热更新，本地 API 会在 TypeScript 编译后自动重启。
+`npm run dev` 会同时启动 H5（`http://localhost:3000`）和本地学习 API（`http://localhost:9000`），并自动读取项目根目录的 `.env.local`。Next.js 负责页面热更新；本地 API 会在 TypeScript 编译后自动重启，也会在 `.env.local` 内容保存后重新校验并自动读取新配置。代码和环境配置同时变化时只会合并重启一次。
 
-如果 `.env.local` 缺失，启动会在监听端口前直接失败，不会默认进入演示模式。`AI_MOCK_MODE` 也必须在 `.env.local` 中显式设为 `true` 或 `false`。
+如果 `.env.local` 缺失，启动会在监听端口前直接失败，不会默认进入演示模式。`AI_MOCK_MODE` 也必须在 `.env.local` 中显式设为 `true` 或 `false`。服务运行期间遇到无效配置或编辑器保存造成的短暂文件缺失时，当前健康 API 会继续使用上一份有效配置；终端只给出不含变量值的提示，并在文件修正后自动重试。
 
 ## 演示模式
 
