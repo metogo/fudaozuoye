@@ -47,4 +47,74 @@ describe("教学 Worker 协议", () => {
     expect(outcome.result?.[0].checks.map(check => check.status)).toContain("verified");
     expect(outcome.result?.[0].checks.map(check => check.status)).toContain("unknown");
   });
+
+  it("对恒等式使用多项式系数核验，并准确报告不相等的表达式", () => {
+    const equal = genericProgram();
+    equal.steps[0].checks = [{ kind: "identity", left: "(x+2)^2", right: "x^2+4*x+4" }];
+    const pass = run(parseTeachingProgram(JSON.stringify(equal), "已知a=6"));
+    expect(pass.result?.[0].checks[0]).toMatchObject({ status: "verified" });
+
+    const unequal = genericProgram();
+    unequal.steps[0].checks = [{ kind: "identity", left: "(x+2)^2", right: "x^2+4*x+3" }];
+    const fail = run(parseTeachingProgram(JSON.stringify(unequal), "已知a=6"));
+    expect(fail.result?.[0].checks[0]).toMatchObject({ status: "error" });
+  });
+
+  it("把定义域无法保证的表达式标为未知，而不是把采样当证明", () => {
+    const raw = genericProgram();
+    raw.steps[0].checks = [{ kind: "identity", left: "sqrt(x)", right: "sqrt(x)" }];
+    const outcome = run(parseTeachingProgram(JSON.stringify(raw), "已知a=6"));
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result?.[0].checks[0]).toMatchObject({ status: "unknown", detail: expect.stringContaining("定义域") });
+  });
+
+  it("单位不等、偏移单位与非标准单位格式不会被误判为相等", () => {
+    const raw = genericProgram();
+    raw.steps[0].checks = [
+      { kind: "unit", left: "1 m", right: "2 m" },
+      { kind: "unit", left: "1 °C", right: "274 K" },
+      { kind: "unit", left: "一米", right: "1 m" },
+    ];
+    const outcome = run(parseTeachingProgram(JSON.stringify(raw), "已知a=6"));
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result?.[0].checks.map(check => check.status)).toEqual(["error", "unknown", "unknown"]);
+  });
+
+  it("拒绝退化图形、错误边长标签和伪造直角", () => {
+    const degenerate = genericProgram();
+    degenerate.steps[0].objects = [{ id: "flat", kind: "polygon", points: [["0", "0"], ["1", "0"], ["2", "0"]] }];
+    expect(run(parseTeachingProgram(JSON.stringify(degenerate), "已知a=6")).error).toContain("退化");
+
+    const label = genericProgram();
+    label.steps[0].objects = [{ id: "wrong_label", kind: "polygon", points: [["0", "0"], ["3", "0"], ["0", "4"]], edgeLabels: ["3", "4", "99"] }];
+    expect(run(parseTeachingProgram(JSON.stringify(label), "已知a=6")).error).toContain("标注");
+
+    const angle = genericProgram();
+    angle.steps[0].objects = [{ id: "not_right", kind: "polygon", points: [["0", "0"], ["2", "0"], ["1", "1"]], rightAngleAt: 0 }];
+    expect(run(parseTeachingProgram(JSON.stringify(angle), "已知a=6")).error).toContain("并非直角");
+  });
+
+  it("曲线的非法区间或跨零分母会被拦截", () => {
+    const invalidDomain = genericProgram();
+    invalidDomain.steps[0].objects = [{ id: "curve", kind: "curve", points: [], expression: "x^2", domain: ["2", "1"] }];
+    expect(run(parseTeachingProgram(JSON.stringify(invalidDomain), "已知a=6")).error).toContain("区间无效");
+
+    const discontinuous = genericProgram();
+    discontinuous.steps[0].objects = [{ id: "curve", kind: "curve", points: [], expression: "1/x", domain: ["-1", "1"] }];
+    expect(run(parseTeachingProgram(JSON.stringify(discontinuous), "已知a=6")).error).toContain("零分母");
+  });
+
+  it("变量来源和值不能被演示文本偷偷改写", () => {
+    const claim = genericProgram();
+    claim.steps[0].explanation = "a=7。";
+    const claimedProgram = parseTeachingProgram(JSON.stringify(claim), "已知a=6。");
+    claimedProgram.sourceValues = { a: "6" };
+    expect(run(claimedProgram).error).toContain("已知a=6");
+
+    const definition = genericProgram();
+    definition.variables[0].expression = "7";
+    const definedProgram = parseTeachingProgram(JSON.stringify(definition), "已知a=6。");
+    definedProgram.sourceValues = { a: "6" };
+    expect(run(definedProgram).error).toContain("不一致");
+  });
 });

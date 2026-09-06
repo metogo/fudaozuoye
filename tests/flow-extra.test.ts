@@ -6,7 +6,7 @@ const session = () => analyzeMock(recognizeMock("math", "primary"), "doubao");
 
 describe("学习流程状态机边界", () => {
   it("不同关卡提供与阶段相符的操作，完整讲解后去掉重复入口", () => {
-    expect(understandingGate().options.map(option => option.id)).toEqual(["continue", "try", "not_understood", "view_board", "view_illustration", "full_solution"]);
+    expect(understandingGate().options!.map(option => option.id)).toEqual(["continue", "try", "not_understood", "view_board", "view_illustration", "full_solution"]);
     expect(answerGate("transfer_answer", "练习", "请作答").options).toBeUndefined();
     expect(answerGate("node_answer", "检查", "请作答").options?.map(option => option.id)).toContain("full_solution");
     expect(postSolutionGate().options?.map(option => option.id)).toContain("retry_original");
