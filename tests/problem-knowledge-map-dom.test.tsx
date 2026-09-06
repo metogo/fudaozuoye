@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let flowProps: any;
+let flowApi: any;
 
 vi.mock("@xyflow/react", async () => {
   const React = await import("react");
@@ -14,7 +15,10 @@ vi.mock("@xyflow/react", async () => {
     applyNodeChanges: (_changes: unknown, nodes: unknown) => nodes,
     ReactFlow: ({ nodes, nodeTypes, onNodeClick, onInit, ...props }: any) => {
       flowProps = { nodes, onNodeClick, ...props };
-      React.useEffect(() => { onInit?.({ getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() }); }, []);
+      React.useEffect(() => {
+        flowApi = { getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() };
+        onInit?.(flowApi);
+      }, []);
       return <div data-testid="flow">{nodes.map((node: any) => {
         const Node = nodeTypes[node.type];
         return <div key={node.id} role="button" data-id={node.id} className="react-flow__node" onClick={() => onNodeClick?.({}, node)}><Node id={node.id} data={node.data} selected={node.selected}/></div>;
@@ -45,6 +49,7 @@ describe("ProblemKnowledgeMapPage", () => {
   const close = vi.fn();
   beforeEach(() => {
     flowProps = undefined;
+    flowApi = undefined;
     close.mockReset();
     localStorage.clear();
     vi.stubGlobal("fetch", vi.fn());
@@ -113,5 +118,41 @@ describe("ProblemKnowledgeMapPage", () => {
     flowProps.onPaneClick();
     await waitFor(() => expect(screen.queryByLabelText("根的判别式的知识说明")).toBeNull());
     expect(screen.getByTestId("flow")).not.toBeNull();
+  });
+
+  it("能容忍损坏缓存，并保留键盘、缩放和节点尺寸更新等图谱操作", async () => {
+    localStorage.setItem("problem-knowledge-map-v2:request-1", "not-json");
+    vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await screen.findByTestId("flow");
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    const root = document.querySelector('[data-id="quadratic"]');
+    expect(root).not.toBeNull();
+    fireEvent.keyDown(root!, { key: "Enter" });
+    expect(await screen.findByLabelText("一元二次方程的知识说明")).not.toBeNull();
+    flowProps.onNodesChange([
+      { type: "dimensions", id: "quadratic", dimensions: { width: 220, height: 100 } },
+      { type: "dimensions", id: "quadratic", dimensions: { width: -1, height: 0 } },
+      { type: "select", id: "quadratic", selected: true },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "放大图谱", hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: "缩小图谱", hidden: true }));
+    expect(flowApi.zoomIn).toHaveBeenCalledTimes(1);
+    expect(flowApi.zoomOut).toHaveBeenCalledTimes(1);
+    flowProps.onMoveEnd({}, { x: 20, y: 30, zoom: 1.2 });
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain('"zoom":1.2');
+  });
+
+  it("布局保存失败只提示当前会话，图谱仍可整理与使用", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await screen.findByTestId("flow");
+    flowProps.onNodeDragStop();
+    await waitFor(() => expect(screen.getByText("浏览器暂时无法保存布局，本次仍可自由调整。")).not.toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "整理", hidden: true }));
+    expect(screen.getByTestId("flow")).not.toBeNull();
+    write.mockRestore();
   });
 });

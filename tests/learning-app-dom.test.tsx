@@ -61,6 +61,31 @@ describe("学习应用状态机", () => {
     expect(screen.getByText("图片模糊")).not.toBeNull();
   });
 
+  it("模型状态未提供默认模型时，会清楚地保留不可提交的拍题入口", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "openai", label: "GPT", available: true, mode: "mock" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("capture:false");
+    expect(screen.getByText("豆包服务暂不可用，请稍后刷新重试。")).not.toBeNull();
+  });
+
+  it("分析的可靠性错误会回到题目确认页，而不是丢失刚识别的题目", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockResolvedValueOnce(sse([["recognized", { text: "题目", childWork: "", subject: "math", gradeBand: "junior" }], ["complete", {}]]))
+      .mockResolvedValueOnce(new Response("知识关系没有通过可靠性检查", { status: 422 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("capture:true");
+    fireEvent.click(screen.getByRole("button", { name: "上传题目" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认裁剪" }));
+    await screen.findByText("prepare:review");
+    fireEvent.click(screen.getByRole("button", { name: "开始学习" }));
+    await screen.findByText("prepare:review");
+    expect(screen.getByText("AI 返回的知识关系不够可靠，请再次点击“开始学习”重试。")).not.toBeNull();
+  });
+
   it("只恢复结构完整的本地学习会话，损坏记录会被安全清除", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 })));
     sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "short", session: {} }));
