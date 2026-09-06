@@ -117,4 +117,43 @@ describe("教学 Worker 协议", () => {
     definedProgram.sourceValues = { a: "6" };
     expect(run(definedProgram).error).toContain("不一致");
   });
+
+  it("对常量、未赋值参数与不可符号化等式采用不同且保守的核验结果", () => {
+    const raw = genericProgram();
+    raw.steps[0].checks = [
+      { kind: "numeric", left: "0.1+0.2", right: "0.3" },
+      { kind: "numeric", left: "1", right: "2" },
+      { kind: "numeric", left: "u", right: "u" },
+      { kind: "identity", left: "2/3", right: "4/6" },
+      { kind: "identity", left: "sqrt(x^2)", right: "x" },
+      { kind: "identity", left: "sin(x)", right: "sin(x)" },
+    ];
+    const outcome = run(parseTeachingProgram(JSON.stringify(raw), "已知a=6"));
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result?.[0].checks.map((check) => check.status)).toEqual([
+      "verified", "error", "unknown", "verified", "unknown", "unknown",
+    ]);
+  });
+
+  it("安全曲线会生成采样，定义域、间断点和资源限制会被拒绝", () => {
+    const safe = genericProgram();
+    safe.steps[0].objects = [
+      { id: "sine", kind: "curve", points: [], expression: "sin(x)", domain: ["0", "1"] },
+      { id: "absolute", kind: "curve", points: [], expression: "abs(x)", domain: ["-2", "3"] },
+      { id: "root", kind: "curve", points: [], expression: "sqrt(x)", domain: ["0", "4"] },
+      { id: "log", kind: "curve", points: [], expression: "log(x)", domain: ["1", "2"] },
+    ];
+    const verified = run(parseTeachingProgram(JSON.stringify(safe), "已知a=6"));
+    expect(verified.error).toBeUndefined();
+    expect(verified.result?.[0].objects.every((object) => object.points.length === 81)).toBe(true);
+
+    for (const expression of ["sqrt(x)", "log(x)", "x^0.5"]) {
+      const invalid = genericProgram();
+      invalid.steps[0].objects = [{ id: "bad", kind: "curve", points: [], expression, domain: ["-1", "1"] }];
+      expect(run(parseTeachingProgram(JSON.stringify(invalid), "已知a=6")).error).toBeTruthy();
+    }
+    const tangent = genericProgram();
+    tangent.steps[0].objects = [{ id: "tan", kind: "curve", points: [], expression: "tan(x)", domain: ["-2", "2"] }];
+    expect(run(parseTeachingProgram(JSON.stringify(tangent), "已知a=6")).error).toContain("间断点");
+  });
 });
