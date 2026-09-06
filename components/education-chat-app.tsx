@@ -1320,6 +1320,7 @@ export function EducationChatApp() {
         key={chatUiEpoch}
         messages={messages}
         session={session}
+        stateToken={stateToken}
         reasoningLevels={reasoningLevels}
         reasoningLevel={reasoningLevel}
         illustrationAvailability={illustrationAvailability}

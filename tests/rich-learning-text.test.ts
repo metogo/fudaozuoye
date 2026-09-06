@@ -184,8 +184,10 @@ describe("AI 教学内容排版", () => {
       onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onReopenBoard: () => {}, onNewProblem: () => {}, onRetry: () => {},
     }));
 
-    expect(html).toContain("loading-whisper");
-    expect(html).toContain("正在识别题干与你的作答");
+    expect(html).toContain("小逗号正在思考");
+    expect(html).toContain("正在读懂这道题");
+    expect(html).toContain("学习寄语");
+    expect(html).toContain("学不可以已。");
   });
 
   it("渲染标题、列表、强调和数学公式", () => {

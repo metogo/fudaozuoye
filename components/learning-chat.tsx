@@ -6,7 +6,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type Form
 import dynamic from "next/dynamic";
 import { flushSync } from "react-dom";
 import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/presentation";
-import { loadingLearningQuotes } from "@/lib/learning/quotes";
+import { ChatThinking } from "./chat-thinking";
 import { gradeBandLabels } from "@/lib/learning/grade-pedagogy";
 import type { ChatMessage, IllustrationAvailability, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
 import { ArrowIcon, BookIcon, CameraIcon, CheckIcon, ChevronIcon, DownloadIcon, ImageIcon, InfoIcon, KeyboardIcon, PencilIcon, QuestionIcon, RefreshIcon, SendIcon, SparkIcon, TutorIcon } from "./icons";
@@ -18,12 +18,13 @@ import { StepBlank } from "./step-blank";
 import { SelectionAsk } from "./selection-ask";
 import { QuoteComposerMotion } from "./quote-composer-motion";
 import { observeChatEdgeFade } from "@/lib/learning/chat-edge-fade";
-import { StreamingIndicator } from "./streaming-indicator";
 import { MessageTime } from "./message-time";
 import { BOARD_UI_ENABLED } from "@/lib/learning/ui-features";
 const ConversationExport = dynamic(() => import("./conversation-export").then((module) => module.ConversationExport), { ssr: false });
+const KnowledgeMapPage = dynamic(() => import("./problem-knowledge-map").then(module => module.ProblemKnowledgeMapPage), { ssr: false });
 
 interface LearningChatProps {
+  stateToken?: string;
   homeMotionPaused?: boolean;
   onTranscribeStep?: (gateId: string, blob: Blob, signal: AbortSignal) => Promise<{ text: string; confidence: number }>;
   messages: ChatMessage[];
@@ -55,6 +56,7 @@ interface LearningChatProps {
 }
 
 export function LearningChat(props: LearningChatProps) {
+  const [knowledgeMapOpen, setKnowledgeMapOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [input, setInput] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<{ text: string; requestId: string; range: Range } | null>(null);
@@ -263,9 +265,10 @@ export function LearningChat(props: LearningChatProps) {
       {isHome ? <EmptyConversation ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <MessageList messages={visibleChatMessages} solutionDisplay={solutionDisplay} retryMessageId={props.retryLabel ? props.retryMessageId : null} busy={props.busy} onRetry={props.retryLabel ? props.onRetry : undefined}/>
         {props.reviewProblem && <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>}
-        {props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn && <LoadingWhisper label={props.loadingLabel}/>}
+        <ChatThinking active={props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn} label={props.loadingLabel}/>
         {isPreparingNextTurn && gate?.kind !== "step_answer" && <NextTurnPlaceholder/>}
-        {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}/>}
+        {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard onKnowledgeMap={props.stateToken && !props.busy ? () => setKnowledgeMapOpen(true) : undefined} busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}/>}
+        {!gate && !props.busy && props.session && props.stateToken && <button className="min-h-11 rounded-xl border border-emerald-900/10 px-4 text-sm text-emerald-800" onClick={() => setKnowledgeMapOpen(true)}>本题知识图谱</button>}
         {BOARD_UI_ENABLED && !props.busy && !hasPendingRetry && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>再次查看刚才的板书</span><span className="text-[9px] font-normal text-stone-400">不改变当前任务</span></button>}
         {!props.busy && props.session?.flow.stage === "complete" && !gate && <CompletionActions session={props.session} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {!props.busy && props.session?.flow.stage === "reviewed_complete" && !gate && <ReviewCompletionActions onRetryOriginal={props.onRetryOriginal} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
@@ -277,7 +280,8 @@ export function LearningChat(props: LearningChatProps) {
     {props.notice && <div role="alert" className="chat-toast absolute inset-x-4 top-[68px] z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-stone-950 px-4 py-3 text-xs leading-5 text-white shadow-2xl"><p className="min-w-0 flex-1"><InfoIcon className="mr-2 inline h-4 w-4 align-[-3px]"/>{props.notice}</p>{props.retryLabel && <button type="button" disabled={props.busy} onClick={props.onRetry} className="min-h-11 shrink-0 rounded-xl bg-white px-3 text-[11px] font-semibold text-stone-950 disabled:opacity-40">{props.retryLabel}</button>}</div>}
 
     {exportOpen && <ConversationExport messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
-    <SelectionAsk root={scrollRef} disabled={exportOpen || Boolean(quote) || !props.session || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
+    {knowledgeMapOpen && props.session && props.stateToken && <KnowledgeMapPage session={props.session} stateToken={props.stateToken} onClose={() => setKnowledgeMapOpen(false)}/>}
+    <SelectionAsk root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || !props.session || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
       if (text.length > 12000) { setFileError("选中文字过长，请将引用控制在 12000 字以内。"); return; }
       flushSync(() => {
         setSelectedQuote({ text, range, requestId: props.session!.requestId });
@@ -413,7 +417,7 @@ function SuggestedQuestionTrail({ suggestions, onSuggestion }: { suggestions: Su
   </section>;
 }
 
-function GateCard({ gate, busy = false, onTranscribeStep, answerChoices, choicesDerivedFromPrompt, allowFullSolution, onChoice, onAnswer }: { gate: LearningGate; busy?: boolean; onTranscribeStep?: LearningChatProps["onTranscribeStep"]; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; illustrationAvailability: IllustrationAvailability; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void }) {
+function GateCard({ gate, busy = false, onKnowledgeMap, onTranscribeStep, answerChoices, choicesDerivedFromPrompt, allowFullSolution, onChoice, onAnswer }: { gate: LearningGate; busy?: boolean; onKnowledgeMap?: () => void; onTranscribeStep?: LearningChatProps["onTranscribeStep"]; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; illustrationAvailability: IllustrationAvailability; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void }) {
   // Hide illustrations for both new and previously saved gates; keep the underlying feature intact.
   const visibleOptions = (gate.options ?? []).filter((option) => option.id !== "view_illustration" && (BOARD_UI_ENABLED || option.id !== "view_board") && (allowFullSolution || option.id !== "full_solution"));
   const mainOptions = visibleOptions.filter((option) => option.id !== "view_board" && option.id !== "full_solution");
@@ -430,6 +434,7 @@ function GateCard({ gate, busy = false, onTranscribeStep, answerChoices, choices
       {!answerChoices?.length && <p className="text-[11px] leading-5 text-stone-500">请在下方输入你的答案并发送。</p>}
     </> : mainOptions.length ? <div className="chat-gate__options grid grid-cols-2 gap-2">{mainOptions.map((option) => <button type="button" key={option.id} data-emphasis={option.emphasis} onClick={() => onChoice(gate, option.id)} className={`min-h-11 rounded-xl px-3 text-xs font-semibold transition active:scale-[.98] ${gate.kind === "solution_review" ? "col-span-2" : ""} ${option.emphasis === "primary" ? "bg-stone-950 text-white" : option.emphasis === "quiet" ? "col-span-2 text-stone-400 underline decoration-stone-300 underline-offset-4" : "border border-stone-200 text-stone-700 hover:border-stone-400"}`}>{option.id === "try" && <PencilIcon className="gate-action-icon"/>}{option.id === "not_understood" && <QuestionIcon className="gate-action-icon"/>}<span>{option.id === "try" ? "这一步我来做" : option.label}</span>{option.emphasis === "primary" && <ArrowIcon className="gate-action-arrow"/>}</button>)}</div> : !helperOptions.length && <p className="text-[11px] leading-5 text-stone-500">可以在下方继续描述哪里不懂。</p>}
     {helperOptions.length > 0 && <div className="chat-gate__helpers" role="group" aria-label="辅助讲解">{helperOptions.map((option) => <button type="button" key={option.id} onClick={() => onChoice(gate, option.id)}>{option.id === "view_board" ? <PencilIcon className="gate-action-icon"/> : <BookIcon className="gate-action-icon"/>}<span>{option.label}</span></button>)}</div>}
+    {onKnowledgeMap && <div className="chat-gate__helpers"><button type="button" onClick={onKnowledgeMap}><BookIcon className="gate-action-icon"/><span>本题知识图谱</span><ChevronIcon className="h-3 w-3"/></button></div>}
     </div>
   </section>;
 }
@@ -484,13 +489,6 @@ function RecognitionReview({ problem, onConfirm, busy }: { problem: ProblemSnaps
     </div> : null}
     <button type="button" disabled={busy || text.trim().length < 3 || Boolean(missingRequiredVisualFacts)} onClick={confirm} className="mt-3 min-h-11 w-full rounded-xl bg-stone-950 text-sm font-semibold text-white disabled:opacity-35">确认题目，开始讲解</button>
   </section>;
-}
-
-function LoadingWhisper({ label }: { label: string }) {
-  const [index, setIndex] = useState(0);
-  useEffect(() => { const timer = window.setInterval(() => setIndex((value) => (value + 1) % loadingLearningQuotes.length), 5_500); return () => window.clearInterval(timer); }, []);
-  const quote = loadingLearningQuotes[index];
-  return <div className="loading-whisper rounded-2xl border border-stone-200/80 bg-white/75 px-4 py-3"><div role="status" aria-live="polite" className="flex items-center gap-2"><StreamingIndicator status="starting" compact/><p className="text-xs font-semibold text-stone-700">{label || "AI 正在继续思考"}</p></div><p aria-hidden="true" key={index} className="quote-enter mt-2 text-[11px] leading-5 text-stone-400">“{quote.text}” <span>— {quote.source}</span></p></div>;
 }
 
 function NextTurnPlaceholder() {

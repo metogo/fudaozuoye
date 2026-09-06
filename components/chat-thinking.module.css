@@ -1,0 +1,20 @@
+.shell { overflow:hidden; flex-shrink:0; display:grid; grid-template-rows:1fr; opacity:1; transition:grid-template-rows .18s ease-out,opacity .18s ease-out; }
+.shell[data-exiting="true"] { grid-template-rows:0fr; opacity:0; pointer-events:none; }
+.clip { min-height:0; overflow:hidden; }
+@starting-style { .shell { grid-template-rows:0fr; opacity:0; } }
+.content { display:flex; align-items:flex-start; gap:14px; padding:20px 8px 22px; border:0; background:linear-gradient(105deg,#edf5ef80,transparent 80%); border-radius:22px; }
+.avatar { display:grid; place-items:center; flex:0 0 46px; height:48px; margin-top:4px; }
+.avatar :global(.comma-companion) { width:42px; height:42px; animation:readNod 3.8s ease-in-out infinite!important; transform-origin:50% 85%; }
+.copy { min-width:0; }
+.quote { margin:14px 0 0; padding:10px 0 0; border:0; border-top:1px solid #dce6dd80; color:#7c8980; font-size:11px; line-height:1.85; overflow-wrap:anywhere; }
+.quote p { margin:0; }.quote cite { display:block; margin-top:3px; color:#88928a; font-size:10px; font-style:normal; }
+.eyebrow { display:flex; align-items:center; gap:8px; font-size:10px; line-height:18px; letter-spacing:.06em; color:#82948b; margin-bottom:6px; }
+.phase { animation:phaseIn .2s ease-out; }
+.phase h3 { margin:0; font-size:15px; line-height:1.6; font-weight:600; color:#314b40; letter-spacing:.01em; overflow-wrap:anywhere; }
+.phase p { margin:5px 0 0; font-size:12px; line-height:1.8; color:#8a958e; overflow-wrap:anywhere; }
+.dots { display:inline-flex; gap:3px; }.dots i { width:3px; height:3px; border-radius:50%; background:#7d9f8b; animation:dotBreath 1.6s ease-in-out infinite; }.dots i:nth-child(2) { animation-delay:.2s; }.dots i:nth-child(3) { animation-delay:.4s; }
+@keyframes readNod { 0%,65%,100% { transform:rotate(0) translateY(0); } 30% { transform:rotate(7deg) translateY(2px); } 45% { transform:rotate(-2deg) translateY(0); } }
+@keyframes dotBreath { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+@keyframes phaseIn { from { opacity:.4; } to { opacity:1; } }
+@media(max-width:360px) { .content { gap:10px; padding-inline:4px; }.phase h3 { font-size:14px; }.phase p { font-size:11px; } }
+@media(prefers-reduced-motion:reduce) { .avatar :global(.comma-companion) { animation:none!important; }.phase,.dots i { animation:none; }.shell { transition:none; } }

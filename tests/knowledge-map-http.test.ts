@@ -1,0 +1,42 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { postKnowledgeMap } from "@/lib/learning/http/knowledge-map";
+import { getSessionProviderAdapter } from "@/lib/learning/providers";
+import { openSession } from "@/lib/learning/server-state";
+vi.mock("@/lib/learning/providers", () => ({ getSessionProviderAdapter: vi.fn() }));
+vi.mock("@/lib/learning/server-state", () => ({ openSession: vi.fn(), consentRateIdentity: () => "test-knowledge-map" }));
+vi.mock("@/lib/learning/request-guards", () => ({ assertSameOrigin: vi.fn(), assertRateLimit: vi.fn(), assertContentLength: vi.fn() }));
+const request = () => new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed" }) });
+describe("图谱独立只读接口", () => {
+  afterEach(() => vi.resetAllMocks());
+  it("使用已签名会话而非客户端伪造题目，且不回写进度", async () => {
+    const session = { problem: { text: "signed original" }, flow: { activeGate: { id: "gate-1" } } };
+    vi.mocked(openSession).mockReturnValue(session as never);
+    const generateKnowledgeMap = vi.fn().mockResolvedValue({ rootId: "core" });
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeMap } as never);
+    const before = JSON.stringify(session), response = await postKnowledgeMap(request());
+    expect(openSession).toHaveBeenCalledWith("sealed");
+    expect(generateKnowledgeMap).toHaveBeenCalledWith(session);
+    expect(await response.json()).toEqual({ map: { rootId: "core" } });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(JSON.stringify(session)).toBe(before);
+  });
+  it("损坏的凭证不能调用模型", async () => { vi.mocked(openSession).mockImplementation(() => { throw new Error("凭证损坏"); }); expect((await postKnowledgeMap(request())).status).toBe(400); expect(getSessionProviderAdapter).not.toHaveBeenCalled(); });
+  it("详情只生成所选节点，先验证图谱属于当前原题", async () => {
+    const session = { problem: { text: "两个实数根" } };
+    const node = { id: "core", title: "判别式", summary: "判断根", application: "使用非负条件", evidence: "两个实数根" };
+    const map = { version: 1, rootId: "core", nodes: [node, { ...node, id: "real", title: "实数" }], edges: [{ from: "core", to: "real", kind: "prerequisite", reason: "实数根要求根号内非负" }] };
+    vi.mocked(openSession).mockReturnValue(session as never);
+    const generateKnowledgeDetail = vi.fn().mockResolvedValue({ summary: "说明", application: "用途" });
+    const generateKnowledgeMap = vi.fn();
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeDetail, generateKnowledgeMap } as never);
+    const detailRequest = (nodeId: string) => new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed", map, nodeId }) });
+    expect(await (await postKnowledgeMap(detailRequest("real"))).json()).toEqual({ detail: { summary: "说明", application: "用途" } });
+    expect(generateKnowledgeDetail).toHaveBeenCalledWith(session, map, "real");
+    expect(generateKnowledgeMap).not.toHaveBeenCalled();
+    expect((await postKnowledgeMap(detailRequest("missing"))).status).toBe(400);
+    map.nodes[0].evidence = "另一道题";
+    expect((await postKnowledgeMap(detailRequest("core"))).status).toBe(400);
+    expect(generateKnowledgeDetail).toHaveBeenCalledTimes(1);
+  });
+  it("模型失败只返回可重试错误，不生成假图谱", async () => { vi.mocked(openSession).mockReturnValue({} as never); vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeMap: vi.fn().mockRejectedValue(new Error("模型请求失败")) } as never); const body = await (await postKnowledgeMap(request())).json(); expect(body.data).toBeNull(); expect(body.error.message).toBe("模型请求失败"); });
+});

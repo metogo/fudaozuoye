@@ -10,6 +10,7 @@ import { postTransfer } from "../../../lib/learning/http/transfer";
 import { postTutor } from "../../../lib/learning/http/tutor";
 import { postTurn } from "../../../lib/learning/http/turn";
 import { postEmphasis } from "../../../lib/learning/http/emphasis";
+import { postKnowledgeMap } from "../../../lib/learning/http/knowledge-map";
 import { postVerify } from "../../../lib/learning/http/verify";
 
 const maximumRequestBytes = 8 * 1024 * 1024;
@@ -27,6 +28,7 @@ const routes: Record<string, (request: Request) => Promise<Response> | Response>
   "POST /learning/tutor": postTutor,
   "POST /learning/turn": postTurn,
   "POST /learning/emphasis": postEmphasis,
+  "POST /learning/knowledge-map": postKnowledgeMap,
 };
 
 export const main = createServer((request, response) => {

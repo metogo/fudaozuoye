@@ -52,6 +52,8 @@ import { generateGeneralTeaching } from "./general-teaching";
 import { generalTeachingTool } from "../teaching-program";
 export type AnalysisPhaseReporter = (key: string, label: string) => void;
 export interface ProviderAdapter {
+  generateKnowledgeMap?(session: LearningSession): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
+  generateKnowledgeDetail?(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string): Promise<import("../knowledge-map").KnowledgeDetail>;
   selectEmphasis?(session: LearningSession, source: string, context: string): Promise<LearningEmphasis[]>;
   readonly id: ProviderId;
   readonly reasoningLevel: ReasoningLevel;
@@ -545,6 +547,21 @@ export class LiveProviderAdapter implements ProviderAdapter {
   async selectEmphasis(session: LearningSession, source: string, context: string): Promise<LearningEmphasis[]> {
     const raw = await this.textRequest(emphasisSystem, emphasisPrompt(session, source, context), undefined, true, 18000, undefined, 1200);
     return parseLearningEmphasis(parseJsonObject(raw), source, problemEvidenceText(session.problem));
+  }
+  async generateKnowledgeMap(session: LearningSession) {
+    const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await import("./knowledge-map");
+    const { parseKnowledgeMap, mapEvidence } = await import("../knowledge-map");
+    const raw = await this.textRequest(knowledgeMapSystem, knowledgeMapPrompt(session), undefined, true, 40000, undefined, 4800);
+    return parseKnowledgeMap({ ...resolveKnowledgeEvidence(parseJsonObject(raw), session), overviewOnly: true }, mapEvidence(session));
+  }
+  async generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string) {
+    const { knowledgeDetailSystem, knowledgeMapPrompt } = await import("./knowledge-map");
+    const { parseKnowledgeDetail } = await import("../knowledge-map");
+    const node = map.nodes.find(n => n.id === nodeId);
+    if (!node) throw new Error("知识点不存在");
+    const relations = map.edges.filter(e => e.from === nodeId || e.to === nodeId).map(e => ({ ...e, from: map.nodes.find(n => n.id === e.from)?.title, to: map.nodes.find(n => n.id === e.to)?.title }));
+    const raw = await this.textRequest(knowledgeDetailSystem, JSON.stringify({ original: knowledgeMapPrompt(session), node, relations }), undefined, true, 25000, undefined, 1400);
+    return parseKnowledgeDetail(parseJsonObject(raw));
   }
   async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {
     return transcribeStudentResponse(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
