@@ -80,4 +80,14 @@ describe("ProblemKnowledgeMapPage", () => {
     await screen.findByTestId("flow");
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
+
+  it("详情失败时仍可浏览图谱，并允许单独重试说明", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ map })).mockResolvedValueOnce(response({}, false)).mockResolvedValueOnce(response({ detail: { summary: "恢复说明", application: "恢复使用" } }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await screen.findByTestId("flow");
+    fireEvent.click(screen.getByText("根的判别式"));
+    expect(await screen.findByText("补充说明暂未加载，仍可浏览图谱。")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "重试说明", hidden: true }));
+    expect(await screen.findByText("恢复说明")).not.toBeNull();
+  });
 });
