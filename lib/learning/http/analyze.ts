@@ -27,7 +27,10 @@ export async function postAnalyze(request: Request): Promise<Response> {
     const provider = "doubao" as const;
     const adapter = getProviderAdapter(provider, reasoningLevel, request.signal);
 
-    if (stage === "recognize") return recognize(form, provider, adapter);
+    // `recognize` validates file bytes asynchronously. Await it here so an
+    // invalid upload is converted by this route's error boundary to a stable
+    // client response instead of escaping as a rejected handler promise.
+    if (stage === "recognize") return await recognize(form, provider, adapter);
     if (stage === "recognize_text") return recognizeText(form, provider, adapter);
     const raw = form.get("problem");
     if (typeof raw !== "string" || raw.length > 24_000) return new Response("缺少已确认的题目", { status: 400 });
