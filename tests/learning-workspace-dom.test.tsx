@@ -80,4 +80,25 @@ describe("学习工作区", () => {
     expect(await screen.findByRole("dialog")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "关闭知识路径" }));
   });
+  it("学习卡上的检查、下拆、换题和知识路径选择都回到同一个学习点", async () => {
+    const callbacks = props();
+    const current = { ...session, nodes: session.nodes.map((node) => node.id === "concept" ? { ...node, state: "learning" } : node) };
+    const view = render(<LearningWorkspace session={current as never} {...callbacks}/>);
+    expect(screen.getByText("平方根的定义")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "这里不会，找更基础的知识" }));
+    expect(callbacks.onExpand).toHaveBeenCalledWith("concept");
+    fireEvent.click(screen.getByRole("button", { name: "换相似题" }));
+    await waitFor(() => expect(callbacks.onSimilar).toHaveBeenCalledWith("concept"));
+    fireEvent.change(screen.getByPlaceholderText("写下你的答案"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    expect(callbacks.onVerify).toHaveBeenCalledWith("concept", "2");
+    fireEvent.click(screen.getByRole("button", { name: "问这段" }));
+    expect(await screen.findByRole("dialog")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "关闭追问" }));
+    fireEvent.click(screen.getByRole("button", { name: /打开知识路径/ }));
+    const path = await screen.findByRole("dialog");
+    expect(path.textContent).toContain("越往下，越基础");
+    fireEvent.click(screen.getByRole("button", { name: "关闭知识路径" }));
+    view.unmount();
+  });
 });
