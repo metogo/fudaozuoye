@@ -1,0 +1,32 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</>, CopyableLearningText: ({ text }: any) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
+vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: any) => <>{text}</> }));
+vi.mock("@/components/home-welcome-hero", () => ({ HomeWelcomeHero: () => <div>欢迎</div> }));
+vi.mock("@/components/selection-ask", () => ({ SelectionAsk: () => null }));
+vi.mock("@/components/quote-composer-motion", () => ({ QuoteComposerMotion: () => null }));
+vi.mock("@/components/comma-companion", () => ({ CommaCompanion: () => <i>逗号</i> }));
+vi.mock("@/components/step-blank", () => ({ StepBlank: () => <div>填空</div> }));
+vi.mock("@/components/conversation-export", () => ({ ConversationExport: ({ onClose }: any) => <div role="dialog">导出预览<button onClick={onClose}>关闭导出</button></div> }));
+vi.mock("@/components/problem-knowledge-map", () => ({ ProblemKnowledgeMapPage: ({ onClose }: any) => <div role="dialog">知识图谱页面<button onClick={onClose}>关闭图谱</button></div> }));
+import { LearningChat } from "@/components/learning-chat";
+
+const base: any = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
+const session: any = { requestId: "r", problem: { text: "题目", gradeBand: "junior" }, nodes: [], flow: { stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂" }] } } };
+describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
+ it("首页校验文件、选择推理强度并发送文本题目", () => { const p = { ...base, onFile: vi.fn(), onReasoningLevel: vi.fn(), onSend: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: /轻度/ })); expect(p.onReasoningLevel).toHaveBeenCalledWith("light"); const file = new File(["x"], "a.txt", { type: "text/plain" }); fireEvent.change(screen.getByLabelText("从相册选择题目"), { target: { files: [file] } }); expect(screen.getAllByText("请选择图片文件")).toHaveLength(2); fireEvent.change(screen.getByLabelText("输入题目或问题"), { target: { value: "x+1=2" } }); fireEvent.submit(screen.getByLabelText("输入题目或问题").closest("form")!); expect(p.onSend).toHaveBeenCalledWith("x+1=2"); });
+ it("任务卡和建议问题都可操作", () => { const p = { ...base, session, stateToken: "token", messages: [{ id: "a", role: "assistant", kind: "assistant", text: "讲解中断", status: "error", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions }], onChoice: vi.fn(), onSuggestion: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: "继续" })); expect(p.onChoice).toHaveBeenCalledWith(session.flow.activeGate, "continue"); fireEvent.click(screen.getByRole("button", { name: /为什么用判别式/ })); expect(p.onSuggestion).toHaveBeenCalledWith(session.flow.suggestedQuestions[0]); });
+ it("识别待确认时要求图中条件，并将编辑结果回传", () => { const confirm = vi.fn(); const problem: any = { text: "图形题", visualContext: { related: true, affectsSolving: true, facts: [], summary: "" } }; render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>); expect(screen.getByText("这道题依赖配图，请补全图中条件或重新拍摄。")).not.toBeNull(); fireEvent.change(screen.getByLabelText("图中信息"), { target: { value: "AB=3" } }); fireEvent.click(screen.getByRole("button", { name: "确认题目，开始讲解" })); expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ userRevised: true })); });
+ it("两种完成态都会提供合适的后续学习动作", () => { const transfer = vi.fn(), fresh = vi.fn(), retry = vi.fn(); const completed = { ...session, originalPassed: true, flow: { ...session.flow, stage: "complete", activeGate: null } }; const view = render(<LearningChat {...base} session={completed} onRequestTransfer={transfer} onNewProblem={fresh}/>); expect(screen.getByText("你已经独立解决了这道原题")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "再练一道同类题" })); expect(transfer).toHaveBeenCalled(); fireEvent.click(screen.getAllByRole("button", { name: "开始新题" }).at(-1)!); expect(fresh).toHaveBeenCalled(); view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, stage: "reviewed_complete", activeGate: null } }} onRetryOriginal={retry} onRequestTransfer={transfer} onNewProblem={fresh}/>); fireEvent.click(screen.getByRole("button", { name: "遮住讲解，重做原题" })); expect(retry).toHaveBeenCalled(); });
+ it("对话完成后可打开并关闭 PDF 导出和本题知识图谱", async () => {
+   const ready = { ...session, flow: { ...session.flow, activeGate: null } };
+   render(<LearningChat {...base} session={ready} stateToken="token" messages={[{ id: "m", role: "assistant", kind: "assistant", text: "讲解", status: "complete", createdAt: new Date().toISOString() }]}/>);
+   fireEvent.click(screen.getByRole("button", { name: "导出 PDF" }));
+   expect(await screen.findByText("导出预览")).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "关闭导出" }));
+   fireEvent.click(screen.getByRole("button", { name: "本题知识图谱" }));
+   expect(await screen.findByText("知识图谱页面")).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "关闭图谱" }));
+ });
+});

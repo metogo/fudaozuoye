@@ -3,10 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningApp } from "@/components/learning-app";
 
+let latestWorkspace: any;
+
 vi.mock("@/components/capture-step", () => ({ CaptureStep: ({ ready, onFile }: { ready: boolean; onFile: (file: File) => void }) => <div><p>capture:{String(ready)}</p><button onClick={() => onFile(new File(["x"], "q.png", { type: "image/png" }))}>上传题目</button></div> }));
 vi.mock("@/components/image-cropper", () => ({ ImageCropper: ({ onConfirm, onCancel }: { onConfirm: (blob: Blob, url: string) => void; onCancel: () => void }) => <div><button onClick={() => onConfirm(new Blob(["x"]), "blob:q")}>确认裁剪</button><button onClick={onCancel}>取消裁剪</button></div> }));
 vi.mock("@/components/review-step", () => ({ PreparationStep: ({ phase, onConfirm, onCancel }: { phase: string; onConfirm: () => void; onCancel: () => void }) => <div><p>prepare:{phase}</p><button onClick={onConfirm}>开始学习</button><button onClick={onCancel}>停止</button></div> }));
-vi.mock("@/components/learning-workspace", () => ({ LearningWorkspace: ({ onReset }: { onReset: () => void }) => <div><p>learning</p><button onClick={onReset}>新题</button></div> }));
+vi.mock("@/components/learning-workspace", () => ({ LearningWorkspace: (props: any) => {
+  latestWorkspace = props;
+  return <div><p>learning</p><p data-testid="workspace-notice">{props.notice}</p><button onClick={props.onReset}>新题</button></div>;
+} }));
 
 function sse(events: Array<[string, unknown]>) {
   const text = events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("");
@@ -43,6 +48,19 @@ describe("学习应用状态机", () => {
     expect(screen.getByText("服务暂时无法准备，请刷新后重试。")).not.toBeNull();
   });
 
+  it("题目识别失败会回到上传入口并保留可行动提示", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockRejectedValueOnce(new Error("图片模糊"));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("capture:true");
+    fireEvent.click(screen.getByRole("button", { name: "上传题目" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认裁剪" }));
+    await screen.findByText("capture:true");
+    expect(screen.getByText("图片模糊")).not.toBeNull();
+  });
+
   it("只恢复结构完整的本地学习会话，损坏记录会被安全清除", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 })));
     sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "short", session: {} }));
@@ -54,5 +72,37 @@ describe("学习应用状态机", () => {
     sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session, displayProvider: "openai" }));
     render(<LearningApp/>);
     await screen.findByText("learning");
+  });
+
+  it("学习空间的拆解、验证、同类题、讲解与追问都会保持会话可继续", async () => {
+    const session = {
+      schemaVersion: "1.1", requestId: "actions", provider: "doubao", rootNodeId: "root", currentNodeId: "root",
+      nodes: [{ id: "root", title: "根知识", atomic: false }], edges: [],
+      problemGuide: { goal: "g", keyClue: "k", approach: "a", firstQuestion: "f" }, stage: "learning",
+    };
+    const next = { ...session, currentNodeId: "child", nodes: [...session.nodes, { id: "child", title: "前置知识", atomic: true }] };
+    sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session }));
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockResolvedValueOnce(sse([["phase", { label: "向下拆解" }], ["graph", { session: next, stateToken: "y".repeat(48) }], ["complete", {}]]))
+      .mockResolvedValueOnce(sse([["phase", { label: "生成同类题" }], ["graph", { session, stateToken: "z".repeat(48) }], ["complete", {}]]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { session, stateToken: "a".repeat(48), assessment: { passed: true, explanation: "回答正确" } } }), { status: 200 }))
+      .mockResolvedValueOnce(sse([["delta", { text: "完整解答" }], ["complete", {}]]))
+      .mockResolvedValueOnce(sse([["delta", { text: "追问回答" }], ["complete", {}]]));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("learning");
+    await latestWorkspace.onExpand("root");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("已向下拆到"));
+    await latestWorkspace.onSimilar("root");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("同知识点新题"));
+    await latestWorkspace.onVerify("root", "42");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("回答正确"));
+    const solution = vi.fn();
+    await latestWorkspace.onSolution(solution);
+    expect(solution).toHaveBeenCalledWith("完整解答");
+    const tutor = vi.fn();
+    await latestWorkspace.onTutor("node", "为什么", tutor);
+    expect(tutor).toHaveBeenCalledWith("追问回答");
   });
 });

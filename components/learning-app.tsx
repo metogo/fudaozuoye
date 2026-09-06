@@ -346,3 +346,13 @@ function analysisMessageOf(error: unknown) {
   return message.includes("知识关系没有通过可靠性检查") ? "AI 返回的知识关系不够可靠，请再次点击“开始学习”重试。" : message;
 }
 function isAbortError(error: unknown) { return error instanceof DOMException && error.name === "AbortError"; }
+
+export {
+  analysisMessageOf,
+  apiUrl,
+  isAbortError,
+  isProviderId,
+  isRestorableState,
+  messageOf,
+  readSseResponse,
+};

@@ -55,4 +55,29 @@ describe("学习工作区", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回首页，学习下一题" }));
     expect(callbacks.onReset).toHaveBeenCalledTimes(1);
   });
+  it("迁移验收可生成题目并提交最终答案", () => {
+    const callbacks = props();
+    const pending = { ...session, stage: "transfer_check", transferCheck: null };
+    const view = render(<LearningWorkspace session={pending as never} {...callbacks}/>);
+    fireEvent.click(screen.getByRole("button", { name: "生成迁移题" }));
+    expect(callbacks.onGenerateTransfer).toHaveBeenCalled();
+    const transfer = { ...session, stage: "transfer_check", transferCheck: { id: "transfer", prompt: "若 x²=9，x 是多少？", answer: "±3", type: "short_text", explanation: "开方" } };
+    view.rerender(<LearningWorkspace session={transfer as never} {...callbacks}/>);
+    fireEvent.change(screen.getByPlaceholderText("写下你的答案"), { target: { value: "±3" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交最终答案" }));
+    expect(callbacks.onVerify).toHaveBeenCalledWith("__transfer__", "±3");
+  });
+  it("知识路径和需要帮助状态仍提供可返回的学习出口", async () => {
+    const callbacks = props();
+    const needsHelp = { ...session, stage: "needs_help", nodes: session.nodes.map((node, index) => index ? { ...node, state: "needs_help" } : node) };
+    const view = render(<LearningWorkspace session={needsHelp as never} {...callbacks} focusNodeId="concept"/>);
+    expect(await screen.findByText("这个基础点还没有理解")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "查看原题完整答案" }));
+    expect(await screen.findByText("原题完整答案")).not.toBeNull();
+    view.unmount();
+    render(<LearningWorkspace session={session as never} {...callbacks} focusNodeId="concept"/>);
+    fireEvent.click(screen.getByRole("button", { name: /打开知识路径/ }));
+    expect(await screen.findByRole("dialog")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "关闭知识路径" }));
+  });
 });

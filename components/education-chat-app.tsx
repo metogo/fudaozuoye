@@ -1733,3 +1733,18 @@ export function canReuseIllustration(
     } catch { return false; }
   });
 }
+
+// Stateless guards are exported so their persistence and recovery contracts can
+// be verified without mounting the entire chat application.
+export {
+  boardCacheCandidate,
+  choiceLabel,
+  isAbortError,
+  isReasoningLevel,
+  isStoredChatState,
+  labelOf,
+  messageOf,
+  reasoningLabel,
+  turnLoadingLabel,
+  validateStoredBoardLesson,
+};

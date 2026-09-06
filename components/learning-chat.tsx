@@ -557,3 +557,7 @@ function choicesFromSession(session: LearningSession | null, gate: LearningGate 
   if (gate.kind === "transfer_answer") return session.transferCheck?.choices;
   return session.nodes.find((node) => node.id === gate.nodeId)?.check.choices;
 }
+
+// Kept stateless so the server/client entry points and focused tests share the
+// exact same task wording and answer-source rules.
+export { choiceDisplayText, choicesFromSession, composerPlaceholder, currentTaskCopy };
