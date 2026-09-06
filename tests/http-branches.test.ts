@@ -108,6 +108,14 @@ describe("低频学习接口的成功、兜底与错误分支", () => {
     expect(await response.json()).toMatchObject({ error: { message: "迁移题未绑定有效知识点" } });
   });
 
+  it("迁移题生成服务异常时保持标准错误信封，而不泄露内部状态", async () => {
+    vi.mocked(openSession).mockReturnValue({ originalPassed: true, stage: "transfer_check", provider: "doubao" } as never);
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateTransferCheck: vi.fn().mockRejectedValue(new ServiceError("模型暂忙", 503, "PROVIDER_BUSY", true)) } as never);
+    const response = await postTransfer(request("/api/learning/transfer", { stateToken: "sealed" }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: "PROVIDER_BUSY", retryable: true, message: "模型暂忙" } });
+  });
+
   it("列出运行时可用模型配置", async () => {
     vi.mocked(listProviderAvailability).mockReturnValue([{ id: "doubao", available: true }] as never);
     expect(await getProviders().json()).toEqual({ schemaVersion: "1.0", providers: [{ id: "doubao", available: true }] });
