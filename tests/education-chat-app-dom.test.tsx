@@ -33,6 +33,7 @@ vi.mock("@/components/learning-illustration", () => ({
 
 import { EducationChatApp } from "@/components/education-chat-app";
 import { readSseResponse } from "@/lib/learning/client-sse";
+import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint";
 
 const learnedSession = {
   schemaVersion: "1.1", requestId: "request-app", reasoningLevel: "light",
@@ -131,7 +132,9 @@ describe("EducationChatApp", () => {
       },
     };
     sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session, stateToken: "x".repeat(48), messages: [] }));
-    vi.mocked(fetch).mockResolvedValue(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValue(response("turn"));
     vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
       if (reply.stage !== "turn") return;
       await onEvent("message.delta", { text: "继续理解。" });
@@ -266,7 +269,9 @@ describe("EducationChatApp", () => {
 
   it("普通任务失败会留下可重试入口，而可选同类练习不会锁住当前任务", async () => {
     sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
-    vi.mocked(fetch).mockResolvedValue(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValue(response("turn"));
     vi.mocked(readSseResponse).mockRejectedValue(new Error("模型暂时不可用"));
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
@@ -341,5 +346,64 @@ describe("EducationChatApp", () => {
     await act(async () => { await latest.onSend("这道题"); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("用下方相机或相册换一张"));
     expect(latest.retryLabel).toBe("");
+  });
+
+  it("选中文字追问携带引用；无效的猜你想问不会抢走当前学习任务", async () => {
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValue(response("turn"));
+    const requests: any[] = [];
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage !== "turn") return;
+      requests.push(reply);
+      await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onQuestion("这句话为什么重要？", "有两个实数根"); });
+    await act(async () => { await latest.onSuggestion({ id: "forged", text: "伪造问题", scopeLabel: "无", sourceSummary: "无" }); });
+    expect(requests).toHaveLength(1);
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
+    expect(body.input).toEqual({ type: "question", text: "这句话为什么重要？", quote: "有两个实数根" });
+    expect(screen.getByTestId("messages").textContent).toContain("user:这句话为什么重要？");
+  });
+
+  it("插画完成后关闭会确认已看过，并在同题内复用已生成的插画", async () => {
+    const session = {
+      ...learnedSession,
+      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "view_illustration", label: "插画演示" }] } },
+    };
+    const lesson = {
+      requestId: session.requestId,
+      problemFingerprint: illustrationFingerprint(session as any),
+      receipt: "receipt-1",
+      title: "看清关系",
+      frameCount: 1,
+      frames: [{ id: "frame-1", index: 1, title: "第一步", imageUrl: "data:image/svg+xml;base64,PHN2Zy8+", narration: "先看条件" }],
+    };
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValue(response("turn"));
+    const turnInputs: any[] = [];
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage !== "turn") return;
+      turnInputs.push(JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).input);
+      if (turnInputs.length === 1) await onEvent("illustration.complete", lesson);
+      await onEvent("flow.update", { session, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
+    await waitFor(() => expect(latestIllustration.lesson).toEqual(lesson));
+    await act(async () => { await latestIllustration.onClose(); });
+    await waitFor(() => expect(turnInputs).toHaveLength(2));
+    expect(turnInputs[1]).toEqual({ type: "acknowledge_illustration", gateId: "gate", receipt: "receipt-1" });
+    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
+    expect(turnInputs).toHaveLength(2);
+    expect(latestIllustration.lesson).toEqual(lesson);
   });
 });
