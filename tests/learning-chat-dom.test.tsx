@@ -58,4 +58,38 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    fireEvent.click(screen.getByRole("button", { name: "重试这条消息" }));
    expect(onRetry).toHaveBeenCalledTimes(1);
  });
+ it("图像复核可切换为辅助或无关图，避免把空图中条件提交给模型", () => {
+   const confirm = vi.fn();
+   const problem: any = { text: "图形题", visualContext: { related: true, affectsSolving: true, facts: [], summary: "" } };
+   render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>);
+   const submit = screen.getByRole("button", { name: "确认题目，开始讲解" });
+   expect(submit.hasAttribute("disabled")).toBe(true);
+   fireEvent.click(screen.getByRole("button", { name: "辅助理解" }));
+   expect(submit.hasAttribute("disabled")).toBe(false);
+   fireEvent.click(submit);
+   expect(confirm).toHaveBeenLastCalledWith(expect.objectContaining({ visualContext: expect.objectContaining({ related: true, affectsSolving: false }) }));
+   fireEvent.click(screen.getByRole("button", { name: "与题无关" }));
+   fireEvent.click(submit);
+   expect(confirm).toHaveBeenLastCalledWith(expect.objectContaining({ visualContext: expect.objectContaining({ related: false, facts: [] }) }));
+ });
+ it("流式消息、下一步占位、结果和错误反馈都保持在对话主线内", () => {
+   const retry = vi.fn();
+   const flowing = { ...session, flow: { ...session.flow, activeGate: { ...session.flow.activeGate, kind: "node_answer" } } };
+   const messages: any[] = [
+     { id: "m", role: "system", kind: "milestone", text: "已找到关键条件", status: "complete", createdAt: new Date().toISOString() },
+     { id: "p", role: "system", kind: "path", text: "原题 → 平方根", status: "complete", createdAt: new Date().toISOString() },
+     { id: "r", role: "system", kind: "result", text: "✓ 回答正确", status: "complete", createdAt: new Date().toISOString() },
+     { id: "a", role: "assistant", kind: "assistant", text: "上一段讲解", status: "finishing", createdAt: new Date().toISOString() },
+     { id: "e", role: "assistant", kind: "assistant", text: "中断", status: "error", createdAt: new Date().toISOString(), scopeLabel: "原题完整讲解" },
+   ];
+   const view = render(<LearningChat {...base} session={flowing} stateToken="token" busy loadingLabel="正在准备" retryLabel="重试这一步" retryMessageId="e" onRetry={retry} messages={messages}/>);
+   expect(screen.getByText("已找到关键条件")).not.toBeNull();
+   expect(screen.getByText("正在补回缺失的基础")).not.toBeNull();
+   expect(screen.getByText("下一步正在准备")).not.toBeNull();
+   expect(screen.getByText("完整讲解未完成")).not.toBeNull();
+   expect(screen.getByRole("button", { name: "重试这条消息" }).hasAttribute("disabled")).toBe(true);
+   view.rerender(<LearningChat {...base} session={flowing} stateToken="token" busy={false} retryLabel="重试这一步" retryMessageId="e" onRetry={retry} messages={messages}/>);
+   fireEvent.click(screen.getByRole("button", { name: "重试这条消息" }));
+   expect(retry).toHaveBeenCalledTimes(1);
+ });
 });
