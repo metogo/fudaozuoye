@@ -56,6 +56,43 @@ describe("对话编排器的恢复与文案守卫", () => {
     expect(isAbortError(new Error("aborted"))).toBe(false);
   });
 
+  it("恢复守卫与所有学习动作都会走到可理解的兜底文案", () => {
+    expect(isStoredChatState(null)).toBe(false);
+    expect(isStoredChatState("not-a-session")).toBe(false);
+    expect(isStoredChatState({ ...state, session: { ...state.session, schemaVersion: "1.0" } })).toBe(false);
+    expect(isStoredChatState({ ...state, session: { ...state.session, flow: null } })).toBe(false);
+    expect(isStoredChatState({ ...state, session: { ...state.session, problem: {} } })).toBe(false);
+    expect(isStoredChatState({ ...state, messages: [{ id: "m", text: "讲解", role: "forged" }] })).toBe(false);
+    expect(boardCacheCandidate(null, "r")).toBeNull();
+    expect(boardCacheCandidate("cache", "r")).toBeNull();
+    expect(boardCacheCandidate({ requestId: "r" }, "r")).toBeNull();
+    expect(messageOf(new Error("ordinary failure"))).toBe("ordinary failure");
+    expect(labelOf({ label: 12 }, "默认")).toBe("12");
+    expect(reasoningLabel("light")).toBe("轻度");
+    expect(reasoningLabel("high")).toBe("高");
+    for (const [choice, label] of [
+      ["view_step_answer", "查看这个空的答案"], ["full_solution", "看完整讲解"],
+      ["continue", "懂了，继续"], ["try", "这一步我来做"],
+      ["view_board", "用板书讲清楚"], ["start_recall", "我看完了，收起讲解"],
+      ["retry_original", "遮住讲解，重做原题"], ["practice_similar", "换一道同知识点题"],
+      ["finish_review", "先结束，稍后再练"], ["not_understood", "这一步没懂"],
+    ] as const) expect(choiceLabel(choice)).toBe(label);
+    for (const [input, expected] of [
+      [{ type: "choose_suggestion", suggestionId: "s" }, "选中的问题"],
+      [{ type: "question", text: "为什么" }, "刚才的问题"],
+      [{ type: "image_question" }, "标出的疑问"],
+      [{ type: "answer", gateId: "g", answer: "x" }, "判断"],
+      [{ type: "retry_original" }, "重新打开"],
+      [{ type: "request_transfer" }, "同知识点"],
+      [{ type: "acknowledge_illustration", gateId: "g", receipt: "r" }, "关键步骤"],
+      [{ type: "choose", gateId: "g", choice: "view_illustration" }, "演算步骤"],
+      [{ type: "choose", gateId: "g", choice: "full_solution" }, "完整讲解"],
+      [{ type: "choose", gateId: "g", choice: "start_recall" }, "关键步骤"],
+      [{ type: "choose", gateId: "g", choice: "practice_similar" }, "同知识点"],
+      [{ type: "choose", gateId: "g", choice: "continue" }, "继续讲解"],
+    ] as const) expect(turnLoadingLabel(input as never)).toContain(expected);
+  });
+
   it("板书缓存服务能区分有效、失效、暂不可用三种恢复结果", async () => {
     const lesson = { title: "板书", subtitle: "说明", returnLabel: "返回", layout: "steps", blocks: [{ id: "a", label: "条件", content: "看条件", tone: "plain" }], annotations: [] };
     vi.stubGlobal("fetch", vi.fn()
