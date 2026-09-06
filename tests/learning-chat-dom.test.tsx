@@ -29,4 +29,33 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    expect(await screen.findByText("知识图谱页面")).not.toBeNull();
    fireEvent.click(screen.getByRole("button", { name: "关闭图谱" }));
  });
+ it("首页拒绝过大图片并可直接进入白板写题", () => {
+   const onWhiteboard = vi.fn();
+   render(<LearningChat {...base} onWhiteboard={onWhiteboard}/>);
+   fireEvent.click(screen.getByRole("button", { name: "白板写题" }));
+   expect(onWhiteboard).toHaveBeenCalledWith("question");
+   const large = new File([new Uint8Array(21 * 1024 * 1024)], "large.png", { type: "image/png" });
+   fireEvent.change(screen.getByLabelText("拍照发题"), { target: { files: [large] } });
+   expect(screen.getAllByText("图片不能超过 20MB")).toHaveLength(2);
+ });
+ it("答案任务支持点击选项、白板和拍照作答，失败消息能在原位置重试", () => {
+   const onSend = vi.fn(), onWhiteboard = vi.fn(), onResponsePhoto = vi.fn(), onRetry = vi.fn();
+   const answerSession = {
+     ...session,
+     nodes: [{ id: "n", check: { choices: ["A. 4", "B. 5"] } }],
+     flow: { ...session.flow, activeGate: { id: "answer", nodeId: "n", kind: "node_answer", title: "做一道小题", prompt: "请选择答案", options: [{ id: "not_understood", label: "没懂" }] } },
+   };
+   const view = render(<LearningChat {...base} session={answerSession} onSend={onSend} onWhiteboard={onWhiteboard} onResponsePhoto={onResponsePhoto} messages={[]}/>);
+   fireEvent.click(screen.getByRole("button", { name: "A 4" }));
+   expect(onSend).toHaveBeenCalledWith("A. 4");
+   view.rerender(<LearningChat {...base} session={{ ...answerSession, nodes: [] }} onSend={onSend} onWhiteboard={onWhiteboard} onResponsePhoto={onResponsePhoto} messages={[]}/>);
+   fireEvent.click(screen.getByRole("button", { name: "打开白板作答" }));
+   expect(onWhiteboard).toHaveBeenCalledWith("answer");
+   const photo = new File(["x"], "answer.png", { type: "image/png" });
+   fireEvent.change(screen.getByLabelText("拍照作答").querySelector("input")!, { target: { files: [photo] } });
+   expect(onResponsePhoto).toHaveBeenCalledWith(photo, "answer");
+   view.rerender(<LearningChat {...base} session={answerSession} onRetry={onRetry} retryLabel="重试这一步" retryMessageId="failed" messages={[{ id: "failed", role: "assistant", kind: "assistant", text: "中断", status: "error", createdAt: new Date().toISOString() }]}/>);
+   fireEvent.click(screen.getByRole("button", { name: "重试这条消息" }));
+   expect(onRetry).toHaveBeenCalledTimes(1);
+ });
 });
