@@ -92,4 +92,24 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    fireEvent.click(screen.getByRole("button", { name: "重试这条消息" }));
    expect(retry).toHaveBeenCalledTimes(1);
  });
+ it("答案任务可切换为针对当前步骤的提问，再无缝回到答案输入", () => {
+   const onQuestion = vi.fn(), onSend = vi.fn(), onWhiteboard = vi.fn();
+   const answerSession = {
+     ...session,
+     flow: { ...session.flow, stage: "guided_reasoning", activeGate: { id: "answer", kind: "original_answer", title: "独立作答", prompt: "写出结果", options: [{ id: "not_understood", label: "没懂" }] } },
+   };
+   render(<LearningChat {...base} session={answerSession} onQuestion={onQuestion} onSend={onSend} onWhiteboard={onWhiteboard}/>);
+   expect(screen.getByLabelText("输入你的答案")).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "改为提问" }));
+   const question = screen.getByLabelText("询问当前步骤");
+   fireEvent.change(question, { target: { value: "为什么先这样列式？" } });
+   fireEvent.submit(question.closest("form")!);
+   expect(onQuestion).toHaveBeenCalledWith("为什么先这样列式？", undefined);
+   const answer = screen.getByLabelText("输入你的答案");
+   fireEvent.change(answer, { target: { value: "42" } });
+   fireEvent.submit(answer.closest("form")!);
+   expect(onSend).toHaveBeenCalledWith("42");
+   fireEvent.click(screen.getByRole("button", { name: "打开白板作答" }));
+   expect(onWhiteboard).toHaveBeenCalledWith("answer");
+ });
 });
