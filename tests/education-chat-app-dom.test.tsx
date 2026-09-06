@@ -263,4 +263,42 @@ describe("EducationChatApp", () => {
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
     expect(latest.session?.requestId).toBe("request-app");
   });
+
+  it("普通任务失败会留下可重试入口，而可选同类练习不会锁住当前任务", async () => {
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch).mockResolvedValue(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }));
+    vi.mocked(readSseResponse).mockRejectedValue(new Error("模型暂时不可用"));
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onChoice(learnedSession.flow.activeGate, "continue"); });
+    await waitFor(() => expect(latest.retryLabel).toBe("重试这一步"));
+    expect(screen.getByTestId("notice").textContent).toContain("模型暂时不可用");
+    await act(async () => { await latest.onRequestTransfer(); });
+    expect(latest.retryLabel).toBe("");
+    expect(screen.getByTestId("notice").textContent).toContain("同类练习暂时没有生成成功");
+  });
+
+  it("流式正文重置与可选强调失败都不影响完整讲解和后续任务", async () => {
+    const longText = "这是足够长的一段讲解文字，用于触发重点标记的可选请求，同时仍然要保证主讲解流程不受影响。";
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("turn"))
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage !== "turn") return;
+      await onEvent("message.delta", { text: "旧草稿" });
+      await onEvent("message.reset", { reason: "重新组织讲解" });
+      await onEvent("message.delta", { text: longText });
+      await onEvent("message.complete", { scopeLabel: "原题完整讲解" });
+      await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onChoice(learnedSession.flow.activeGate, "full_solution"); });
+    await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain(longText));
+    expect(screen.getByTestId("messages").textContent).not.toContain("旧草稿");
+    expect(latest.retryLabel).toBe("");
+  });
 });

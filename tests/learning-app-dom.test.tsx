@@ -105,4 +105,46 @@ describe("学习应用状态机", () => {
     await latestWorkspace.onTutor("node", "为什么", tutor);
     expect(tutor).toHaveBeenCalledWith("追问回答");
   });
+
+  it("原子知识点会直接标记不会，并在迁移阶段自动生成同类题", async () => {
+    const session = {
+      schemaVersion: "1.1", requestId: "atomic", provider: "doubao", rootNodeId: "root", currentNodeId: "root",
+      nodes: [{ id: "root", title: "最小知识点", atomic: true }], edges: [], problemGuide: { goal: "g", keyClue: "k", approach: "a", firstQuestion: "f" }, stage: "learning",
+    };
+    const transferSession = { ...session, stage: "transfer_check", transferCheck: undefined };
+    sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session }));
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { session: transferSession, stateToken: "y".repeat(48), assessment: { passed: false, explanation: "先补基础" } } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { session: { ...transferSession, transferCheck: { text: "同类题" } }, stateToken: "z".repeat(48) } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("learning");
+    await latestWorkspace.onExpand("root");
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    expect(String(fetch.mock.calls[1][0])).toContain("/learning/verify");
+    expect(String(fetch.mock.calls[2][0])).toContain("/learning/transfer");
+    expect(JSON.parse(fetch.mock.calls[1][1].body).action).toBe("mark_unknown");
+  });
+
+  it("学习请求失败不会清空已恢复的会话，并把操作错误留在当前界面", async () => {
+    const session = { schemaVersion: "1.1", requestId: "errors", provider: "doubao", rootNodeId: "root", currentNodeId: "root", nodes: [{ id: "root", title: "根", atomic: false }], edges: [], problemGuide: { goal: "g", keyClue: "k", approach: "a", firstQuestion: "f" }, stage: "learning" };
+    sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session }));
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockRejectedValueOnce(new Error("拆解失败"))
+      .mockRejectedValueOnce(new Error("同类题失败"))
+      .mockRejectedValueOnce(new Error("讲解失败"));
+    vi.stubGlobal("fetch", fetch);
+    render(<LearningApp/>);
+    await screen.findByText("learning");
+    await latestWorkspace.onExpand("root");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("拆解失败"));
+    await latestWorkspace.onSimilar("root");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("同类题失败"));
+    const delta = vi.fn();
+    await latestWorkspace.onSolution(delta);
+    expect(delta).toHaveBeenCalledWith("答案生成失败，请稍后重试。");
+    expect(screen.getByText("learning")).not.toBeNull();
+  });
 });
