@@ -57,4 +57,13 @@ describe("板书步骤展示文案", () => {
     for (const copy of copies) expect(Array.from(copy.eyebrow).length).toBeGreaterThanOrEqual(3);
     for (const copy of copies) expect(Array.from(copy.eyebrow).length).toBeLessThanOrEqual(4);
   });
+
+  it("不完整旧板书也为迁移、回顾与未知步骤提供可读动作", () => {
+    const copy = (role: BoardTeachingRole | undefined, index: number) => boardStepDisplayCopy({ roles: [], role, title: "原生标题", index });
+    expect(copy("transfer", 4).eyebrow).toBe("举一反三");
+    expect(copy("recap", 4).eyebrow).toBe("回顾方法");
+    expect(copy(undefined, 0).eyebrow).toBe("理解题意");
+    expect(copy(undefined, 8).eyebrow).toBe("第9步");
+    expect(boardStepDisplayCopy({ subject: "math", roles: canonicalRoles, role: undefined, title: "额外步骤", index: 8 })).toEqual({ eyebrow: "第9步", title: "额外步骤" });
+  });
 });

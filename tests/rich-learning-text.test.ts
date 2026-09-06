@@ -24,6 +24,11 @@ import { tutorSystemPrompt } from "@/lib/learning/providers/tutor";
 import type { BoardLesson } from "@/lib/learning/types";
 
 describe("AI 教学内容排版", () => {
+  it("把连续选择项拆为可作答选项，且不误拆非连续标号", () => {
+    expect(parseLearningPrompt("请完成原题：A. 判别式 B. 韦达定理 C. 勾股定理")).toEqual({ body: "请完成原题：", choices: ["A. 判别式", "B. 韦达定理", "C. 勾股定理"] });
+    expect(parseLearningPrompt("说明：A. 只是一个缩写")).toEqual({ body: "说明：A. 只是一个缩写", choices: [] });
+    expect(stripLearningChoiceLabel("（B）  韦达定理", 1)).toBe("韦达定理");
+  });
   it("追问在视口下方才提示，露出可阅读的问题后消失", () => {
     expect(isSuggestionBelowViewport(700, 750, 80)).toBe(true);
     expect(isSuggestionBelowViewport(700, 680, 80)).toBe(true);
@@ -705,6 +710,23 @@ describe("AI 教学内容排版", () => {
     expect(streaming).not.toContain("data-arithmetic-displays");
     expect(raw).toContain("2+3=5");
     expect(malformed).toContain("公式写法需核对");
+  });
+
+  it("标准讲解保留结构语义，同时屏蔽链接与图片等不受信任内容", () => {
+    const html = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "# 一级标题\n\n## 二级标题\n\n### 三级标题\n\n普通 **重点** 与 *强调*、`代码`。\n\n> 引用依据\n\n1. 第一步\n2. 第二步\n\n- 条件\n- 结论\n\n[外部链接](https://example.com)\n\n![图示](https://example.com/a.png)\n\n---\n\n```txt\n不执行\n```",
+    }));
+    expect(html).toContain("rich-heading--primary");
+    expect(html).toContain("rich-heading--secondary");
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain("<ol>");
+    expect(html).toContain("<ul>");
+    expect(html).toContain("<code>代码</code>");
+    expect(html).toContain("外部链接");
+    expect(html).not.toContain("href=");
+    expect(html).toContain("图片：图示");
+    expect(html).toContain("<hr");
+    expect(html).toContain("<pre>");
   });
 });
 

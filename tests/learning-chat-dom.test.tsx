@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</>, CopyableLearningText: ({ text }: any) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: any) => <>{text}</> }));
@@ -132,5 +132,29 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    fireEvent.click(screen.getByRole("button", { name: "选择超长文字" }));
    expect(screen.getByText("选中文字过长，请将引用控制在 12000 字以内。")).not.toBeNull();
    expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
+ });
+ it("当猜你想问或新讲解在可视区域下方时，跳转提示会精确带到对应内容", async () => {
+   const scrollTo = vi.fn();
+   HTMLElement.prototype.scrollTo = scrollTo;
+   const originalRect = HTMLElement.prototype.getBoundingClientRect;
+   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+     if (this.getAttribute("aria-label") === "对话内容") return { top: 0, bottom: 100, width: 320, height: 100 } as DOMRect;
+     if (this.closest(".suggested-question-trail")) return { top: 140, bottom: 180, width: 240, height: 40 } as DOMRect;
+     return originalRect.call(this);
+   });
+   const message = { id: "assistant-1", role: "assistant", kind: "assistant", text: "先确认题干条件。", status: "complete", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions } as any;
+   const view = render(<LearningChat {...base} session={session} messages={[message]}/>);
+   fireEvent(window, new Event("resize"));
+   const suggestionJump = await screen.findByRole("button", { name: "下面有猜你想问 ↓" });
+   fireEvent.click(suggestionJump);
+   expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "auto" }));
+
+   const area = screen.getByLabelText("对话内容");
+   Object.defineProperties(area, { scrollHeight: { configurable: true, value: 800 }, clientHeight: { configurable: true, value: 100 }, scrollTop: { configurable: true, writable: true, value: 0 } });
+   fireEvent.scroll(area);
+   view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, suggestedQuestions: [] } }} messages={[message, { ...message, id: "assistant-2", text: "补充一条新的讲解。" }]}/>);
+   await waitFor(() => expect(screen.getByRole("button", { name: "有新讲解 ↓" })).not.toBeNull());
+   fireEvent.click(screen.getByRole("button", { name: "有新讲解 ↓" }));
+   expect(scrollTo).toHaveBeenLastCalledWith({ top: 800, behavior: "smooth" });
  });
 });

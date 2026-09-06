@@ -95,11 +95,62 @@ describe("题目裁剪器", () => {
     expect(screen.getByRole("button", { name: "缩小" }).hasAttribute("disabled")).toBe(true);
   });
 
+  it("放大预览会约束拖动、支持双指缩放和键盘焦点循环", async () => {
+    render(<ImageCropper file={new File(["image"], "question.png", { type: "image/png" })} onConfirm={vi.fn()} onCancel={vi.fn()}/>);
+    await screen.findByAltText("待裁剪的作业照片");
+    fireEvent.click(screen.getByRole("button", { name: /放大查看/ }));
+    const dialog = screen.getByRole("dialog", { name: "放大查看图片" });
+    const area = dialog.querySelector(".flex.min-h-0") as HTMLDivElement;
+    vi.spyOn(area, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 300, height: 240 } as DOMRect);
+    Object.defineProperties(area, { clientWidth: { configurable: true, value: 300 }, clientHeight: { configurable: true, value: 240 } });
+    fireEvent.pointerMove(area, { pointerId: 99, clientX: 1, clientY: 1 });
+    fireEvent.pointerDown(area, { pointerId: 1, clientX: 30, clientY: 30 });
+    fireEvent.pointerDown(area, { pointerId: 2, clientX: 100, clientY: 30 });
+    fireEvent.pointerMove(area, { pointerId: 2, clientX: 190, clientY: 30 });
+    fireEvent.click(screen.getByRole("button", { name: "放大" }));
+    expect(screen.getByRole("button", { name: "缩小" }).hasAttribute("disabled")).toBe(false);
+    const back = screen.getByRole("button", { name: "返回裁剪" });
+    back.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "放大" }));
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(back);
+    fireEvent.pointerUp(area, { pointerId: 1 });
+    fireEvent.pointerCancel(area, { pointerId: 2 });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "放大查看图片" })).toBeNull();
+  });
+
   it("图片读取和旋转失败会保留页面并给出可理解的重试提示", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValueOnce("data:,");
     render(<ImageCropper file={new File(["image"], "question.png", { type: "image/png" })} onConfirm={vi.fn()} onCancel={vi.fn()}/>);
     await screen.findByAltText("待裁剪的作业照片");
     fireEvent.click(screen.getByRole("button", { name: /旋转90/ }));
     expect((await screen.findByRole("alert")).textContent).toContain("图片太大");
+  });
+
+  it("读取、解码和压缩失败都留在裁剪页，并允许用户取消返回", async () => {
+    class BrokenReader extends Reader { readAsDataURL() { this.onerror?.({} as ProgressEvent<FileReader>); } }
+    vi.stubGlobal("FileReader", BrokenReader);
+    const cancel = vi.fn();
+    const first = render(<ImageCropper file={new File(["image"], "broken.png", { type: "image/png" })} onConfirm={vi.fn()} onCancel={cancel}/>);
+    expect((await screen.findByRole("alert")).textContent).toContain("照片读取失败");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(cancel).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    vi.stubGlobal("FileReader", Reader);
+    vi.stubGlobal("Image", class { naturalWidth = 400; naturalHeight = 200; onload: (() => void) | null = null; onerror: (() => void) | null = null; set src(_value: string) { this.onerror?.(); } });
+    const invalid = render(<ImageCropper file={new File(["image"], "invalid.png", { type: "image/png" })} onConfirm={vi.fn()} onCancel={vi.fn()}/>);
+    await screen.findByAltText("待裁剪的作业照片");
+    fireEvent.click(screen.getByRole("button", { name: /旋转90/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("图片格式无法读取");
+    invalid.unmount();
+    vi.stubGlobal("Image", class { naturalWidth = 400; naturalHeight = 200; onload: (() => void) | null = null; onerror: (() => void) | null = null; set src(_value: string) { this.onload?.(); } });
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementationOnce((callback) => callback(null));
+    render(<ImageCropper file={new File(["image"], "compress.png", { type: "image/png" })} onConfirm={vi.fn()} onCancel={vi.fn()}/>);
+    await screen.findByAltText("待裁剪的作业照片");
+    fireEvent.click(screen.getByRole("button", { name: "裁剪并识别" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("图片压缩失败");
   });
 });

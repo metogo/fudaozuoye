@@ -47,4 +47,15 @@ describe("拍题首页", () => {
     expect(screen.getByRole("status").textContent).toContain("松开，换一句");
     fireEvent.touchEnd(main);
   });
+
+  it("清空已选文件并能从不可读的本地寄语缓存安全启动", () => {
+    const read = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    render(<CaptureStep providers={providers as never} provider="doubao" ready onProvider={vi.fn()} onFile={vi.fn()}/>);
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+    Object.defineProperty(inputs[0], "value", { configurable: true, writable: true, value: "old-file" });
+    fireEvent.click(inputs[0]);
+    fireEvent.click(inputs[1]);
+    expect(inputs[0].value).toBe("");
+    read.mockRestore();
+  });
 });

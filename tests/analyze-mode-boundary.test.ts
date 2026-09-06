@@ -52,6 +52,19 @@ describe("题目识别模式边界", () => {
     expect(second.session.problemGuide.keyClue).toContain("长方形菜园");
     expect(secondEvidence).not.toContain("180 千米");
   });
+
+  it("无效阶段、缺少题目、空文本和不完整图片都会在路由层给出稳定错误", async () => {
+    const consent = `${CONSENT_COOKIE}=${createConsentValue()}`;
+    const request = async (form: FormData) => postAnalyze(new Request("http://localhost/api/learning/analyze", { method: "POST", headers: { Cookie: consent }, body: form }));
+    const invalid = new FormData(); invalid.set("provider", "doubao"); invalid.set("reasoningLevel", "light"); invalid.set("stage", "bad");
+    expect((await request(invalid)).status).toBe(400);
+    const noPhoto = new FormData(); noPhoto.set("provider", "doubao"); noPhoto.set("reasoningLevel", "light"); noPhoto.set("stage", "recognize");
+    expect(await (await request(noPhoto)).text()).toContain("请先选择");
+    const emptyText = new FormData(); emptyText.set("provider", "doubao"); emptyText.set("reasoningLevel", "light"); emptyText.set("stage", "recognize_text"); emptyText.set("text", "x");
+    expect(await (await request(emptyText)).text()).toContain("请输入一道完整的题目");
+    const noProblem = new FormData(); noProblem.set("provider", "doubao"); noProblem.set("reasoningLevel", "light"); noProblem.set("stage", "full");
+    expect(await (await request(noProblem)).text()).toContain("缺少已确认的题目");
+  });
 });
 
 function problem(text: string): ProblemSnapshot {

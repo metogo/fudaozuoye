@@ -127,4 +127,63 @@ describe("实时模型适配器请求边界", () => {
     await expect(adapter.decideBoardPresentation(session, { kind: "problem" })).resolves.toEqual({ recommended: true, reason: "多个数量关系需要按步骤对应展示。", layout: "steps" });
     await expect(adapter.generateKnowledgeDetail!(session, map, "missing")).rejects.toThrow("知识点不存在");
   });
+
+  it("在发起模型请求前先处理可确定的答案、无效目标与取消信号", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const adapter = new LiveProviderAdapter(config(), fetcher);
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const concept = session.nodes.find((node) => node.kind === "concept");
+    expect(concept).toBeDefined();
+
+    const deterministic = { id: "check", conceptId: "c", type: "short_text" as const, prompt: "写出结果", answer: "42", explanation: "结果为42" };
+    await expect(adapter.verifyAnswer(deterministic, "42")).resolves.toMatchObject({ passed: true });
+    await expect(adapter.verifyAnswer(deterministic, "41")).resolves.toMatchObject({ passed: false });
+
+    const recall = { id: "solution-recall-step", conceptId: "c", type: "short_text" as const, prompt: "说出操作", answer: "等式两边同时除以3", explanation: "说明具体操作" };
+    await expect(adapter.verifyAnswer(recall, "我懂了")).resolves.toMatchObject({ passed: false });
+    await expect(adapter.verifyAnswer(recall, "等式两边同时除以3")).resolves.toMatchObject({ passed: true });
+
+    await expect(adapter.generateSimilarCheck(session, "missing-node")).rejects.toThrow("找不到要换题的知识点");
+    await expect(adapter.generateTransferCheck({ ...session, nodes: session.nodes.filter((node) => node.kind !== "concept"), edges: [] })).rejects.toThrow("找不到迁移题");
+    await expect(adapter.generateBoardLesson(session, { kind: "problem" }, { recommended: false, reason: "无需板书", layout: "steps" })).rejects.toThrow("不需要切换板书");
+    const signal = new AbortController();
+    signal.abort();
+    await expect(adapter.generateIllustrationLesson(session, () => undefined, signal.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("同知识点练习、关键步骤回忆与步骤填空均经由结构校验后返回", async () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const concept = session.nodes.find((node) => node.kind === "concept")!;
+    const source = "先把总路程除以时间，得到每小时行驶的路程。";
+    const fetcher: typeof fetch = vi.fn()
+      .mockResolvedValueOnce(tool(JSON.stringify({
+        prompt: "小车2小时行驶80千米，平均每小时行驶多少千米？",
+        type: concept.check.type,
+        choices: concept.check.type === "choice" ? ["40千米", "80千米", "160千米"] : undefined,
+        answer: "40千米",
+        explanation: "80除以2，得到每小时40千米。",
+      })))
+      .mockResolvedValueOnce(chat(JSON.stringify({ matchesConcept: true, distinct: true, reason: "同样先求单位时间的量，题干数据不同。" })))
+      .mockResolvedValueOnce(chat(JSON.stringify({
+        sourceQuote: "先把总路程除以时间",
+        question: "为什么这里先用总路程除以时间？",
+        answer: "因为这样能得到每小时的路程。",
+        explanation: "说明总量除以对应份数能得到一份的量。",
+      })))
+      .mockResolvedValueOnce(chat(JSON.stringify({
+        sourceId: "step-source-1",
+        instruction: "补全先求每小时路程的算式。",
+        before: "每小时路程 = 总路程 ÷ ",
+        after: "。",
+        answer: "时间",
+        explanation: "总路程除以时间得到每小时的路程。",
+        hint: "想想每一份代表多长时间。",
+      })));
+    const adapter = new LiveProviderAdapter(config(), fetcher);
+    await expect(adapter.generateSimilarCheck(session, concept.id)).resolves.toMatchObject({ answer: "40千米", conceptId: concept.conceptId });
+    await expect(adapter.generateSolutionRecallCheck!(session, `${source}\n再用每小时路程完成后续计算。`)).resolves.toMatchObject({ prompt: expect.stringContaining("先把总路程除以时间") });
+    await expect(adapter.generateStepExercise!(session, source)).resolves.toMatchObject({ check: { answer: "时间" } });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
 });

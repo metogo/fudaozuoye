@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let flowProps: any;
@@ -154,5 +154,15 @@ describe("ProblemKnowledgeMapPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "整理", hidden: true }));
     expect(screen.getByTestId("flow")).not.toBeNull();
     write.mockRestore();
+  });
+
+  it("等待超过预计时间后明确告诉用户仍在生成，而不是伪装成进度", () => {
+    vi.useFakeTimers();
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    act(() => { vi.advanceTimersByTime(10_250); });
+    expect(screen.getByRole("timer", { name: "已等待 10 秒", hidden: true })).not.toBeNull();
+    expect(screen.getByText("比预计稍久，模型仍在生成，请再稍等。")).not.toBeNull();
+    expect(screen.getByText("时间为估计，并非生成进度")).not.toBeNull();
+    vi.useRealTimers();
   });
 });

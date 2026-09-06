@@ -176,4 +176,37 @@ describe("教学 Worker 协议", () => {
     expect(checked.error).toBeUndefined();
     expect(checked.result?.[0].checks.some((check) => (check as { detail?: string }).detail?.includes("3 cm"))).toBe(true);
   });
+
+  it("对可恢复的自由符号保持未知，对前向引用、循环引用和危险语法明确拒绝", () => {
+    const free = genericProgram();
+    free.symbols = [];
+    free.steps[0].checks = [{ kind: "numeric", left: "u", right: "u" }];
+    const unknown = run(parseTeachingProgram(JSON.stringify(free), "已知a=6"));
+    expect(unknown.result?.[0].checks[0]).toMatchObject({ status: "unknown" });
+
+    const cyclic = genericProgram();
+    cyclic.variables = [
+      { name: "a", expression: "b+1", refs: ["c1"] },
+      { name: "b", expression: "a+1", refs: ["c1"] },
+    ];
+    expect(run(parseTeachingProgram(JSON.stringify(cyclic), "已知a=6")).error).toContain("循环引用");
+
+    const unsafe = genericProgram();
+    unsafe.steps[0].checks = [{ kind: "numeric", left: "constructor", right: "1" }];
+    expect(run(parseTeachingProgram(JSON.stringify(unsafe), "已知a=6")).error).toMatch(/未声明|禁止|函数/);
+  });
+
+  it("会保守处理表达式、单位和曲线的边界定义域", () => {
+    const long = genericProgram();
+    long.steps[0].checks = [{ kind: "numeric", left: "1".repeat(257), right: "1" }];
+    expect(() => parseTeachingProgram(JSON.stringify(long), "已知a=6")).toThrow("检查项不合法");
+
+    const unsupportedUnit = genericProgram();
+    unsupportedUnit.steps[0].checks = [{ kind: "unit", left: "1 madeup", right: "1 madeup" }];
+    expect(run(parseTeachingProgram(JSON.stringify(unsupportedUnit), "已知a=6")).result?.[0].checks[0]).toMatchObject({ status: "unknown" });
+
+    const exponential = genericProgram();
+    exponential.steps[0].objects = [{ id: "exp", kind: "curve", points: [], expression: "exp(x)", domain: ["0", "1"] }];
+    expect(run(parseTeachingProgram(JSON.stringify(exponential), "已知a=6")).result?.[0].objects[0].points).toHaveLength(81);
+  });
 });

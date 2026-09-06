@@ -48,4 +48,16 @@ describe("学习流程状态机边界", () => {
     expect(() => assertFlowState(original, current.nodes)).not.toThrow();
     expect(() => assertFlowState({ ...original, activeGate: answerGate("original_answer", "原题", "作答", node.id, ["错", "选项"]) }, current.nodes)).toThrow("选项与题目不一致");
   });
+
+  it("完整校验猜你想问的标识、去重、范围与引用", () => {
+    const current = session();
+    const base = createInitialFlow();
+    const question = { id: "suggest-a123", text: "这一步为什么要这样计算？", scopeLabel: "关键条件", sourceSummary: "题目给出了两个实数根" };
+    expect(() => assertFlowState({ ...base, suggestedQuestions: [question] }, current.nodes)).not.toThrow();
+    expect(() => assertFlowState({ ...base, suggestedQuestions: Array.from({ length: 4 }, (_, index) => ({ ...question, id: `suggest-a12${index}`, text: `第${index}个问题为什么这样算？` })) }, current.nodes)).toThrow("结构不合法");
+    expect(() => assertFlowState({ ...base, suggestedQuestions: [{ ...question, id: "suggest-a123" }, { ...question, id: "suggest-a123", text: "另一个问题为什么这样算？" }] }, current.nodes)).toThrow("标识不合法");
+    expect(() => assertFlowState({ ...base, suggestedQuestions: [{ ...question, text: "这一步为什么这样计算?" }, { ...question, id: "suggest-b234", text: "这一步为什么这样计算？" }] }, current.nodes)).toThrow("内容不能重复");
+    expect(() => assertFlowState({ ...base, suggestedQuestions: [{ ...question, scopeLabel: "x" }] }, current.nodes)).toThrow("范围不合法");
+    expect(() => assertFlowState({ ...base, suggestedQuestions: [{ ...question, sourceSummary: "短" }] }, current.nodes)).toThrow("引用不合法");
+  });
 });

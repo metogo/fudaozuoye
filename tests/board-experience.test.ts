@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { enrichBoardLessonWithSafeAids } from "@/lib/learning/board-aids";
-import { compileBoardExperience } from "@/lib/learning/board-experience";
+import { assertBoardExperience, compileBoardExperience, legacyBoardWorkspaceKey } from "@/lib/learning/board-experience";
 import { assertDirectedBoardMoves, directBoardBlueprint, directBoardScenes } from "@/lib/learning/board-director";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { subjects, type BoardFormulaVisual, type BoardLesson, type BoardScene } from "@/lib/learning/types";
@@ -101,6 +101,29 @@ describe("可执行教学板书协议", () => {
     const reopened = compileBoardExperience(JSON.parse(JSON.stringify(old)) as BoardLesson);
     expect(reopened.key).toBe(first.key);
     expect(reopened.scenes).toHaveLength(3);
+  });
+
+  it("体验协议会拒绝空场景、重复节点和损坏的动作引用", () => {
+    expect(() => compileBoardExperience(lesson(scenes().slice(0, 1)))).toThrow("至少需要两个");
+    const duplicated = scenes().slice(0, 2);
+    duplicated[1].id = duplicated[0].id;
+    expect(() => compileBoardExperience(lesson(duplicated))).toThrow("不能重复");
+
+    const valid = compileBoardExperience(lesson(scenes()));
+    expect(legacyBoardWorkspaceKey(lesson(scenes()))).toContain("board-");
+    expect(() => assertBoardExperience({ ...valid, layout: "unknown" })).toThrow("协议不合法");
+    expect(() => assertBoardExperience({ ...valid, scenes: [{ ...valid.scenes[0], actions: [{ ...valid.scenes[0].actions[0], targetId: "missing" }] }, valid.scenes[1]] })).toThrow("动作指向");
+    expect(() => assertBoardExperience({ ...valid, scenes: [{ ...valid.scenes[0], elements: [] }, valid.scenes[1]] })).toThrow("元素必须");
+  });
+
+  it("证据链主介质会以来源场景呈现，并拒绝无效视觉元素", () => {
+    const input = scenes().slice(0, 3);
+    input[1].visual = { kind: "evidence_chain", title: "证据", evidence: "题目条件", caption: "由条件得到结论", links: [{ id: "e1", quote: "有两个实数根", meaning: "判别式非负" }, { id: "e2", quote: "二次项系数非零", meaning: "可以用判别式" }] } as BoardScene["visual"];
+    const experience = compileBoardExperience(lesson(input));
+    expect(experience.scenes[1].medium).toBe("source");
+    const invalid = structuredClone(experience);
+    invalid.scenes[1].elements[0] = { id: "broken", type: "visual", visual: null as never, fallbackText: "" };
+    expect(() => assertBoardExperience(invalid)).toThrow("元素内容不合法");
   });
 
   it.each(subjects)("%s 代表板书都能迁移为可读的动态体验", (subject) => {

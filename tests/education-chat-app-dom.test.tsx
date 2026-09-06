@@ -106,6 +106,68 @@ describe("EducationChatApp", () => {
     expect(screen.getByTestId("ready").textContent).toBe("false");
   });
 
+  it("文本识别或分析未返回完整状态时保留原操作，并能从重试入口继续", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("recognize"))
+      .mockResolvedValueOnce(response("recognize"))
+      .mockResolvedValueOnce(response("analyze"))
+      .mockResolvedValueOnce(response("turn"))
+      .mockResolvedValueOnce(response("analyze"))
+      .mockResolvedValueOnce(response("analyze"))
+      .mockResolvedValueOnce(response("turn"));
+    let recognitions = 0;
+    let analyses = 0;
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage === "recognize") {
+        recognitions += 1;
+        if (recognitions === 2) await onEvent("recognized", learnedSession.problem);
+      }
+      if (reply.stage === "analyze") {
+        analyses += 1;
+        if (analyses === 1 || analyses === 3) await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      }
+      if (reply.stage === "turn") {
+        await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+        await onEvent("flow.ready", {});
+      }
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onSend("一道文字题"); });
+    await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有识别到完整题目"));
+    await act(async () => { await latest.onRetry(); });
+    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+
+    // A recognized problem can still fail closed if analysis returns no graph; retry keeps it usable.
+    await act(async () => { await latest.onNewProblem(); });
+    await act(async () => { await latest.onConfirmProblem(learnedSession.problem); });
+    await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有返回可用的学习路径"));
+    await act(async () => { await latest.onRetry(); });
+    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+  });
+
+  it("拍题会经裁剪确认后进入与文字题相同的讲解流程", async () => {
+    const visualProblem = { ...learnedSession.problem, visualContext: { related: true, affectsSolving: true, summary: "三角形", facts: ["AB=AC"] } };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("recognize"))
+      .mockResolvedValueOnce(response("analyze"))
+      .mockResolvedValueOnce(response("turn"));
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage === "recognize") await onEvent("recognized", visualProblem);
+      if (reply.stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      if (reply.stage === "turn") { await onEvent("message.delta", { text: "先看图形条件。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { latest.onFile(new File(["image"], "q.png", { type: "image/png" })); });
+    expect(latestCrop).toBeTruthy();
+    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:question"); });
+    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+    expect(screen.getByTestId("messages").textContent).toContain("先看图形条件");
+  });
+
   it("一轮学习流可处理路径、答案、转写、分支提示和恢复状态", async () => {
     sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
     vi.mocked(fetch).mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } })).mockResolvedValueOnce(response("turn"));
@@ -131,6 +193,40 @@ describe("EducationChatApp", () => {
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("回答正确"));
     expect(screen.getByTestId("messages").textContent).toContain("AI 读到的作答：Δ≥0");
     expect(screen.getByTestId("messages").textContent).toContain("原题步骤 → 判别式 → 不等式");
+  });
+
+  it("流式回复重整、重点标记与图解无效事件都不会破坏当前学习状态", async () => {
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("turn"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ marks: [{ text: "核心条件", kind: "key" }] }), { status: 200 }));
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage !== "turn") return;
+      await onEvent("message.delta", { text: "先看条件。" });
+      await onEvent("message.reset", { reason: "正在重整表述" });
+      await onEvent("message.delta", { text: "这是重新整理后的核心条件，需要先判断题目给出的数量关系，再选择公式完成推导。" });
+      await onEvent("message.complete", { scopeLabel: "关键条件" });
+      await onEvent("flow.suggestions", { suggestions: [{ id: "suggestion", text: "为什么先看条件", scopeLabel: "关键条件", sourceSummary: "题干" }] });
+      await onEvent("flow.milestone", { label: "条件已整理" });
+      await onEvent("flow.resume", { label: "回到当前任务" });
+      await onEvent("flow.progress", { label: "正在准备下一步" });
+      await onEvent("illustration.progress", { requestId: "other", label: "忽略" });
+      await onEvent("illustration.frame", { requestId: "other", frameCount: 1 });
+      await onEvent("illustration.complete", { requestId: "other", frameCount: 1, frames: [] });
+      await onEvent("path.updated", { labels: ["条件", "公式"] });
+      await onEvent("answer.result", { passed: false, text: "再核对一次" });
+      await onEvent("input.transcribed", { text: "x=3", needsConfirmation: false });
+      await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onQuestion("这里为什么这样做", "条件关系"); });
+    await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("重新整理后的核心条件"));
+    expect(screen.getByTestId("messages").textContent).toContain("再看一步： 再核对一次");
+    expect(screen.getByTestId("messages").textContent).toContain("AI 读到的作答：x=3");
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   });
 
   it("已开始学习时，追问、猜你想问、重做和转移练习都会回到同一学习流", async () => {

@@ -51,6 +51,14 @@ describe("学习应用状态机", () => {
     expect(screen.getByText("服务暂时无法准备，请刷新后重试。")).not.toBeNull();
   });
 
+  it("损坏的本地 JSON 与缺失服务状态都能安全回到拍题入口", async () => {
+    sessionStorage.setItem("guided-learning-session-v2", "{");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [] }), { status: 200 })));
+    render(<LearningApp/>);
+    await screen.findByText("capture:false");
+    expect(screen.getByText("服务暂时无法准备，请刷新后重试。")).not.toBeNull();
+  });
+
   it("题目识别失败会回到上传入口并保留可行动提示", async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
@@ -189,5 +197,30 @@ describe("学习应用状态机", () => {
     expect(createReportFile).toHaveBeenCalledWith(session);
     expect(click).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("报告已保存为图片"));
+  });
+
+  it("验证、迁移、追问和系统分享的失败或原生路径均不打断已恢复会话", async () => {
+    const session = { schemaVersion: "1.1", requestId: "remaining-actions", provider: "doubao", rootNodeId: "root", currentNodeId: "root", nodes: [{ id: "root", title: "根" }], edges: [], problemGuide: { goal: "g", keyClue: "k", approach: "a", firstQuestion: "f" }, stage: "learning" };
+    sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session }));
+    const transfer = { ...session, transferCheck: { text: "迁移题" } };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "答案暂不可核验" } }), { status: 422 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { session: transfer, stateToken: "y".repeat(48) } }), { status: 200 }))
+      .mockRejectedValueOnce(new Error("追问服务断开"));
+    vi.stubGlobal("fetch", fetch);
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "share", { configurable: true, value: share });
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    render(<LearningApp/>);
+    await screen.findByText("learning");
+    await latestWorkspace.onVerify("root", "42");
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("答案暂不可核验"));
+    await latestWorkspace.onGenerateTransfer();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    await expect(latestWorkspace.onTutor("node", "为什么", vi.fn())).rejects.toThrow("追问服务断开");
+    await latestWorkspace.onShare();
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ title: "回溯学学习报告" }));
+    expect(screen.getByText("learning")).not.toBeNull();
   });
 });
