@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertCurriculumCatalog, curriculumCatalog, listConcepts } from "@/lib/learning/curriculum";
+import { assertCurriculumCatalog, curriculumCatalog, isCurriculumAncestor, listConcepts } from "@/lib/learning/curriculum";
 import { knowledgeNodeFromBlueprint, parseKnowledgeBlueprints } from "@/lib/learning/providers/blueprint";
 
 const validNode = {
@@ -31,6 +31,31 @@ describe("课程目录治理", () => {
     expect(curriculumCatalog.filter((item) => item.subject === "physics").length).toBeGreaterThanOrEqual(25);
     expect(curriculumCatalog.filter((item) => item.subject === "chemistry").length).toBeGreaterThanOrEqual(25);
     expect(listConcepts("math", "primary").some((item) => item.id === "math.function.logarithmic")).toBe(false);
+  });
+
+  it("课程目录拒绝重复、原子冲突与不合法前置关系，并安全终止循环搜索", () => {
+    const original = structuredClone(curriculumCatalog);
+    try {
+      curriculumCatalog.push({ ...curriculumCatalog[0] });
+      expect(() => assertCurriculumCatalog()).toThrow("重复概念");
+      curriculumCatalog.splice(0, curriculumCatalog.length, ...structuredClone(original));
+      curriculumCatalog[0].atomic = !curriculumCatalog[0].atomic;
+      expect(() => assertCurriculumCatalog()).toThrow("原子标记");
+      curriculumCatalog.splice(0, curriculumCatalog.length, ...structuredClone(original));
+      curriculumCatalog[0].prerequisites = ["missing-concept"];
+      curriculumCatalog[0].atomic = false;
+      expect(() => assertCurriculumCatalog()).toThrow("不存在的前置");
+      curriculumCatalog.splice(0, curriculumCatalog.length, ...structuredClone(original));
+      const parent = curriculumCatalog.find(item => item.subject !== curriculumCatalog[0].subject)!;
+      curriculumCatalog[0].prerequisites = [parent.id]; curriculumCatalog[0].atomic = false;
+      expect(() => assertCurriculumCatalog()).toThrow("跨学科");
+      curriculumCatalog.splice(0, curriculumCatalog.length, ...structuredClone(original));
+      const child = curriculumCatalog.find(item => item.prerequisites.length > 0)!;
+      const prerequisite = curriculumCatalog.find(item => item.id === child.prerequisites[0])!;
+      prerequisite.difficulty = child.difficulty;
+      expect(() => assertCurriculumCatalog()).toThrow("没有严格简化");
+      expect(isCurriculumAncestor("不存在", child.id)).toBe(false);
+    } finally { curriculumCatalog.splice(0, curriculumCatalog.length, ...original); }
   });
 });
 
