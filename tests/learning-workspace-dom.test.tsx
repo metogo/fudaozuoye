@@ -101,4 +101,61 @@ describe("学习工作区", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭知识路径" }));
     view.unmount();
   });
+
+  it("原子知识点、选择题、旁支预览和下钻加载态各自保留正确的学习出口", async () => {
+    const callbacks = props();
+    const choiceNode = {
+      ...session.nodes[1],
+      atomic: true,
+      attempts: 1,
+      state: "unknown",
+      diagnosticEvidence: "4 的平方根",
+      diagnosticEvidenceSource: "child_work",
+      check: { ...session.nodes[1].check, id: "similar-choice", type: "choice", choices: ["1", "2", "4"] },
+      teaching: { ...session.nodes[1].teaching, alternateExplanation: "换一种说法理解平方根" },
+    };
+    const atomic = { ...session, nodes: [session.nodes[0], choiceNode], currentNodeId: "concept" };
+    const view = render(<LearningWorkspace session={atomic as never} {...callbacks}/>);
+    expect(screen.getByText("知识路径已拆到学习起点")).not.toBeNull();
+    expect(screen.getByText("我的作答原文“4 的平方根”")).not.toBeNull();
+    expect(screen.getByText("换一种说法理解平方根")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    expect(callbacks.onVerify).toHaveBeenCalledWith("concept", "2");
+
+    const sideNode = { ...choiceNode, id: "side", title: "旁支概念", state: "learning", atomic: false, attempts: 0, diagnosticEvidenceSource: "parent" };
+    const side = { ...atomic, currentNodeId: "concept", nodes: [session.nodes[0], choiceNode, sideNode] };
+    view.rerender(<LearningWorkspace session={side as never} {...callbacks} focusNodeId="side"/>);
+    await waitFor(() => expect(screen.getByText("这是旁支预览。回到当前主讲节点后才能继续作答。")).not.toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "返回当前主讲节点" }));
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
+    view.rerender(<LearningWorkspace session={side as never} {...callbacks} focusNodeId="concept" expandingNodeId="concept" notice="正在定位"/>);
+    expect((await screen.findByRole("status")).textContent).toContain("正在定位");
+    const firstAtomic = { ...atomic, nodes: [session.nodes[0], { ...choiceNode, state: "learning", attempts: 0 }] };
+    view.rerender(<LearningWorkspace session={firstAtomic as never} {...callbacks} focusNodeId="concept"/>);
+    fireEvent.click(screen.getByRole("button", { name: "还是不懂，换种讲法" }));
+    expect(callbacks.onVerify).toHaveBeenCalledWith("concept", "__not_known__");
+  });
+
+  it("追问失败可原题重发，滚动提示和忙碌态不会让用户失去返回入口", async () => {
+    const callbacks = props();
+    callbacks.onTutor.mockRejectedValue(new Error("网络暂时不可用"));
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 600 });
+    Object.defineProperty(window, "scrollTo", { configurable: true, value: scrollTo });
+    const view = render(<LearningWorkspace session={session as never} {...callbacks} focusNodeId="concept"/>);
+    fireEvent.scroll(window);
+    fireEvent.click(screen.getByRole("button", { name: "问例子" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("网络暂时不可用");
+    fireEvent.click(screen.getByRole("button", { name: "保留问题，重新发送" }));
+    expect(callbacks.onTutor).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "回到页面顶部" }));
+    expect(scrollTo).toHaveBeenCalled();
+    view.rerender(<LearningWorkspace session={{ ...session, stage: "transfer_check", transferCheck: null } as never} {...callbacks} busy/>);
+    expect(screen.getByRole("button", { name: "正在生成…" }).hasAttribute("disabled")).toBe(true);
+  });
 });
