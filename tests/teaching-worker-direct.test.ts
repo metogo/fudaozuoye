@@ -156,4 +156,24 @@ describe("教学 Worker 协议", () => {
     tangent.steps[0].objects = [{ id: "tan", kind: "curve", points: [], expression: "tan(x)", domain: ["-2", "2"] }];
     expect(run(parseTeachingProgram(JSON.stringify(tangent), "已知a=6")).error).toContain("间断点");
   });
+
+  it("几何标注会按真实边长重新放置，单位、根式与非标量注释不会被猜测", () => {
+    const reordered = genericProgram();
+    reordered.steps[0].objects = [{
+      id: "triangle", kind: "polygon", points: [["0", "0"], ["3", "0"], ["0", "4"]],
+      edgeLabels: ["4", "3", "5"], rightAngleAt: 0,
+    }];
+    const result = run(parseTeachingProgram(JSON.stringify(reordered), "已知a=6"));
+    expect(result.error).toBeUndefined();
+    expect((result.result?.[0].objects[0] as { edgeLabels?: string[] }).edgeLabels).toEqual(["3", "5", "4"]);
+
+    const annotations = genericProgram();
+    annotations.steps[0].objects = [{
+      id: "annotated", kind: "polygon", points: [["0", "0"], ["3", "0"], ["0", "4"]],
+      edgeLabels: ["3 cm", "m(O2)=32", "√16"],
+    }];
+    const checked = run(parseTeachingProgram(JSON.stringify(annotations), "已知a=6"));
+    expect(checked.error).toBeUndefined();
+    expect(checked.result?.[0].checks.some((check) => (check as { detail?: string }).detail?.includes("3 cm"))).toBe(true);
+  });
 });
