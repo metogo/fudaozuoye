@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { boardPlanSchema, boardPlanVisibleText, parseBoardPlan } from "@/lib/learning/providers/board-plan";
+import { createNativeBoardBlocks, createNativeBoardFallbackPlan } from "@/lib/learning/board-native-fallback";
 import type { BoardBlock, LearningSession } from "@/lib/learning/types";
 
 const blocks: BoardBlock[] = [
@@ -96,5 +97,24 @@ describe("板书受限语义图解析", () => {
       { id: "f", label: "f", coefficients: [1, 0, 0], color: "emerald" },
     ] }), current(evidence), blocks, []);
     expect(result.scenes[0].visual).toMatchObject({ kind: "function_plot", domain: [-2, 2] });
+  });
+
+  it("新版板书会按当前学科蓝图复核每个教学动作", () => {
+    const session = current("总量180千米，3小时行驶完，求每小时行驶多少千米。");
+    const nativeBlocks = createNativeBoardBlocks(session, { kind: "problem" });
+    const fallback = createNativeBoardFallbackPlan(session, nativeBlocks);
+    const input = {
+      ...fallback,
+      scenes: fallback.scenes.map((scene) => ({
+        intent: scene.intent, role: scene.role, move: scene.move,
+        purpose: scene.purpose, evidence: scene.evidence, why: scene.why,
+        selfCheck: scene.selfCheck, sourceMessageIds: [],
+        visual: { kind: "none", title: "", evidence: "", caption: "" },
+      })),
+    };
+    const parsed = parseBoardPlan(input, session, nativeBlocks, []);
+    expect(parsed.scenes).toHaveLength(nativeBlocks.length);
+    expect(parsed.scenes.map((scene) => scene.role)).toEqual(expect.arrayContaining(["orient", "reason"]));
+    expect(() => parseBoardPlan({ ...input, discipline: "physics" }, session, nativeBlocks, [])).toThrow("板书学科必须与当前题目一致");
   });
 });
