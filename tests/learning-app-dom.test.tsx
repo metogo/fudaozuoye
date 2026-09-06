@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningApp } from "@/components/learning-app";
 
+const { createReportFile } = vi.hoisted(() => ({ createReportFile: vi.fn(async () => new File(["report"], "学习报告.png", { type: "image/png" })) }));
+vi.mock("@/lib/learning/report", () => ({ createReportFile }));
+
 let latestWorkspace: any;
 
 vi.mock("@/components/capture-step", () => ({ CaptureStep: ({ ready, onFile }: { ready: boolean; onFile: (file: File) => void }) => <div><p>capture:{String(ready)}</p><button onClick={() => onFile(new File(["x"], "q.png", { type: "image/png" }))}>上传题目</button></div> }));
@@ -171,5 +174,20 @@ describe("学习应用状态机", () => {
     await latestWorkspace.onSolution(delta);
     expect(delta).toHaveBeenCalledWith("答案生成失败，请稍后重试。");
     expect(screen.getByText("learning")).not.toBeNull();
+  });
+
+  it("不支持系统分享时会下载报告并保留可理解的反馈", async () => {
+    const session = { schemaVersion: "1.1", requestId: "share", provider: "doubao", rootNodeId: "root", currentNodeId: "root", nodes: [{ id: "root" }], edges: [], problemGuide: { goal: "g", keyClue: "k", approach: "a", firstQuestion: "f" } };
+    sessionStorage.setItem("guided-learning-session-v2", JSON.stringify({ stateToken: "x".repeat(48), session }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [{ id: "doubao", label: "豆包", available: true, mode: "mock" }] }), { status: 200 })));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:report"), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    render(<LearningApp/>);
+    await screen.findByText("learning");
+    await latestWorkspace.onShare();
+    expect(createReportFile).toHaveBeenCalledWith(session);
+    expect(click).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("报告已保存为图片"));
   });
 });
