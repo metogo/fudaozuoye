@@ -21,4 +21,49 @@ describe("LearningBoard", () => {
    expect(screen.queryByText("内容0")).toBeNull();
    expect(screen.getByText("内容7")).not.toBeNull();
  });
+ it("兼容旧图示、流式回答、焦点循环和键盘安全区", () => {
+   const onClose = vi.fn();
+   const onAsk = vi.fn();
+   const viewportListeners = new Map<string, () => void>();
+   Object.defineProperty(window, "visualViewport", { configurable: true, value: {
+     height: window.innerHeight - 180,
+     offsetTop: 12,
+     addEventListener: (name: string, listener: () => void) => viewportListeners.set(name, listener),
+     removeEventListener: (name: string) => viewportListeners.delete(name),
+   } });
+   const messages = [
+     { id: "u", role: "user", kind: "user", text: "为什么这样做", surface: "board", status: "complete" },
+     { id: "s", role: "assistant", kind: "assistant", text: "正在推导", surface: "board", status: "streaming" },
+     { id: "e", role: "assistant", kind: "assistant", text: "网络中断", surface: "board", status: "error" },
+   ];
+   render(<LearningBoard {...props} experience={{ ...props.experience, quality: undefined }} messages={messages} busy onClose={onClose} onAsk={onAsk} notice="" retryLabel=""/>);
+   expect(screen.getByText("旧图示")).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: /板书问答/ }));
+   expect(screen.getByText("回答中断")).not.toBeNull();
+   expect(screen.getByLabelText("发送板书问题")).not.toBeNull();
+   viewportListeners.get("resize")?.();
+   const dialog = screen.getByRole("dialog");
+   const buttons = dialog.querySelectorAll("button");
+   (buttons[0] as HTMLButtonElement).focus();
+   fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+   expect(document.activeElement).toBe(buttons[buttons.length - 1]);
+   (buttons[buttons.length - 1] as HTMLButtonElement).focus();
+   fireEvent.keyDown(dialog, { key: "Tab" });
+   expect(document.activeElement).toBe(buttons[0]);
+   fireEvent.click(screen.getAllByRole("button", { name: /停止回答并返回/ })[0]);
+   expect(onClose).toHaveBeenCalled();
+ });
+ it("已被场景表达的旧图示不重复渲染，空白和忙碌输入不会发送", () => {
+   const ask = vi.fn();
+   const { rerender } = render(<LearningBoard {...props} onAsk={ask} experience={{ ...props.experience, legacyVisual: { kind: "geometry" }, scenes: [{ visual: { kind: "geometry_model" } }] }}/>);
+   expect(screen.queryByText("旧图示")).toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: /板书问答/ }));
+   const input = screen.getByLabelText("围绕当前板书提问");
+   fireEvent.submit(input.closest("form")!);
+   expect(ask).not.toHaveBeenCalled();
+   rerender(<LearningBoard {...props} onAsk={ask} busy experience={{ ...props.experience, legacyVisual: { kind: "geometry" }, scenes: [{ visual: { kind: "geometry_model" } }] }}/>);
+   fireEvent.change(screen.getByLabelText("围绕当前板书提问"), { target: { value: "问题" } });
+   fireEvent.submit(screen.getByLabelText("围绕当前板书提问").closest("form")!);
+   expect(ask).not.toHaveBeenCalled();
+ });
 });

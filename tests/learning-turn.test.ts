@@ -3,7 +3,8 @@ import { postTurn } from "@/lib/learning/http/turn";
 import { answerGate, understandingGate } from "@/lib/learning/flow";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { MockProviderAdapter } from "@/lib/learning/providers/adapter";
-import { openSession, sealSession } from "@/lib/learning/server-state";
+import { illustrationFingerprint } from "@/lib/learning/providers/illustration";
+import { createIllustrationReceipt, openSession, sealSession } from "@/lib/learning/server-state";
 import type { ClientSessionState, GradeBand, LearningTurnInput, Subject } from "@/lib/learning/types";
 
 let requestIndex = 0;
@@ -654,7 +655,46 @@ describe("教育 Chat 学习回合", () => {
     expect(response.status).toBe(400);
     expect(await response.text()).toContain("当前学习任务已变化");
   });
+
+  it("步骤填空支持图片转写、提示、查看答案并回到下一段讲解", async () => {
+    const started = await startState("math", "junior");
+    const step = event<ClientSessionState>(await turn(started.stateToken, {
+      type: "choose", gateId: started.session.flow.activeGate!.id, choice: "try",
+    }), "flow.update");
+    const gate = step.session.flow.activeGate!;
+    expect(gate.kind).toBe("step_answer");
+    const transcriptionResponse = await postTurn(imageRequest(step.stateToken, { type: "transcribe_step", gateId: gate.id }));
+    expect(transcriptionResponse.status).toBe(200);
+    const transcription = event<{ text: string; needsConfirmation: boolean }>(await transcriptionResponse.text(), "input.transcribed");
+    expect(transcription.needsConfirmation).toBe(true);
+    const hinted = await turn(step.stateToken, { type: "choose", gateId: gate.id, choice: "not_understood" });
+    expect(eventTexts(hinted, "message.delta")).toContain("关系");
+    const revealed = event<ClientSessionState>(await turn(step.stateToken, { type: "choose", gateId: gate.id, choice: "view_step_answer" }), "flow.update");
+    expect(revealed.session.flow.activeGate?.stepAnswer?.answer).toBe(openSession(revealed.stateToken).stepCheck?.answer);
+    const continued = event<ClientSessionState>(await turn(revealed.stateToken, { type: "choose", gateId: gate.id, choice: "continue" }), "flow.update");
+    expect(continued.session.flow.activeGate?.kind).not.toBe("step_answer");
+  });
+
+  it("插画完成凭证会进入回忆环节，重复确认不重置学习状态", async () => {
+    const started = await startState("physics", "junior");
+    const receipt = createIllustrationReceipt(started.session.requestId, illustrationFingerprint(started.session));
+    const first = event<ClientSessionState>(await turn(started.stateToken, {
+      type: "acknowledge_illustration", gateId: started.session.flow.activeGate!.id, receipt,
+    }), "flow.update");
+    expect(first.session.flow.viewedSolution).toBe(true);
+    expect(first.session.flow.activeGate?.kind).toBe("solution_review");
+    const second = event<ClientSessionState>(await turn(first.stateToken, {
+      type: "acknowledge_illustration", gateId: first.session.flow.activeGate!.id, receipt,
+    }), "flow.update");
+    expect(second.session.flow.activeGate?.id).toBe(first.session.flow.activeGate?.id);
+    const invalid = await postTurn(request(started.stateToken, {
+      type: "acknowledge_illustration", gateId: started.session.flow.activeGate!.id, receipt: "forged",
+    }));
+    expect(invalid.status).toBe(200);
+    expect(await invalid.text()).toContain("插画完成凭证无效");
+  });
 });
+
 
 async function startState(subject: Subject, gradeBand: GradeBand) {
   const session = analyzeMock(recognizeMock(subject, gradeBand), "doubao");
