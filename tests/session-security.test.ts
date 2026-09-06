@@ -155,6 +155,58 @@ describe("无状态学习会话边界", () => {
     expect(secondData.data.session.stage).toBe("needs_help");
   });
 
+  it("允许监护人确认可验收的知识点，但不会把该入口用于原题", async () => {
+    const base = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const current = base.nodes.find((node) => node.id === base.currentNodeId)!;
+    const session = {
+      ...base,
+      stage: "learning" as const,
+      currentNodeId: current.id,
+      nodes: base.nodes.map((node) => node.id === current.id ? { ...node, state: "learning" as const } : node),
+    };
+    const response = await verifyRoute(jsonRequest({ stateToken: sealSession(session), nodeId: current.id, source: "parent" }));
+    expect(response.status).toBe(200);
+    const data = await response.json() as { data: { session: typeof session; assessment: { state: string; passed: boolean } } };
+    expect(data.data.assessment).toMatchObject({ passed: true, state: "parent_confirmed" });
+    expect(data.data.session.nodes.find((node) => node.id === current.id)?.attempts).toBe(current.attempts);
+
+    const original = {
+      ...session,
+      stage: "original_check" as const,
+      currentNodeId: session.rootNodeId,
+      nodes: session.nodes.map((node) => node.kind === "concept" ? { ...node, state: "mastered" as const } : node),
+    };
+    const denied = await verifyRoute(jsonRequest({ stateToken: sealSession(original), nodeId: original.rootNodeId, source: "parent" }));
+    expect(denied.status).toBe(400);
+    expect(await denied.text()).toContain("原题必须由学生独立完成");
+  });
+
+  it("原题与迁移题的通过和未通过都会回写到同一份受保护会话", async () => {
+    const base = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const root = base.nodes.find((node) => node.id === base.rootNodeId)!;
+    const ready = {
+      ...base,
+      stage: "original_check" as const,
+      currentNodeId: root.id,
+      nodes: base.nodes.map((node) => node.kind === "concept" ? { ...node, state: "mastered" as const } : node),
+    };
+    const original = await verifyRoute(jsonRequest({ stateToken: sealSession(ready), nodeId: root.id, answer: root.check.answer, source: "system" }));
+    expect(original.status).toBe(200);
+    const originalData = await original.json() as { data: { stateToken: string; session: typeof ready } };
+    expect(originalData.data.session).toMatchObject({ stage: "transfer_check", originalPassed: true, currentNodeId: null });
+
+    const transfer = transferCheckMock("math", "primary");
+    const withTransfer = { ...openSession(originalData.data.stateToken), transferCheck: transfer };
+    const failed = await verifyRoute(jsonRequest({ stateToken: sealSession(withTransfer), nodeId: "__transfer__", answer: "错误答案" }));
+    expect(failed.status).toBe(200);
+    const failedData = await failed.json() as { data: { stateToken: string; session: typeof withTransfer } };
+    expect(failedData.data.session).toMatchObject({ stage: "transfer_check", transferPassed: false });
+
+    const passed = await verifyRoute(jsonRequest({ stateToken: failedData.data.stateToken, nodeId: "__transfer__", answer: transfer.answer }));
+    expect(passed.status).toBe(200);
+    expect((await passed.json()) as { data: { session: { stage: string; transferPassed: boolean } } }).toMatchObject({ data: { session: { stage: "complete", transferPassed: true } } });
+  });
+
   it("同一网络下的监护人同意凭证具有独立限流身份", () => {
     const first = createConsentValue();
     const second = createConsentValue();
