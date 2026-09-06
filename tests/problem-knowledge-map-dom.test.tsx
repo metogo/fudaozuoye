@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+let flowProps: any;
+
 vi.mock("@xyflow/react", async () => {
   const React = await import("react");
   return {
@@ -10,7 +12,8 @@ vi.mock("@xyflow/react", async () => {
     MarkerType: { ArrowClosed: "arrow" },
     Position: { Top: "top", Bottom: "bottom" },
     applyNodeChanges: (_changes: unknown, nodes: unknown) => nodes,
-    ReactFlow: ({ nodes, nodeTypes, onNodeClick, onInit }: any) => {
+    ReactFlow: ({ nodes, nodeTypes, onNodeClick, onInit, ...props }: any) => {
+      flowProps = { nodes, onNodeClick, ...props };
       React.useEffect(() => { onInit?.({ getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() }); }, []);
       return <div data-testid="flow">{nodes.map((node: any) => {
         const Node = nodeTypes[node.type];
@@ -41,6 +44,7 @@ const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) 
 describe("ProblemKnowledgeMapPage", () => {
   const close = vi.fn();
   beforeEach(() => {
+    flowProps = undefined;
     close.mockReset();
     localStorage.clear();
     vi.stubGlobal("fetch", vi.fn());
@@ -89,5 +93,25 @@ describe("ProblemKnowledgeMapPage", () => {
     expect(await screen.findByText("补充说明暂未加载，仍可浏览图谱。")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重试说明", hidden: true }));
     expect(await screen.findByText("恢复说明")).not.toBeNull();
+  });
+
+  it("节点拖拽、空白处取消选择和分支展开都不会让图谱消失", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await screen.findByTestId("flow");
+    expect(flowProps.nodes).toHaveLength(2);
+    flowProps.onNodesChange([{ type: "position", id: "delta", position: { x: 480, y: 260 } }]);
+    flowProps.onNodeDragStop();
+    fireEvent(window, new Event("pagehide"));
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain("delta");
+    fireEvent.click(screen.getByText("收起基础"));
+    expect(screen.getByText("展开 1 个基础")).not.toBeNull();
+    fireEvent.click(screen.getByText("展开 1 个基础"));
+    expect(screen.getByText("收起基础")).not.toBeNull();
+    fireEvent.click(screen.getByText("根的判别式"));
+    expect(await screen.findByLabelText("根的判别式的知识说明")).not.toBeNull();
+    flowProps.onPaneClick();
+    await waitFor(() => expect(screen.queryByLabelText("根的判别式的知识说明")).toBeNull());
+    expect(screen.getByTestId("flow")).not.toBeNull();
   });
 });
