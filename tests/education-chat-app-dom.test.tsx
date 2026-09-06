@@ -41,6 +41,20 @@ const learnedSession = {
   nodes: [{ id: "root", title: "原题", kind: "problem", difficulty: 0, state: "learning", atomic: false }], edges: [],
   flow: { activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "continue", label: "继续" }] }, suggestedQuestions: [], viewedSolution: false },
 };
+const restorableBoardLesson = {
+  title: "条件关系", subtitle: "板书", returnLabel: "回到对话", layout: "steps", annotations: [],
+  blocks: [
+    { id: "orient", label: "找到条件", content: "先看题干条件。", tone: "plain" },
+    { id: "reason", label: "建立关系", content: "再用关系求解。", tone: "key" },
+  ],
+  plan: {
+    version: 2, contentRevision: 2, subject: "math", discipline: "math", thesis: "先抓住题干中的数量关系再列式求解。", learningGoal: "理解数量关系", sourceMessageIds: ["m1"],
+    scenes: [
+      { id: "orient", label: "找到条件", title: "找到条件", content: "先看题干条件。", tone: "plain", intent: "extract", sourceMessageIds: ["m1"], role: "orient", purpose: "定位本题需要使用的已知条件", why: "已知条件决定后续如何建立数量关系。", selfCheck: "能说出题干给了什么。", move: "提取条件" },
+      { id: "reason", label: "建立关系", title: "建立关系", content: "再用关系求解。", tone: "key", intent: "derive", sourceMessageIds: ["m1"], role: "reason", purpose: "把已知条件连接成可计算的关系", why: "关系建立后才能按照同一规则完成推导。", selfCheck: "能写出对应关系。", move: "建立关系" },
+    ],
+  },
+};
 const response = (stage: string, body: unknown = {}, ok = true) => ({ stage, ok, json: async () => body }) as Response & { stage: string };
 
 describe("EducationChatApp", () => {
@@ -283,6 +297,44 @@ describe("EducationChatApp", () => {
     await screen.findByTestId("ready");
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
     expect(latest.session?.requestId).toBe("request-app");
+  });
+
+  it("恢复已核验的本地板书缓存时会编译工作区，且不影响对话恢复", async () => {
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [], boardCache: { version: 2, requestId: "request-app", lesson: restorableBoardLesson } }));
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("board-cache")) return { ok: true, status: 200, json: async () => ({ data: { lesson: restorableBoardLesson } }) } as Response;
+      return response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } });
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
+    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+  });
+
+  it("恢复页面后能用已保存的安全重试动作继续同一个学习任务", async () => {
+    const stateToken = "x".repeat(48);
+    const failed = { id: "failed-answer", role: "assistant", kind: "assistant", text: "刚才的讲解未完成", status: "error", createdAt: new Date().toISOString() };
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({
+      session: learnedSession, stateToken, messages: [failed],
+      pendingRetry: { version: 1, requestId: "request-app", stateToken, messageId: "failed-answer", input: { type: "choose", gateId: "gate", choice: "continue" } },
+    }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("turn"));
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage !== "turn") return;
+      await onEvent("message.delta", { text: "已从原来的步骤继续。" });
+      await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await waitFor(() => expect(latest.retryLabel).toBe("重试这一步"));
+    await act(async () => { await latest.onRetry(); });
+    const input = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).input;
+    expect(input).toEqual({ type: "choose", gateId: "gate", choice: "continue" });
+    expect(latest.retryLabel).toBe("");
   });
 
   it("普通任务失败会留下可重试入口，而可选同类练习不会锁住当前任务", async () => {

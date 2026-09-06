@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</>, CopyableLearningText: ({ text }: any) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: any) => <>{text}</> }));
 vi.mock("@/components/home-welcome-hero", () => ({ HomeWelcomeHero: () => <div>欢迎</div> }));
-vi.mock("@/components/selection-ask", () => ({ SelectionAsk: () => null }));
+vi.mock("@/components/selection-ask", () => ({ SelectionAsk: ({ disabled, onAsk }: any) => <><button type="button" disabled={disabled} onClick={() => onAsk("判别式大于等于零", {} as Range)}>选择文字提问</button><button type="button" disabled={disabled} onClick={() => onAsk("字".repeat(12001), {} as Range)}>选择超长文字</button></> }));
 vi.mock("@/components/quote-composer-motion", () => ({ QuoteComposerMotion: () => null }));
 vi.mock("@/components/comma-companion", () => ({ CommaCompanion: () => <i>逗号</i> }));
 vi.mock("@/components/step-blank", () => ({ StepBlank: () => <div>填空</div> }));
@@ -111,5 +111,26 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    expect(onSend).toHaveBeenCalledWith("42");
    fireEvent.click(screen.getByRole("button", { name: "打开白板作答" }));
    expect(onWhiteboard).toHaveBeenCalledWith("answer");
+ });
+ it("选中文字后将提问器绑定到引用，发送或取消都会回收为普通对话", () => {
+   const onQuestion = vi.fn();
+   render(<LearningChat {...base} session={session} onQuestion={onQuestion}/>);
+   fireEvent.click(screen.getByRole("button", { name: "选择文字提问" }));
+   expect(screen.getByLabelText("正在引用的文字").textContent).toContain("判别式大于等于零");
+   const question = screen.getByLabelText("询问当前步骤");
+   fireEvent.change(question, { target: { value: "为什么要满足这个条件？" } });
+   fireEvent.submit(question.closest("form")!);
+   expect(onQuestion).toHaveBeenCalledWith("为什么要满足这个条件？", "判别式大于等于零");
+   expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "选择文字提问" }));
+   fireEvent.click(screen.getByRole("button", { name: "取消引用" }));
+   expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
+   expect(screen.getByLabelText("输入题目或问题")).not.toBeNull();
+ });
+ it("拒绝过长的文字引用而不进入悬浮提问状态", () => {
+   render(<LearningChat {...base} session={session}/>);
+   fireEvent.click(screen.getByRole("button", { name: "选择超长文字" }));
+   expect(screen.getByText("选中文字过长，请将引用控制在 12000 字以内。")).not.toBeNull();
+   expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
  });
 });

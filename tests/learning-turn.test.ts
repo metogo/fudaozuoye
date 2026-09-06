@@ -61,6 +61,24 @@ describe("教育 Chat 学习回合", () => {
     expect(names.indexOf("flow.ready")).toBeLessThan(names.indexOf("flow.suggestions"));
   });
 
+  it("推荐问题生成失败时仍保留已生成的首讲与下一步任务", async () => {
+    vi.spyOn(MockProviderAdapter.prototype, "suggestQuestions").mockRejectedValue(new Error("suggestions unavailable"));
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const body = await turn(sealSession(session), { type: "start" });
+    const next = event<ClientSessionState>(body, "flow.update");
+    expect(body).not.toContain("event: flow.suggestions");
+    expect(next.session.flow.activeGate?.kind).toBe("understanding");
+  });
+
+  it("板书呈现判断失败时仍可继续当前讲解", async () => {
+    vi.spyOn(MockProviderAdapter.prototype, "decideBoardPresentation").mockRejectedValue(new Error("presentation unavailable"));
+    const started = await startState("math", "junior");
+    const body = await turn(started.stateToken, { type: "choose", gateId: started.session.flow.activeGate!.id, choice: "not_understood" });
+    const next = event<ClientSessionState>(body, "flow.update");
+    expect(body).toContain("event: presentation.unavailable");
+    expect(next.session.flow.activeGate).not.toBeNull();
+  });
+
   it("属于当前题目的原图会同时进入首次讲解和后台标准答案分析", async () => {
     let auditDone = false;
     const completion = vi.spyOn(MockProviderAdapter.prototype, "completeChatSession").mockImplementation(async (session) => {

@@ -99,6 +99,35 @@ describe("板书受限语义图解析", () => {
     expect(result.scenes[0].visual).toMatchObject({ kind: "function_plot", domain: [-2, 2] });
   });
 
+  it("对每类图形的结构错误在解析边界明确拒绝，不把残缺图带入板书", () => {
+    const evidence = "已知 $x+1=3$，甲方案成本较低，乙方案成本较高。在△ABC中，∠A=90°。f=x^2，定义域为[-2,2]。1898年改革开始。1900年相关措施停止。";
+    const session = current(evidence);
+    const invalidVisuals = [
+      { ...common("formula_chain", evidence), steps: [null, { id: "s2", expression: "$x=2$", explanation: "两边同时减去1" }] },
+      { ...common("evidence_chain", evidence), links: [null, { id: "l2", quote: "1900年相关措施停止", meaning: "确定结束时间" }] },
+      { ...common("timeline", evidence), events: [null, { id: "t2", time: "1900年", event: "1900年相关措施停止" }] },
+      { ...common("process_flow", evidence), steps: [null, { id: "p2", label: "记录", evidence: "1900年相关措施停止" }] },
+      { ...common("comparison_matrix", evidence), columns: ["甲方案"], rows: [] },
+      { ...common("concept_graph", evidence), direction: "diagonal", nodes: [], edges: [] },
+      { ...common("geometry_model", evidence), points: [{ id: "a", label: "A" }, { id: "b", label: "B" }], objects: [null] },
+      { ...common("function_plot", evidence), domain: [2, -2], series: [] },
+    ];
+    for (const visual of invalidVisuals) expect(() => parseBoardPlan(plan(visual), session, blocks, [])).toThrow();
+  });
+
+  it("拒绝重复节点和未受原题支持的视觉关系", () => {
+    const evidence = "已知 $x+1=3$，需要解出未知数。";
+    const session = current(evidence);
+    const duplicateFormula = { ...common("formula_chain", evidence), steps: [
+      { id: "same", expression: "$x+1=3$", explanation: "先保留已知等式" }, { id: "same", expression: "$x=2$", explanation: "两边同时减去1" },
+    ] };
+    const inventedGraph = { ...common("concept_graph", evidence), direction: "top-down", nodes: [
+      { id: "one", label: "凭空条件", role: "given" }, { id: "two", label: "未知结论", role: "relation" },
+    ], edges: [{ from: "one", to: "two", label: "推出" }] };
+    expect(() => parseBoardPlan(plan(duplicateFormula), session, blocks, [])).toThrow("不能重复");
+    expect(() => parseBoardPlan(plan(inventedGraph), session, blocks, [])).toThrow("支持");
+  });
+
   it("新版板书会按当前学科蓝图复核每个教学动作", () => {
     const session = current("总量180千米，3小时行驶完，求每小时行驶多少千米。");
     const nativeBlocks = createNativeBoardBlocks(session, { kind: "problem" });
