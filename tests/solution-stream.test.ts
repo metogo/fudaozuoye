@@ -54,6 +54,12 @@ describe("原题答案 SSE", () => {
     expect(body).not.toContain("event: complete");
   });
 
+  it("缺失会话令牌时返回结构化请求错误", async () => {
+    const response = await solutionRoute(new Request("http://localhost/api/learning/solution", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ data: null, error: { code: "INVALID_REQUEST" } });
+  });
+
   it("多小问题目要求讲解逐项覆盖", () => {
     const problem = "已知条件。1. 求速度；2. 判断方向。";
     const missingSecond = "### 解题思路\n先分析两个要求之间的关系，并从已知条件中选择适用的方法。这里补充足够的背景说明，确保讲解本身不是只有一句结论。\n### 分步推导\n1. 求速度时先写出关系式，再代入题目给出的数值，并检查使用的单位是否统一。\n2. 对第一问的结果进行验算，确认它符合题目情境和数量级。\n### 结论\n第一问已经得到可核验结果。\n### 易错提醒\n还需要处理题目的其余小问，不能在这里只给一个结果。";
