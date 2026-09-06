@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type TextareaHTMLAttributes } from "react";
 import type { ProblemSnapshot } from "@/lib/learning/types";
+import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { ArrowIcon, CheckIcon, RefreshIcon } from "./icons";
 
 export type PreparationPhase = "recognizing" | "review" | "analyzing";
@@ -27,6 +28,7 @@ export function PreparationStep(props: PreparationStepProps) {
   const [childWorkExpanded, setChildWorkExpanded] = useState(Boolean(problem?.childWork.trim()));
   const [originalVisible, setOriginalVisible] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [quoteIndex, setQuoteIndex] = useState(0);
   const working = phase !== "review";
 
   useEffect(() => {
@@ -36,10 +38,17 @@ export function PreparationStep(props: PreparationStepProps) {
     return () => window.clearInterval(timer);
   }, [phase, working]);
 
+  useEffect(() => {
+    if (!working) return;
+    const timer = window.setInterval(() => setQuoteIndex((index) => (index + 1) % loadingLearningQuotes.length), 5_500);
+    return () => window.clearInterval(timer);
+  }, [working]);
+
   const set = <K extends keyof ProblemSnapshot>(key: K, value: ProblemSnapshot[K]) => {
     if (problem) props.onChange({ ...problem, [key]: value, userRevised: true });
   };
   const progress = preparationProgress(phase, props.label, props.events);
+  const quote = loadingLearningQuotes[quoteIndex];
 
   return <main className="preparation-screen mx-auto min-h-dvh w-full max-w-3xl px-5 pb-8 pt-5 sm:px-8 sm:pt-7" aria-busy={working}>
     <header className="mb-5 flex items-center justify-between gap-4">
@@ -59,6 +68,10 @@ export function PreparationStep(props: PreparationStepProps) {
           <span className="analysis-core-loader" aria-hidden="true"><i/></span>
           <div className="min-w-0"><p className="text-[10px] font-semibold tracking-[.12em] text-stone-500">当前：{progress.steps[progress.current]}</p><p className="mt-1 text-xl font-semibold leading-7 tracking-[-.035em] text-white">{props.label}</p></div>
         </div>
+        <blockquote key={quote.text} className="relative z-10 mt-5 border-l border-emerald-300/35 pl-3 text-stone-300" aria-label="学习寄语" aria-live="off">
+          <p className="text-sm leading-6 text-stone-200">“{quote.text}”</p>
+          <cite className="mt-1 block text-[10px] not-italic tracking-[.08em] text-stone-500">— {quote.source}</cite>
+        </blockquote>
         <ol className="relative z-10 mt-6 grid grid-cols-3 gap-2" aria-label="AI 准备进度">
           {progress.steps.map((step, index) => {
             const state = index < progress.current ? "done" : index === progress.current ? "current" : "waiting";

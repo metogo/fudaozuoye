@@ -14,8 +14,11 @@ describe("识别结果确认页", () => {
     const cb = callbacks();
     render(<PreparationStep phase="recognizing" problem={null} previewUrl="" demo={false} label="正在识别题干" events={[]} busy={false} {...cb}/>);
     expect(screen.getByLabelText("AI 准备进度").textContent).toContain("识别题目");
+    expect(screen.getByLabelText("学习寄语").textContent).toContain("学不可以已");
     act(() => vi.advanceTimersByTime(1000));
     expect(screen.getByText("1 秒")).not.toBeNull();
+    act(() => vi.advanceTimersByTime(4_500));
+    expect(screen.getByLabelText("学习寄语").textContent).toContain("不积跬步");
     fireEvent.click(screen.getByRole("button", { name: "停止识别" }));
     expect(cb.onCancel).toHaveBeenCalledTimes(1);
   });
