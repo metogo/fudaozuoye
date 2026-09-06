@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ServiceError } from "@/lib/learning/errors";
 import { LiveProviderAdapter } from "@/lib/learning/providers/adapter";
+import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import type { ProviderConfig } from "@/lib/learning/providers/config";
 
 const config = (protocol: ProviderConfig["protocol"] = "chat-completions"): ProviderConfig => ({
@@ -106,5 +107,24 @@ describe("实时模型适配器请求边界", () => {
     const error = new ServiceError("模型响应超时", 504, "PROVIDER_TIMEOUT", true);
     expect(error.retryable).toBe(true);
     expect(error.status).toBe(504);
+  });
+
+  it("图谱详情、手写转写与板书决策均走同一受控请求边界", async () => {
+    const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
+    const map: any = {
+      version: 1,
+      rootId: "core",
+      nodes: [{ id: "core", title: "单位量", summary: "", application: "", evidence: session.problem.text.slice(0, 8) }],
+      edges: [],
+    };
+    const responses: typeof fetch = vi.fn()
+      .mockResolvedValueOnce(chat(JSON.stringify({ summary: "单位量表示每一份的数量。", application: "这道题先用总量除以份数。" })))
+      .mockResolvedValueOnce(chat(JSON.stringify({ text: "180÷3=60", confidence: 0.94 })))
+      .mockResolvedValueOnce(tool(JSON.stringify({ recommended: true, reason: "多个数量关系需要按步骤对应展示。", layout: "steps" })));
+    const adapter = new LiveProviderAdapter(config(), responses);
+    await expect(adapter.generateKnowledgeDetail!(session, map, "core")).resolves.toMatchObject({ summary: "单位量表示每一份的数量。" });
+    await expect(adapter.transcribeStudentAnswer("data:image/png;base64,AA==", "写出单位量")).resolves.toEqual({ text: "180÷3=60", confidence: 0.94 });
+    await expect(adapter.decideBoardPresentation(session, { kind: "problem" })).resolves.toEqual({ recommended: true, reason: "多个数量关系需要按步骤对应展示。", layout: "steps" });
+    await expect(adapter.generateKnowledgeDetail!(session, map, "missing")).rejects.toThrow("知识点不存在");
   });
 });
