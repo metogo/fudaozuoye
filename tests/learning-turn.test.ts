@@ -693,6 +693,33 @@ describe("教育 Chat 学习回合", () => {
     expect(invalid.status).toBe(200);
     expect(await invalid.text()).toContain("插画完成凭证无效");
   });
+
+  it("连续卡住非原子知识点时会向下展开，最小知识点则给出可求助任务", async () => {
+    const started = await startState("physics", "junior");
+    const answerState = nodeAnswerState(started);
+    const node = answerState.session.nodes.find((item) => item.id === answerState.session.flow.activeGate?.nodeId)!;
+    const expandable = {
+      ...answerState.session,
+      flow: { ...answerState.session.flow, stage: "remediation" as const, remediationCount: 1, activeGate: understandingGate("再换一种讲法", node.id) },
+    };
+    const expanded = event<ClientSessionState>(await turn(sealSession(expandable), {
+      type: "choose", gateId: expandable.flow.activeGate.id, choice: "not_understood",
+    }), "flow.update");
+    expect(expanded.session.flow.focus.kind).toBe("node");
+    expect(expanded.session.flow.remediationCount).toBe(0);
+    expect(expanded.session.flow.pathNodeIds.length).toBeGreaterThanOrEqual(2);
+
+    const atomic = expanded.session.nodes.find((item) => item.kind === "concept" && item.atomic)!;
+    const minimal = {
+      ...expanded.session,
+      currentNodeId: atomic.id,
+      flow: { ...expanded.session.flow, stage: "remediation" as const, focus: { kind: "node" as const, nodeId: atomic.id }, remediationCount: 1, activeGate: understandingGate("还清楚吗", atomic.id) },
+    };
+    const needsHelp = event<ClientSessionState>(await turn(sealSession(minimal), {
+      type: "choose", gateId: minimal.flow.activeGate.id, choice: "not_understood",
+    }), "flow.update");
+    expect(needsHelp.session.flow.activeGate?.kind).toBe("needs_help");
+  });
 });
 
 
