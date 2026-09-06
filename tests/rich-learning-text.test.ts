@@ -684,6 +684,28 @@ describe("AI 教学内容排版", () => {
     expect(solutionSystemPrompt()).toContain("有序列表");
     expect(solutionSystemPrompt()).toContain("KaTeX");
   });
+
+  it("紧凑、流式与公式修复提示分别采用可读的降级呈现", () => {
+    const compact = renderToStaticMarkup(createElement(RichLearningText, {
+      compact: true, text: "# 标题\n\n> 引用\n\n- 一项\n- 二项\n\n---",
+    }));
+    const streaming = renderToStaticMarkup(createElement(RichLearningText, {
+      streaming: true, text: "$$2+3=5$$", trailing: createElement("i", null, "继续"),
+    }));
+    const raw = renderToStaticMarkup(createElement(RichLearningText, {
+      autoMath: false, text: "$$2+3=5$$",
+    }));
+    const malformed = renderToStaticMarkup(createElement(RichLearningText, {
+      text: "这里有未闭合公式 $x+1",
+    }));
+    expect(compact).toContain("rich-learning-text--compact");
+    expect(compact).not.toContain("<hr");
+    expect(streaming).toContain("chat-streaming-text");
+    expect(streaming).toContain("继续");
+    expect(streaming).not.toContain("data-arithmetic-displays");
+    expect(raw).toContain("2+3=5");
+    expect(malformed).toContain("公式写法需核对");
+  });
 });
 
 function renderLearningChatWithMessage(status: "streaming" | "complete"): string {
