@@ -38,4 +38,24 @@ describe("脱敏学习报告", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
     await expect(createReportFile(session as never)).rejects.toThrow("报告图片生成失败");
   });
+
+  it("为不同学习状态标出不同颜色，并在尚未验收时生成脱敏结语", async () => {
+    const context = Object.fromEntries(["fillRect", "fillText", "beginPath", "arc", "fill", "roundRect", "measureText"].map((key) => [key, vi.fn()]));
+    context.measureText.mockImplementation((text: string) => ({ width: text.length > 24 ? 2_000 : 1 }));
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(new Blob(["png"], { type: "image/png" })));
+    await createReportFile({
+      ...session,
+      nodes: [
+        { kind: "concept", difficulty: 1, state: "known", title: "已知" },
+        { kind: "concept", difficulty: 2, state: "parent_confirmed", title: "确认" },
+        { kind: "concept", difficulty: 3, state: "unchecked", title: "待确认" },
+      ],
+      originalPassed: false,
+      transferPassed: false,
+    } as never);
+    expect(context.fillText).toHaveBeenCalledWith("本次学习尚未完成客观验收", 74, 883);
+    expect(context.fillText.mock.calls.some(([text]) => String(text).includes("报告已自动脱敏"))).toBe(true);
+    expect(context.fillStyle).toBe("#78716c");
+  });
 });
