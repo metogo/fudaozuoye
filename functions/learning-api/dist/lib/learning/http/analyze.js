@@ -29,8 +29,11 @@ async function postAnalyze(request) {
         const reasoningLevel = requestedReasoningLevel;
         const provider = "doubao";
         const adapter = (0, providers_1.getProviderAdapter)(provider, reasoningLevel, request.signal);
+        // `recognize` validates file bytes asynchronously. Await it here so an
+        // invalid upload is converted by this route's error boundary to a stable
+        // client response instead of escaping as a rejected handler promise.
         if (stage === "recognize")
-            return recognize(form, provider, adapter);
+            return await recognize(form, provider, adapter);
         if (stage === "recognize_text")
             return recognizeText(form, provider, adapter);
         const raw = form.get("problem");
