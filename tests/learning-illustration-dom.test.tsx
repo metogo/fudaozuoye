@@ -24,4 +24,19 @@ describe("LearningIllustration", () => { beforeEach(() => { Object.definePropert
    render(<LearningIllustration lesson={null} frames={[]} expectedCount={0} busy={false} loadingLabel="" error="需要补充条件：图中 AB 的长度（上次核验：obj1）" canClose onClose={vi.fn()} onRegenerate={vi.fn()}/>);
    expect(screen.getByRole("alert").textContent).toContain("还需要确认：图中 AB 的长度");
  });
+ it("展示已到达的帧、示意图说明和不同失败原因，同时不允许生成中关闭", () => {
+   const close = vi.fn();
+   const partial = [{ ...frames[0], scene: { shapes: [{ id: "line" }] }, schematic: true }, frames[1]];
+   const { rerender } = render(<LearningIllustration lesson={null} frames={partial as any} expectedCount={3} busy loadingLabel="" error="" canClose={false} onClose={close} onRegenerate={vi.fn()}/>);
+   expect(screen.getByText("正在完成后续图解…")).not.toBeNull();
+   expect(screen.getByText("示意图不按比例，请以标注与算式为准。")).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "2. 算结果" }));
+   expect(screen.getByText("算结果")).not.toBeNull();
+   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+   expect(close).not.toHaveBeenCalled();
+   rerender(<LearningIllustration lesson={null} frames={[]} expectedCount={0} busy={false} loadingLabel="" error="生成超时" canClose onClose={close} onRegenerate={vi.fn()}/>);
+   expect(screen.getByRole("alert").textContent).toContain("用时较长");
+   rerender(<LearningIllustration lesson={null} frames={[]} expectedCount={0} busy={false} loadingLabel="" error="关键条件不足" canClose onClose={close} onRegenerate={vi.fn()}/>);
+   expect(screen.getByRole("alert").textContent).toContain("部分条件还不清楚");
+ });
 });

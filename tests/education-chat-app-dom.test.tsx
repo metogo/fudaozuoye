@@ -301,4 +301,45 @@ describe("EducationChatApp", () => {
     expect(screen.getByTestId("messages").textContent).not.toContain("旧草稿");
     expect(latest.retryLabel).toBe("");
   });
+
+  it("没有可用推理服务时保持不可发送，并说明下一步", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: false }], illustration: { available: false, reason: "未配置" } }));
+    render(<EducationChatApp/>);
+    await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("AI 服务暂不可用"));
+    expect(screen.getByTestId("ready").textContent).toBe("false");
+    await act(async () => { latest.onReasoningLevel("medium"); });
+    expect(screen.getByTestId("notice").textContent).toContain("中推理尚未配置");
+  });
+
+  it("图片识别失败会标记原图片消息并保留重新识别操作", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("recognize"));
+    vi.mocked(readSseResponse).mockRejectedValue(new Error("照片太模糊"));
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    latest.onFile(new File(["image"], "blur.png", { type: "image/png" }));
+    await screen.findByTestId("cropper");
+    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:blur"); });
+    await waitFor(() => expect(latest.retryLabel).toBe("重新识别"));
+    expect(screen.getByTestId("messages").textContent).toContain("这道题我不会，想把它学懂。:error");
+    expect(screen.getByTestId("notice").textContent).toContain("照片太模糊");
+  });
+
+  it("题目分析要求重拍时不会误给旧题的重新分析入口", async () => {
+    const recognized = { text: "题目", childWork: "", subject: "math", gradeBand: "junior", visualContext: { related: false, affectsSolving: false, confidence: 1, facts: [], summary: "" } };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("recognize"))
+      .mockResolvedValueOnce(response("analyze"));
+    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
+      if (reply.stage === "recognize") await onEvent("recognized", recognized);
+      if (reply.stage === "analyze") throw new Error("请重新拍摄，关键条件仍不清楚");
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onSend("这道题"); });
+    await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("用下方相机或相册换一张"));
+    expect(latest.retryLabel).toBe("");
+  });
 });
