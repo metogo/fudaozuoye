@@ -406,4 +406,39 @@ describe("EducationChatApp", () => {
     expect(turnInputs).toHaveLength(2);
     expect(latestIllustration.lesson).toEqual(lesson);
   });
+
+  it("根据当前任务把文字、拍照与白板输入分别路由为作答或提问", async () => {
+    const answerSession = {
+      ...learnedSession,
+      flow: {
+        ...learnedSession.flow,
+        activeGate: { id: "answer-gate", kind: "original_answer", title: "独立作答", prompt: "写答案", options: [] },
+      },
+    };
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: answerSession, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValue(response("turn"));
+    vi.mocked(readSseResponse).mockImplementation(async (_reply: any, onEvent: any) => {
+      await onEvent("flow.update", { session: answerSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onSend("42"); });
+    const textBody = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
+    expect(textBody.input).toEqual({ type: "answer", gateId: "answer-gate", answer: "42" });
+
+    latest.onResponsePhoto(new File(["photo"], "answer.png", { type: "image/png" }), "answer");
+    await screen.findByTestId("cropper");
+    await act(async () => { await latestCrop.onConfirm(new Blob(["photo"], { type: "image/png" }), "blob:answer"); });
+    const imageBody = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body as FormData;
+    expect(JSON.parse(String(imageBody.get("input")))).toEqual({ type: "image_answer", gateId: "answer-gate" });
+
+    latest.onWhiteboard("question");
+    await screen.findByTestId("whiteboard");
+    await act(async () => { await latestWhiteboard.onConfirm(new Blob(["ink"], { type: "image/png" }), "blob:ink"); });
+    const questionBody = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body as FormData;
+    expect(JSON.parse(String(questionBody.get("input")))).toEqual({ type: "image_question" });
+  });
 });
