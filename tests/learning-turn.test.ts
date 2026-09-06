@@ -656,6 +656,30 @@ describe("教育 Chat 学习回合", () => {
     expect(await response.text()).toContain("当前学习任务已变化");
   });
 
+  it("服务端会拒绝所有不属于当前学习任务的回合输入", async () => {
+    const started = await startState("math", "junior");
+    const gateId = started.session.flow.activeGate!.id;
+    const cases: Array<[LearningTurnInput, string]> = [
+      [{ type: "start" }, "本题已经开始学习"],
+      [{ type: "choose", gateId, choice: "finish_review" }, "没有提供这个操作"],
+      [{ type: "answer", gateId, answer: "任意答案" }, "不接受文字答案"],
+      [{ type: "retry_original" }, "当前不需要重新打开原题作答"],
+      [{ type: "request_transfer" }, "请先完成关键步骤检查"],
+      [{ type: "acknowledge_illustration", gateId: "expired", receipt: "forged" }, "当前学习任务已变化"],
+    ];
+    for (const [input, message] of cases) {
+      const response = await postTurn(request(started.stateToken, input));
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain(message);
+    }
+    const imageAnswer = await postTurn(imageRequest(started.stateToken, { type: "image_answer", gateId }));
+    expect(imageAnswer.status).toBe(400);
+    expect(await imageAnswer.text()).toContain("不接受图片作答");
+    const transcribe = await postTurn(imageRequest(started.stateToken, { type: "transcribe_step", gateId }));
+    expect(transcribe.status).toBe(400);
+    expect(await transcribe.text()).toContain("当前不是步骤填空");
+  });
+
   it("步骤填空支持图片转写、提示、查看答案并回到下一段讲解", async () => {
     const started = await startState("math", "junior");
     const step = event<ClientSessionState>(await turn(started.stateToken, {

@@ -10,8 +10,11 @@ import {
   messageOf,
   reasoningLabel,
   turnLoadingLabel,
+  understandingChoiceFromText,
   validateStoredBoardLesson,
+  canReuseIllustration,
 } from "@/components/education-chat-app";
+import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint";
 
 const state = {
   stateToken: "x".repeat(48),
@@ -104,5 +107,37 @@ describe("对话编排器的恢复与文案守卫", () => {
     await expect(validateStoredBoardLesson("token", lesson)).resolves.toEqual({ status: "invalid" });
     await expect(validateStoredBoardLesson("token", lesson)).resolves.toEqual({ status: "unavailable" });
     await expect(validateStoredBoardLesson("token", lesson)).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("将自然语言选择精确映射为下一步，并拒绝不明确的输入", () => {
+    expect(understandingChoiceFromText(" 我懂了！ ")).toBe("continue");
+    expect(understandingChoiceFromText("这一步我来做")).toBe("try");
+    expect(understandingChoiceFromText("还是不懂。")).toBe("not_understood");
+    expect(understandingChoiceFromText("能不能再讲一点")).toBeNull();
+  });
+
+  it("只复用与当前题目严格绑定、帧序完整且资源安全的插画", () => {
+    const session = {
+      requestId: "illustration-request",
+      problem: { text: "x² - 6x + k = 0", visualContext: { summary: "", facts: [] } },
+    };
+    const lesson = {
+      receipt: "receipt-1",
+      requestId: session.requestId,
+      problemFingerprint: illustrationFingerprint(session as never),
+      frameCount: 2,
+      frames: [
+        { id: "frame-1", index: 1, imageUrl: "data:image/svg+xml;base64,PHN2Zy8+" },
+        { id: "frame-2", index: 2, imageUrl: "https://images.example/frame-2.svg" },
+      ],
+    };
+    expect(canReuseIllustration(lesson as never, session as never)).toBe(true);
+    expect(canReuseIllustration({ ...lesson, receipt: "" } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, requestId: "other" } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, problemFingerprint: "stale" } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, frameCount: 3 } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, frames: [{ ...lesson.frames[0], id: "wrong" }, lesson.frames[1]] } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, frames: [lesson.frames[0], { ...lesson.frames[1], imageUrl: "https://user:pass@images.example/a.svg" }] } as never, session as never)).toBe(false);
+    expect(canReuseIllustration({ ...lesson, frames: [lesson.frames[0], { ...lesson.frames[1], imageUrl: "not a URL" }] } as never, session as never)).toBe(false);
   });
 });
