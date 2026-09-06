@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { teachingColors, type TeachingScene as Scene } from "@/lib/learning/teaching-scene";
+import { teachingColors, teachingStrokes, type TeachingScene as Scene } from "@/lib/learning/teaching-scene";
 
 /** JSXGraph receives compiler-owned primitives only; text is rendered without HTML parsing. */
 export function TeachingScene({ scene, fallbackUrl, alt }: { scene: Scene; fallbackUrl: string; alt: string }) {
@@ -20,10 +20,16 @@ export function TeachingScene({ scene, fallbackUrl, alt }: { scene: Scene; fallb
       });
       dispose = () => JXG.JSXGraph.freeBoard(board);
       board.suspendUpdate();
+      const fontSize = scene.template === "general" ? Math.max(10, Math.min(19, container.current.clientWidth / 800 * 28)) : 19;
       for (const shape of scene.shapes) {
         const fixed = { fixed: true, highlight: false };
         if (shape.kind === "label") {
-          board.create("text", [shape.x, 520 - shape.y + 5, shape.text], { ...fixed, display: "internal", parse: false, anchorX: "middle", anchorY: "middle", fontSize: 19, strokeColor: "#193d32" });
+          board.create("text", [shape.x, 520 - shape.y + 5, shape.text], { ...fixed, display: "internal", parse: false, anchorX: "middle", anchorY: "middle", fontSize, strokeColor: "#193d32" });
+        } else if (shape.kind === "path") {
+          if (shape.closed) board.create("polygon", shape.points.map(p => [p[0], 520 - p[1]]), { ...fixed, vertices: { visible: false }, fillColor: teachingColors[shape.color], fillOpacity: 0.3, borders: { strokeColor: teachingStrokes[shape.color], strokeWidth: 3 } });
+          else board.create("curve", [shape.points.map(p => p[0]), shape.points.map(p => 520 - p[1])], { ...fixed, strokeColor: teachingStrokes[shape.color], strokeWidth: 3, lastArrow: !!shape.arrow });
+        } else if (shape.kind === "circle") {
+          board.create("circle", [[shape.x, 520 - shape.y], shape.radius], { ...fixed, strokeColor: teachingStrokes[shape.color], strokeWidth: 3, fillOpacity: 0 });
         } else if (shape.kind === "line") {
           board.create("segment", [[shape.x1, 520 - shape.y1], [shape.x2, 520 - shape.y2]], { ...fixed, strokeColor: teachingColors[shape.color], strokeWidth: shape.width ?? 3 });
         } else {

@@ -1,3 +1,5 @@
+import { prepareStepAnswerMarkdown } from "./step-answer-format";
+
 export interface ParsedLearningPrompt {
   body: string;
   choices: string[];
@@ -106,6 +108,9 @@ export function learningTextToPlainText(source: string): string {
 }
 
 function preparePlainSegment(source: string): string {
+  // Reuse the same conservative whole-fragment handling as answer slots.
+  const fragment = prepareStepAnswerMarkdown(source);
+  if (fragment !== source) return fragment;
   const formulas: string[] = [];
   const stash = (latex: string) => {
     const token = `\uE000${formulas.length}\uE001`;
@@ -114,6 +119,10 @@ function preparePlainSegment(source: string): string {
   };
 
   let text = structureSequentialItems(source);
+  text = text.replace(/[\\A-Za-z0-9{}()[\]^_+\-*/=<>|.,!≥≤≠ \t]+/g, (candidate) => {
+    const normalized = prepareStepAnswerMarkdown(candidate);
+    return normalized === candidate ? candidate : `${candidate.match(/^\s*/)?.[0] ?? ""}${stash(normalized.slice(1, -1))}${candidate.match(/\s*$/)?.[0] ?? ""}`;
+  });
   text = text.replace(
     /((?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z](?:\s*[+\-−]\s*(?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z])*\s*=\s*(?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z](?:\s*(?:sin|cos|tan|cot)\s*[A-Za-z])*)/gi,
     (value) => stash(toLatex(value)),

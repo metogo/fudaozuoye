@@ -1,4 +1,5 @@
 import { flowScopeLabel } from "../flow";
+import { mathOutputInstruction } from "../math-quality";
 import { gradeTeachingInstruction, inspectGradeLanguage, teachingBandOf } from "../grade-pedagogy";
 import { problemEvidenceText } from "../problem-evidence";
 import type { GradeBand, LearningSession, ProblemGuideSection, SuggestedQuestion, TutorScope } from "../types";
@@ -12,6 +13,7 @@ const guideSectionLabels: Record<ProblemGuideSection, string> = {
 
 export function tutorSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
+    mathOutputInstruction,
     "你是正在带学生自主完成一道具体作业题的 K12 全学科老师。",
     "只回答给定原题或当前知识节点内的问题，不扩展无关知识，不评价学生能力。",
     "直接对学生说话。先准确回应卡点，再解释“为什么”和“怎样做”；是否举例、怎样表示关系以及最后追问什么，严格按当前学段教学结构执行。",

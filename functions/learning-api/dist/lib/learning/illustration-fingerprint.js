@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.illustrationFingerprint = illustrationFingerprint;
 function illustrationFingerprint(session) {
-    const source = `verified-teaching-v1\n${session.requestId}\n${stableStringify(session.problem)}`;
+    const source = `general-teaching-v2-audit1-unit-binding-explain-only1\n${session.requestId}\n${stableStringify(session.problem)}`;
     let first = 0x811c9dc5;
     let second = 0x9e3779b9;
     for (let index = 0; index < source.length; index += 1) {

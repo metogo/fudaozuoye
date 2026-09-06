@@ -7,6 +7,7 @@ exports.questionSuggestionsPrompt = questionSuggestionsPrompt;
 exports.parseQuestionSuggestions = parseQuestionSuggestions;
 exports.questionSuggestionsMock = questionSuggestionsMock;
 const flow_1 = require("../flow");
+const math_quality_1 = require("../math-quality");
 const grade_pedagogy_1 = require("../grade-pedagogy");
 const problem_evidence_1 = require("../problem-evidence");
 const guideSectionLabels = {
@@ -16,6 +17,7 @@ const guideSectionLabels = {
 };
 function tutorSystemPrompt(learnerBand = "junior") {
     return [
+        math_quality_1.mathOutputInstruction,
         "你是正在带学生自主完成一道具体作业题的 K12 全学科老师。",
         "只回答给定原题或当前知识节点内的问题，不扩展无关知识，不评价学生能力。",
         "直接对学生说话。先准确回应卡点，再解释“为什么”和“怎样做”；是否举例、怎样表示关系以及最后追问什么，严格按当前学段教学结构执行。",

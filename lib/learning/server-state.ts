@@ -44,6 +44,8 @@ export function toClientState(session: LearningSession): ClientSessionState {
     nodes: session.nodes.map((node) => ({ ...node, check: { ...node.check, answer: "", explanation: "" } })),
     evidence: session.evidence.map((item) => ({ ...item, answer: undefined })),
     transferCheck: session.transferCheck ? { ...session.transferCheck, answer: "", explanation: "" } : null,
+    ...(session.stepCheck ? { stepCheck: { ...session.stepCheck, answer: "", explanation: "" } } : {}),
+    ...(session.solutionRecallCheck ? { solutionRecallCheck: { ...session.solutionRecallCheck, answer: "", explanation: "" } } : {}),
   };
   return { session: safe, stateToken: sealSession(session) };
 }

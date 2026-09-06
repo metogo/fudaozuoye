@@ -1,7 +1,14 @@
 import { createElement } from "react";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { LearningChat } from "@/components/learning-chat";
+import { describe, expect, it, vi } from "vitest";
+
+// Markup tests exercise the real renderer; async loading is covered separately.
+vi.mock("@/components/lazy-rich-learning-text", async () => ({
+  ...await import("@/components/rich-learning-text"),
+  preloadLearningText: () => import("@/components/rich-learning-text"),
+}));
+import { LearningChat, chatJumpLabel, isSuggestionBelowViewport } from "@/components/learning-chat";
 import { LearningBoard } from "@/components/learning-board";
 import { RichLearningText } from "@/components/rich-learning-text";
 import { STREAMING_FINISH_MS, STREAMING_SILENCE_MS, StreamingIndicator } from "@/components/streaming-indicator";
@@ -17,6 +24,15 @@ import { tutorSystemPrompt } from "@/lib/learning/providers/tutor";
 import type { BoardLesson } from "@/lib/learning/types";
 
 describe("AI 教学内容排版", () => {
+  it("追问在视口下方才提示，露出可阅读的问题后消失", () => {
+    expect(isSuggestionBelowViewport(700, 750, 80)).toBe(true);
+    expect(isSuggestionBelowViewport(700, 680, 80)).toBe(true);
+    expect(isSuggestionBelowViewport(700, 600, 80)).toBe(false);
+    expect(isSuggestionBelowViewport(700, -100, 80)).toBe(false);
+    expect(chatJumpLabel(false, true)).toBe("下面有猜你想问 ↓");
+    expect(chatJumpLabel(true, true)).toBe("有新讲解 · 猜你想问 ↓");
+    expect(chatJumpLabel(true, false)).toBe("有新讲解 ↓");
+  });
   it("SSE 状态标记覆盖输出与 Bingo 完成状态，并提供无障碍说明", () => {
     const starting = renderToStaticMarkup(createElement(StreamingIndicator, { status: "streaming" }));
     const finishing = renderToStaticMarkup(createElement(StreamingIndicator, { status: "finishing" }));
@@ -47,6 +63,8 @@ describe("AI 教学内容排版", () => {
     expect(complete).toContain('title="复制文本"');
     expect(complete).not.toContain('aria-haspopup="menu"');
     expect(complete).not.toContain("复制图片");
+    expect(complete).toContain("lesson-chat-shell");
+    expect(complete).toContain("chat-message--teacher");
   });
 
   it("首页不要求选择学段，直接开放拍照、相册、白板和文字发题入口", () => {
@@ -65,7 +83,14 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain('placeholder="输入一道题目…"');
     expect(html).not.toMatch(/<textarea[^>]*\sdisabled=/);
     expect(html).not.toMatch(/aria-label="白板写题"[^>]*\sdisabled=/);
-    expect(html).toContain("home-reasoning-picker mt-1");
+    expect(html).toContain("home-reasoning-picker");
+    expect(html).toContain("home-camera-action");
+    expect(html).toContain("Hey，");
+    expect(html).toContain("来一起解题吧");
+    expect(html).toContain("拍张照，或写下题目。我们一步步来。");
+    expect(html.indexOf("home-reasoning-picker")).toBeGreaterThan(html.indexOf("</textarea>"));
+    expect(html.match(/type="file"/g)).toHaveLength(2);
+    expect(html).toContain('capture="environment"');
     expect(html).not.toContain("数理化");
 
   });
@@ -345,7 +370,8 @@ describe("AI 教学内容排版", () => {
 
     expect(html).toContain("原题");
     expect(html).toContain("选择一个答案");
-    expect(html).toContain("先看完整讲解");
+    expect(html).toContain("看完整讲解");
+    expect(html).not.toContain("插画演示");
     expect(html.match(/class="katex"/g)?.length).toBeGreaterThanOrEqual(4);
     expect(html.match(/<svg/g)?.length).toBeGreaterThanOrEqual(3);
     expect(html).toMatch(/style="min-width:[^"]+;height:[^"]+" class="hide-tail/);
@@ -391,11 +417,19 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain("当前环节");
     expect(html).toContain("确认你是否理解核心思路");
     expect(html).toContain("懂了、没懂，或直接问…");
-    expect(html).toContain("插画演示");
-    expect(html).toContain("用连续插画演示原题步骤");
+    expect(html).not.toContain("插画演示");
+    expect(html).not.toContain("用连续插画演示原题步骤");
+    expect(html).toContain('aria-label="辅助讲解"');
+    expect(html).toContain("chat-gate__options");
+    expect(html).toContain('data-emphasis="primary"');
+    expect(html).not.toContain("用板书讲清楚");
+    for (const label of ["懂了，继续", "这一步我来做", "这一步没懂", "看完整讲解"]) {
+      expect(html).toContain(label);
+    }
     expect(html).not.toContain("当前任务：核心思路听懂了吗？");
     expect(html).not.toContain("提问方式");
     expect(understandingChoiceFromText("我懂了。 ")).toBe("continue");
+    expect(understandingChoiceFromText("这一步我来做")).toBe("try");
     expect(understandingChoiceFromText("这一步没懂！")).toBe("not_understood");
     expect(understandingChoiceFromText("为什么这里要作辅助线？")).toBeNull();
   });
@@ -445,8 +479,7 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain("已学习 · 尚未验证掌握");
     expect(html).toContain("遮住讲解，重做原题");
     expect(html).toContain("换一道同知识点题");
-    expect(html).toContain("再次查看刚才的板书");
-    expect(html).toContain("不改变当前任务");
+    expect(html).not.toContain("再次查看刚才的板书");
     expect(html).toContain("开始新题");
   });
 
@@ -478,10 +511,10 @@ describe("AI 教学内容排版", () => {
     expect(html).not.toContain("残缺的答案开头");
   });
 
-  it("猜你想问附着在来源讲解下，点击后的学生消息保留引用关系", () => {
+  it("异步猜你想问位于任务按钮之后，且保留来源和引用关系", () => {
     const base = analyzeMock(recognizeMock("physics", "junior"), "doubao");
     const suggestion = { id: "suggest-abcd1234", text: "为什么这条条件会决定第一步？", scopeLabel: "原题核心思路", sourceSummary: "先抓住焦距与物距之间的关系" };
-    const session = { ...base, flow: { ...base.flow, suggestedQuestions: [suggestion] } };
+    const session = { ...base, flow: { ...base.flow, activeGate: understandingGate(), suggestedQuestions: [suggestion] } };
     const messages = [
       { id: "assistant-one", role: "assistant" as const, kind: "assistant" as const, text: "先比较题目给出的关键条件。", status: "complete" as const, suggestions: [suggestion], createdAt: new Date().toISOString() },
       { id: "user-one", role: "user" as const, kind: "user" as const, text: suggestion.text, status: "complete" as const, reference: { scopeLabel: suggestion.scopeLabel, sourceSummary: suggestion.sourceSummary }, createdAt: new Date().toISOString() },
@@ -493,10 +526,20 @@ describe("AI 教学内容排版", () => {
       onConfirmProblem: () => {}, onRetryOriginal: () => {}, onRequestTransfer: () => {}, onNewProblem: () => {}, onRetry: () => {},
     }));
     expect(html).toContain('aria-label="猜你想问"');
+    expect(html.indexOf('aria-label="猜你想问"')).toBeGreaterThan(html.indexOf("看完整讲解"));
+    const suggestionStart = html.indexOf('aria-label="猜你想问"');
+    expect(html.lastIndexOf("</article>", suggestionStart)).toBeGreaterThan(html.lastIndexOf("<article", suggestionStart));
     expect(html).toContain("suggested-question-trail__branches");
     expect(html).toContain(suggestion.text);
     expect(html).toContain("引用 · 原题核心思路");
     expect(html).toContain(suggestion.sourceSummary);
+    expect(html).toContain("chat-message--referenced");
+    expect(html).toContain('class="chat-message-reference"');
+    expect(html).toContain('class="chat-message-reference__summary"');
+    if (process.env.SUGGESTION_PREVIEW_CSS) {
+      mkdirSync("outputs/suggestion-preview", { recursive: true });
+      writeFileSync("outputs/suggestion-preview/index.html", `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${process.env.SUGGESTION_PREVIEW_CSS}"></head><body>${html}</body></html>`);
+    }
   });
 
   it("板书正文、重点标记和说明共用同一套公式渲染", () => {

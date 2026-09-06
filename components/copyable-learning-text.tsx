@@ -3,15 +3,18 @@
 import { useId, useRef, useState } from "react";
 import { buildLearningClipboardContent, writeLearningClipboard } from "@/lib/learning/copy-rich-text";
 // 图片复制暂时停用，实现保留在 lib/learning/copy-learning-image.ts，方便后续恢复。
-import { RichLearningText } from "./rich-learning-text";
+import { RichLearningText } from "./lazy-rich-learning-text";
 import { StreamingIndicator } from "./streaming-indicator";
+import { CopyIcon } from "./icons";
+import type { LearningEmphasis } from "@/lib/learning/learning-emphasis";
 
 interface CopyableLearningTextProps {
+  emphasis?: LearningEmphasis[];
   text: string;
   status?: "streaming" | "finishing" | "complete" | "error";
 }
 
-export function CopyableLearningText({ text, status }: CopyableLearningTextProps) {
+export function CopyableLearningText({ text, status, emphasis }: CopyableLearningTextProps) {
   const proseRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pendingRef = useRef(false);
@@ -39,7 +42,7 @@ export function CopyableLearningText({ text, status }: CopyableLearningTextProps
 
   return <div className="copyable-learning-text min-w-0">
     <div ref={proseRef} className="copyable-learning-text__prose min-w-0">
-      <RichLearningText text={text} streaming={status === "streaming"} trailing={streaming
+      <RichLearningText text={text} emphasis={status === "error" ? undefined : emphasis} streaming={status === "streaming"} trailing={streaming
         ? <StreamingIndicator key={`${status}-${text.length}`} status={status}/>
         : undefined}/>
     </div>
@@ -57,10 +60,7 @@ export function CopyableLearningText({ text, status }: CopyableLearningTextProps
       title="复制文本"
       className="copyable-learning-text__copy flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-400 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-600 disabled:opacity-50"
     >
-      <svg className="copyable-learning-text__icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <rect x="8" y="8" width="12" height="12" rx="2"/>
-        <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>
-      </svg>
+      <CopyIcon className="copyable-learning-text__icon h-4 w-4"/>
     </button>}
     </div>
   </div>;

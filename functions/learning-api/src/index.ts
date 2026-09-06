@@ -9,6 +9,7 @@ import { postSimilarCheck } from "../../../lib/learning/http/similar";
 import { postTransfer } from "../../../lib/learning/http/transfer";
 import { postTutor } from "../../../lib/learning/http/tutor";
 import { postTurn } from "../../../lib/learning/http/turn";
+import { postEmphasis } from "../../../lib/learning/http/emphasis";
 import { postVerify } from "../../../lib/learning/http/verify";
 
 const maximumRequestBytes = 8 * 1024 * 1024;
@@ -25,6 +26,7 @@ const routes: Record<string, (request: Request) => Promise<Response> | Response>
   "POST /learning/similar": postSimilarCheck,
   "POST /learning/tutor": postTutor,
   "POST /learning/turn": postTurn,
+  "POST /learning/emphasis": postEmphasis,
 };
 
 export const main = createServer((request, response) => {

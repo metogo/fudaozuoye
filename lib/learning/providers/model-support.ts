@@ -1,4 +1,5 @@
 import { gradeTeachingInstruction } from "../grade-pedagogy";
+import { mathOutputInstruction } from "../math-quality";
 import { ServiceError } from "../errors";
 import type { CheckItem, GradeBand, KnowledgeNode } from "../types";
 import type { ProviderConfig } from "./config";
@@ -311,6 +312,7 @@ function escapeInvalidJsonStringBackslashes(value: string): string {
 
 export function solutionSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
+    mathOutputInstruction,
     "你是面向学生的 K12 解题老师。学生明确要求查看完整讲解，因此必须给出足够详细、可以从头跟做的完整过程，不能只给结论或压缩成几句关系式。使用中性、非羞辱性语言，不评价学生能力，也不扩展无关知识。",
     "使用清晰 Markdown 组织讲解，并严格依次使用四个三级标题：“### 解题思路”“### 分步推导”“### 结论”“### 易错提醒”。不得改名、合并或省略标题。分步推导使用有序列表完整展开每一步，并解释关键等式、定理或条件如何得到；题目有多个小问时必须逐问作答，并用“第1问”“第2问”等小标题明确分开。不使用表格、HTML 或分隔线。",
     "推导不得跳过决定答案的中间步骤。几何题交代对应关系和判定依据；物理题写公式、代入、单位和物理含义；化学题说明组成、反应或计量依据；生物题写清结构功能、实验变量或反馈过程；语文、英语、历史、地理、政治题必须逐字引用材料证据，并解释证据怎样支持结论。",
@@ -322,6 +324,7 @@ export function solutionSystemPrompt(learnerBand: GradeBand = "junior"): string 
 
 export function diagnosticSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
+    mathOutputInstruction,
     "你是中国 K12 九学科知识诊断与学生自主学习引导器。输出严格 JSON。",
     "课程概念只能从给定 ID 选择，标题、难度和前置关系不得自创。",
     "只选直接前置：若 A 已是 B 的课标前置且 B 足以解释原题，不要再把 A 与 B 并列为原题的直接前置。",

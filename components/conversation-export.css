@@ -1,0 +1,78 @@
+.conversation-export-dialog { width: min(960px, calc(100vw - 24px)); height: min(920px, calc(100dvh - 24px)); max-width: none; max-height: none; padding: 0; margin: auto; border: 1px solid #e2e6df; border-radius: 24px; background: #f0f1ed; color: #263630; box-shadow: 0 24px 80px #132a2533; }
+.conversation-export-dialog[open] { display: flex; flex-direction: column; }
+.conversation-export-dialog::backdrop { background: #14251f80; }
+.conversation-export-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; background: #fafbf8; border-bottom: 1px solid #e1e6de; flex-shrink: 0; }
+.conversation-export-toolbar p { margin: 0 0 4px; color: #718276; font-size: 11px; letter-spacing: .08em; }
+.conversation-export-toolbar h2 { margin: 0; font-size: 18px; font-weight: 650; }
+.conversation-export-close { min-width: 44px; min-height: 44px; display: grid; place-items: center; border-radius: 50%; }
+.conversation-export-close:hover { background: #e9eee7; }
+.conversation-export-help { display: flex; gap: 8px; padding: 12px 24px; font-size: 12px; line-height: 1.7; flex-shrink: 0; }
+.conversation-export-help svg { flex-shrink: 0; margin-top: 2px; }
+.conversation-export-preview { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; flex: 1; }
+.conversation-export-actions { flex-shrink: 0; background: #fafbf8; border-top: 1px solid #e1e6de; padding: 14px 24px max(14px, env(safe-area-inset-bottom)); }
+.conversation-export-actions p { font-size: 12px; color: #975723; padding-bottom: 10px; }
+.conversation-export-actions button { min-height: 46px; padding: 0 20px; border-radius: 12px; background: #245f4e; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; margin-left: auto; font-size: 13px; font-weight: 600; }
+.conversation-export-actions button:disabled { opacity: .45; }
+.conversation-document { max-width: 794px; margin: 0 auto; padding: 48px; background: white; color: #24332d; font: 14px/1.85 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; overflow-wrap: anywhere; }
+.conversation-document__cover { border-bottom: 2px solid #28634f; margin-bottom: 28px; padding-bottom: 24px; }
+.conversation-document__brand { font-size: 11px; letter-spacing: .12em; color: #457660; }
+.conversation-document h1 { margin: 12px 0 10px; font-size: 28px; font-weight: 650; letter-spacing: -.03em; }
+.conversation-document__meta, .conversation-document__label, .conversation-document figcaption { color: #6b756c; font-size: 11px; }
+.conversation-document h2 { font-size: 18px; font-weight: 650; margin: 16px 0 12px; }
+.conversation-document h3 { font-size: 14px; font-weight: 650; }
+.conversation-document__problem, .conversation-document__task { border-left: 3px solid #3b765f; padding: 12px 20px; margin-bottom: 32px; background: #f6f8f3; }
+.conversation-document__problem > h2, .conversation-document__task > h2 { margin-top: 0; }
+.conversation-document__section-title { padding-bottom: 10px; border-bottom: 1px solid #d6ded5; }
+.conversation-document__entry { margin: 0 0 22px; padding: 0 0 22px; border-bottom: 1px solid #e6e9e2; }
+.conversation-document__entry-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.conversation-document__entry-heading h3 { flex: 1; margin: 0; }
+.conversation-document__entry-heading time { font-size: 9px; color: #788078; white-space: nowrap; }
+.conversation-document__number { font-size: 11px; color: #6b8a78; font-variant-numeric: tabular-nums; }
+.conversation-document__entry--user > .rich-learning-text { padding-left: 14px; border-left: 2px solid #d4dcd2; }
+.conversation-document__entry--system { color: #556c5d; font-size: 12px; }
+.conversation-document blockquote { border-left: 2px solid #91aa98; background: #f7f8f4; margin: 12px 0; padding: 10px 16px; }
+.conversation-document .rich-learning-text { font-size: inherit; line-height: inherit; color: inherit; }
+.conversation-document .rich-learning-text p { margin: 0 0 10px; }
+.conversation-document .rich-heading { margin: 14px 0 8px; font-size: 15px; }
+.conversation-document .rich-learning-text li { margin: 3px 0; }
+.conversation-document figure { margin: 16px 0; }
+.conversation-document img { display: block; max-width: 100%; max-height: 210mm; width: auto; height: auto; object-fit: contain; }
+.conversation-document figcaption { margin-top: 6px; }
+.conversation-document__suggestions { margin-top: 14px; font-size: 12px; color: #627467; }
+.conversation-document__suggestions h4 { font-weight: 600; margin-bottom: 4px; }
+.conversation-document__suggestions ul { padding-left: 18px; list-style: disc; }
+.conversation-document__warning { font-size: 11px; color: #9c642d; }
+.conversation-document__blank { line-height: 2.6; }
+.conversation-document__answer { display: inline; padding: 0 12px 3px; margin: 0 6px; border-bottom: 1px solid #39705c; }
+.conversation-document__end { margin-top: 36px; border-top: 1px solid #dbe2d7; padding-top: 16px; color: #778074; font-size: 10px; }
+.conversation-document .katex-display { overflow-x: auto; white-space: normal; margin: 14px 0; font-size: .95em; }
+.conversation-document pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .conversation-export-dialog { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+  .conversation-export-preview { padding: 10px; }
+  .conversation-document { padding: 24px 18px; font-size: 13px; }
+  .conversation-export-toolbar { padding: 14px 18px; }
+  .conversation-export-actions button { width: 100%; }
+}
+@media print {
+  @page { size: A4 portrait; margin: 16mm 16mm 18mm; @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #777; } }
+  html:has(.conversation-export-root), body:has(.conversation-export-root) { height: auto !important; overflow: visible !important; background: white !important; }
+  body:has(.conversation-export-root) > :not(.conversation-export-root) { display: none !important; }
+  .conversation-export-root { position: static !important; display: block !important; }
+  .conversation-export-dialog, .conversation-export-dialog[open] { display: block !important; position: static !important; width: auto !important; height: auto !important; max-height: none !important; max-width: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; background: white !important; }
+  .conversation-export-dialog::backdrop, .conversation-export-toolbar, .conversation-export-help, .conversation-export-actions { display: none !important; }
+  .conversation-export-preview { display: block !important; overflow: visible !important; height: auto !important; padding: 0 !important; }
+  .conversation-document { max-width: none; padding: 0; margin: 0; font-size: 10.5pt; line-height: 1.8; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .conversation-document h1 { font-size: 22pt; }
+  .conversation-document h2, .conversation-document h3, .conversation-document__entry-heading { break-after: avoid; page-break-after: avoid; }
+  .conversation-document p, .conversation-document li { orphans: 3; widows: 3; }
+  .conversation-document figure, .conversation-document .katex-display { break-inside: avoid; page-break-inside: avoid; }
+  .conversation-document .rich-learning-text, .conversation-document .math-inline, .conversation-document .math-display { overflow: visible !important; max-height: none !important; }
+  .conversation-document * { animation: none !important; transition: none !important; }
+  .conversation-document .learning-math { overflow: visible; max-width: 100%; white-space: normal; }
+  .conversation-document .katex-display { overflow: visible !important; }
+  .conversation-document .learning-math .katex,
+  .conversation-document .learning-math .katex-html { white-space: normal; }
+  .conversation-document .learning-math .base { white-space: nowrap; }
+  .conversation-document .math-format-note { break-inside: avoid; }
+}

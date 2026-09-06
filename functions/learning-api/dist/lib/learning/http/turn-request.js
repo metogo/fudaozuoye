@@ -8,7 +8,7 @@ async function parseTurnRequest(request, multipart) {
     if (!multipart) {
         const body = await request.json();
         const input = parseTurnInput(body.input);
-        if (input.type === "image_question" || input.type === "image_answer")
+        if (input.type === "image_question" || (input.type === "image_answer" || input.type === "transcribe_step"))
             throw new Error("请先选择要发送的图片");
         return { stateToken: cleanText(body.stateToken, "学习会话不存在", 100_000), input };
     }
@@ -22,7 +22,7 @@ async function parseTurnRequest(request, multipart) {
         throw new Error("学习操作不合法");
     }
     const input = parseTurnInput(inputValue);
-    if (input.type !== "start" && input.type !== "image_question" && input.type !== "image_answer")
+    if (input.type !== "start" && input.type !== "image_question" && input.type !== "image_answer" && input.type !== "transcribe_step")
         throw new Error("图片只能用于原题分析、当前提问或作答");
     const image = form.get("image");
     if (!(image instanceof File))
@@ -50,7 +50,7 @@ function parseTurnInput(value) {
     if (input.type === "start" || input.type === "retry_original" || input.type === "request_transfer")
         return { type: input.type };
     if (input.type === "question")
-        return { type: "question", text: cleanText(input.text, "请输入想问的问题", 300) };
+        return { type: "question", text: cleanText(input.text, "请输入想问的问题", 300), ...(input.quote !== undefined ? { quote: cleanText(input.quote, "请选择要提问的文字", 12000) } : {}) };
     if (input.type === "image_question")
         return { type: "image_question" };
     if (input.type === "choose_suggestion")
@@ -59,13 +59,13 @@ function parseTurnInput(value) {
         return { type: "acknowledge_illustration", gateId: cleanText(input.gateId, "学习任务不存在", 100), receipt: cleanText(input.receipt, "插画完成凭证不存在", 500) };
     if (input.type === "answer")
         return { type: "answer", gateId: cleanText(input.gateId, "学习任务不存在", 100), answer: cleanText(input.answer, "请先写下答案", 2_000) };
-    if (input.type === "image_answer")
-        return { type: "image_answer", gateId: cleanText(input.gateId, "学习任务不存在", 100) };
-    if (input.type === "choose" && ["continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"].includes(String(input.choice))) {
+    if ((input.type === "image_answer" || input.type === "transcribe_step"))
+        return { type: input.type, gateId: cleanText(input.gateId, "学习任务不存在", 100) };
+    if (input.type === "choose" && ["view_step_answer", "continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"].includes(String(input.choice))) {
         const choice = input.choice;
-        if (choice !== "view_board" && input.boardContext !== undefined)
+        if (choice !== "view_board" && choice !== "try" && input.boardContext !== undefined)
             throw new Error("当前操作不能携带板书上下文");
-        return { type: "choose", gateId: cleanText(input.gateId, "学习任务不存在", 100), choice, ...(choice === "view_board" ? { boardContext: (0, board_context_1.parseBoardContext)(input.boardContext) } : {}) };
+        return { type: "choose", gateId: cleanText(input.gateId, "学习任务不存在", 100), choice, ...((choice === "view_board" || choice === "try") ? { boardContext: (0, board_context_1.parseBoardContext)(input.boardContext) } : {}) };
     }
     throw new Error("学习操作不合法");
 }

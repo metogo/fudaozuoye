@@ -19,6 +19,22 @@ function deterministicAnswerMatch(expected, actual) {
         return false;
     if (left === right)
         return true;
+    // Relations cannot be reduced to their numeric tokens (e.g. Δ<0 versus Δ≥0).
+    const relationText = (value) => value.normalize("NFKC").toLowerCase().replace(/\\delta/g, "δ").replace(/\\(?:geq|ge)(?![a-z])|>=/g, "≥").replace(/\\(?:leq|le)(?![a-z])|<=/g, "≤").replace(/\\(?:neq|ne)(?![a-z])|!=/g, "≠").replace(/[\s${}]/g, "");
+    const expectedRelation = relationText(expected);
+    const actualRelation = relationText(assessedActual);
+    if (/[<>≤≥≠=]/.test(expectedRelation + actualRelation)) {
+        if (expectedRelation === actualRelation)
+            return true;
+        const a = expectedRelation.match(/^([^<>≤≥≠=]*)([<>≤≥≠=])([^<>≤≥≠=]*)$/);
+        const b = actualRelation.match(/^([^<>≤≥≠=]*)([<>≤≥≠=])([^<>≤≥≠=]*)$/);
+        if (a && b && a[1] === b[1] && a[3] === b[3])
+            return a[2] === b[2];
+        const inverse = { ">": "<", "<": ">", "≥": "≤", "≤": "≥", "=": "=", "≠": "≠" };
+        if (a && b && a[1] === b[3] && a[3] === b[1])
+            return inverse[a[2]] === b[2];
+        return null;
+    }
     const leftQuantity = quantity(left);
     const rightQuantity = quantity(right);
     if (leftQuantity && rightQuantity) {

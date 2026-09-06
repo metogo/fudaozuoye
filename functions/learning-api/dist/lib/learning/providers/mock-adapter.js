@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MockProviderAdapter = exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = exports.BUILT_IN_MOCK_IMAGE_DATA_URL = void 0;
 const mock_engine_1 = require("../mock-engine");
 const curriculum_1 = require("../curriculum");
+const step_exercise_1 = require("../step-exercise");
 const grade_pedagogy_1 = require("../grade-pedagogy");
 const solution_recall_1 = require("../solution-recall");
 const types_1 = require("../types");
@@ -16,6 +17,11 @@ exports.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代�
 class MockProviderAdapter {
     id;
     reasoningLevel;
+    async generateStepExercise(session, source) {
+        const node = session.nodes.find((item) => item.id === session.currentNodeId && item.kind === "concept");
+        const concept = node?.title ?? session.problemGuide?.keyClue ?? "原题条件";
+        return (0, step_exercise_1.parseStepExercise)({ sourceQuote: source.slice(0, 100), instruction: "补全当前步骤要用到的关系", before: `结合刚才的讲解，这一步先要关注的知识或条件是：`, after: "。", answer: concept, explanation: `只需写出与当前步骤有关的${concept}，不需要做完整题。`, hint: "回看刚才讲解中连接已知条件和目标的那条关系。" }, source);
+    }
     modelId;
     mode = "demo";
     constructor(id, reasoningLevel = "light") {

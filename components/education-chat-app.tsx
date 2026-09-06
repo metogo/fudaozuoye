@@ -3,18 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { readSseResponse } from "@/lib/learning/client-sse";
+import { isOptionalPracticeTurn, turnIdleTimeout } from "@/lib/learning/turn-recovery";
+import { restoreChatRetry, type StoredChatRetry } from "@/lib/learning/chat-retry";
+import { BOARD_UI_ENABLED } from "@/lib/learning/ui-features";
+import { createTextBatcher } from "@/lib/learning/text-batcher";
+import { createDeferredTask } from "@/lib/learning/deferred-task";
 import { boardContextFromChat } from "@/lib/learning/board-context";
-import { enrichBoardLessonWithSafeAids } from "@/lib/learning/board-aids";
-import {
-  compileBoardExperience,
-  legacyBoardWorkspaceKey,
-} from "@/lib/learning/board-experience";
 import {
   BOARD_CACHE_VERSION,
   isStoredBoardCache,
   isStoredBoardLesson,
   type StoredBoardCache,
-} from "@/lib/learning/board-cache";
+} from "@/lib/learning/board-cache-schema";
 import {
   compileBoardDocument,
   createBoardWorkspaceState,
@@ -46,12 +46,12 @@ import {
   requiresProblemImage,
 } from "@/lib/learning/problem-evidence";
 import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint";
-import { ImageCropper } from "./image-cropper";
 import { BoardErrorBoundary } from "./board-error-boundary";
 import { LearningChat } from "./learning-chat";
 import { STREAMING_FINISH_MS } from "./streaming-indicator";
-import { WhiteboardInput } from "./whiteboard-input";
-import { LearningIllustration } from "./learning-illustration";
+const ImageCropper = dynamic(() => import("./image-cropper").then((module) => module.ImageCropper), { ssr: false });
+const WhiteboardInput = dynamic(() => import("./whiteboard-input").then((module) => module.WhiteboardInput), { ssr: false });
+const LearningIllustration = dynamic(() => import("./learning-illustration").then((module) => module.LearningIllustration), { ssr: false });
 
 const SESSION_KEY = "education-chat-session-v3";
 const LearningBoard = dynamic(
@@ -69,6 +69,7 @@ const fallbackIllustration: IllustrationAvailability = {
 };
 
 interface StoredChatState extends ClientSessionState {
+  pendingRetry?: StoredChatRetry;
   reasoningLevel?: ReasoningLevel;
   messages: ChatMessage[];
   boardCache?: StoredBoardCache;
@@ -76,6 +77,14 @@ interface StoredChatState extends ClientSessionState {
 }
 
 export function EducationChatApp() {
+  const [storageWriter] = useState(() => createDeferredTask());
+  useEffect(() => {
+    const flush = () => storageWriter.flush();
+    const hidden = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", hidden);
+    return () => { flush(); window.removeEventListener("pagehide", flush); document.removeEventListener("visibilitychange", hidden); };
+  }, [storageWriter]);
   const [hydrated, setHydrated] = useState(false);
   const [reasoningLevels, setReasoningLevels] = useState(
     fallbackReasoningLevels,
@@ -87,6 +96,9 @@ export function EducationChatApp() {
   const [session, setSession] = useState<LearningSession | null>(null);
   const [stateToken, setStateToken] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // A new problem owns a fresh set of transient chat UI state (scroll hints,
+  // quote selection, draft input and export dialog), not only fresh messages.
+  const [chatUiEpoch, setChatUiEpoch] = useState(0);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [responseCrop, setResponseCrop] = useState<{
     file: File;
@@ -123,11 +135,15 @@ export function EducationChatApp() {
   const [loadingLabel, setLoadingLabel] = useState("");
   const [notice, setNotice] = useState("");
   const [retryLabel, setRetryLabel] = useState("");
+  const [retryMessageId, setRetryMessageId] = useState<string | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<StoredChatRetry | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelReasonRef = useRef<"board-close" | "illustration-close" | null>(
     null,
   );
   const retryRef = useRef<null | (() => Promise<void>)>(null);
+  const restoredRetryRef = useRef<StoredChatRetry | null>(null);
+  const emphasisRequestsRef = useRef(new Set<AbortController>());
   const previewUrlsRef = useRef<string[]>([]);
   const pendingImageMessageIdRef = useRef<string | null>(null);
   const messageFinishTimersRef = useRef<Map<string, number>>(new Map());
@@ -137,6 +153,7 @@ export function EducationChatApp() {
   useEffect(() => {
     let active = true;
     const messageFinishTimers = messageFinishTimersRef.current;
+    const emphasisRequests = emphasisRequestsRef.current;
     const hydrationTimer = window.setTimeout(() => {
       if (!active) return;
       try {
@@ -163,17 +180,20 @@ export function EducationChatApp() {
               })),
             );
             setCachedBoardLesson(null);
+            const recoveredRetry = restoreChatRetry(restored.pendingRetry, restored, restored.messages);
+            if (recoveredRetry) {
+              setPendingRetry(recoveredRetry);
+              restoredRetryRef.current = recoveredRetry;
+              setRetryLabel("重试这一步");
+              setRetryMessageId(recoveredRetry.messageId);
+              setNotice("上次请求未完成，可以在消息旁重试。");
+            }
             boardRestoreRequestIdRef.current = restored.session.requestId;
             const recoverableBoardCache = boardCacheCandidate(
               restored.boardCache,
               restored.session.requestId,
             );
             if (recoverableBoardCache) {
-              const legacyWorkspaceKey = isStoredBoardLesson(
-                recoverableBoardCache.lesson,
-              )
-                ? legacyBoardWorkspaceKey(recoverableBoardCache.lesson)
-                : undefined;
               const expectedRequestId = restored.session.requestId;
               const expectedEpoch = ++boardRestoreEpochRef.current;
               if (
@@ -186,7 +206,7 @@ export function EducationChatApp() {
               void validateStoredBoardLesson(
                 restored.stateToken,
                 recoverableBoardCache.lesson,
-              ).then((result) => {
+              ).then(async (result) => {
                 if (
                   !active ||
                   boardRestoreRequestIdRef.current !== expectedRequestId ||
@@ -197,6 +217,9 @@ export function EducationChatApp() {
                 setPendingBoardCache(null);
                 if (result.status === "valid") {
                   try {
+                    const { compileBoardExperience, legacyBoardWorkspaceKey } = await import("@/lib/learning/board-experience");
+                    if (!active || boardRestoreRequestIdRef.current !== expectedRequestId || boardRestoreEpochRef.current !== expectedEpoch) return;
+                    const legacyWorkspaceKey = isStoredBoardLesson(recoverableBoardCache.lesson) ? legacyBoardWorkspaceKey(recoverableBoardCache.lesson) : undefined;
                     const document = compileBoardDocument(
                       compileBoardExperience(result.lesson, {
                         legacyWorkspaceKey,
@@ -211,6 +234,7 @@ export function EducationChatApp() {
                       ),
                     );
                   } catch {
+                    if (!active || boardRestoreRequestIdRef.current !== expectedRequestId || boardRestoreEpochRef.current !== expectedEpoch) return;
                     setCachedBoardLesson(null);
                     setBoardDocument(null);
                     setBoardWorkspaceState(null);
@@ -259,6 +283,8 @@ export function EducationChatApp() {
       });
     return () => {
       active = false;
+      for (const request of emphasisRequests) request.abort();
+      emphasisRequests.clear();
       window.clearTimeout(hydrationTimer);
       abortRef.current?.abort();
       for (const timer of messageFinishTimers.values())
@@ -272,6 +298,7 @@ export function EducationChatApp() {
   useEffect(() => {
     if (!hydrated) return;
     if (!session || !stateToken) return;
+    storageWriter.schedule(() => {
     const persistable = messages.map((message) => ({
       ...message,
       imageUrl: undefined,
@@ -301,6 +328,7 @@ export function EducationChatApp() {
           stateToken,
           reasoningLevel,
           messages: persistable,
+          ...(pendingRetry ? { pendingRetry } : {}),
           ...(boardCache ? { boardCache } : {}),
           ...(boardWorkspace ? { boardWorkspace } : {}),
         } satisfies StoredChatState),
@@ -310,6 +338,7 @@ export function EducationChatApp() {
         setNotice("当前浏览器无法保存进度；关闭页面后记录会丢失。"),
       );
     }
+    });
   }, [
     boardDocument,
     boardWorkspaceState,
@@ -317,9 +346,11 @@ export function EducationChatApp() {
     hydrated,
     messages,
     pendingBoardCache,
+    pendingRetry,
     reasoningLevel,
     session,
     stateToken,
+    storageWriter,
   ]);
 
   const selectReasoningLevel = (next: ReasoningLevel) => {
@@ -360,13 +391,14 @@ export function EducationChatApp() {
     if (gate && understandingChoice) {
       await performTurn(
         { session, stateToken },
-        { type: "choose", gateId: gate.id, choice: understandingChoice },
+        { type: "choose", gateId: gate.id, choice: understandingChoice, ...(understandingChoice === "try" ? { boardContext: boardContextFromChat(messages.filter((message) => message.kind === "assistant")) } : {}) },
       );
       return;
     }
     if (
       gate &&
       [
+        "step_answer",
         "node_answer",
         "solution_recall_answer",
         "original_answer",
@@ -382,10 +414,10 @@ export function EducationChatApp() {
     await performTurn({ session, stateToken }, { type: "question", text });
   };
 
-  const askCurrentQuestion = async (text: string) => {
+  const askCurrentQuestion = async (text: string, quote?: string) => {
     if (!session) return;
-    addMessage(userMessage(text));
-    await performTurn({ session, stateToken }, { type: "question", text });
+    addMessage({ ...userMessage(text), ...(quote ? { reference: { scopeLabel: "选中文字", sourceSummary: quote } } : {}) });
+    await performTurn({ session, stateToken }, { type: "question", text, ...(quote ? { quote } : {}) });
   };
 
   const sendImageResponse = async (
@@ -426,6 +458,7 @@ export function EducationChatApp() {
 
   const choose = async (gate: LearningGate, choice: LearningChoice) => {
     if (!session || busy) return;
+    if (choice === "view_board" && !BOARD_UI_ENABLED) return;
     if (
       choice === "view_illustration" &&
       canReuseIllustration(illustrationLessonRef.current ?? illustrationLesson, session)
@@ -435,8 +468,8 @@ export function EducationChatApp() {
       return;
     }
     const label =
-      gate.options?.find((option) => option.id === choice)?.label ??
-      choiceLabel(choice);
+      choice === "try" ? choiceLabel(choice) :
+      gate.options?.find((option) => option.id === choice)?.label ?? choiceLabel(choice);
     addMessage(userMessage(label));
     if (choice === "view_illustration") {
       illustrationLessonRef.current = null;
@@ -452,8 +485,8 @@ export function EducationChatApp() {
         type: "choose",
         gateId: gate.id,
         choice,
-        ...(choice === "view_board"
-          ? { boardContext: boardContextFromChat(messages) }
+        ...(choice === "view_board" || choice === "try"
+          ? { boardContext: boardContextFromChat(choice === "try" ? messages.filter((message) => message.kind === "assistant") : messages) }
           : {}),
       },
     );
@@ -673,11 +706,17 @@ export function EducationChatApp() {
     cancelReasonRef.current = null;
     abortRef.current = controller;
     let streamId: string | null = null;
+    let streamSource = "";
+    const rememberRetry = () => {
+      if (surface === "chat" && !image && !isOptionalPracticeTurn(input))
+        setPendingRetry({ version: 1, requestId: current.session.requestId, stateToken: current.stateToken, messageId: streamId, input });
+    };
+    rememberRetry();
+    const textBatch = createTextBatcher((text) => {
+      if (streamId) updateMessage(streamId, (message) => ({ ...message, text: message.text + text }));
+    });
     let receivedState = false;
-    const timeoutDuration =
-      input.type === "choose" && input.choice === "view_illustration"
-        ? 210_000
-        : 45_000;
+    const timeoutDuration = turnIdleTimeout(input);
     let timeout = window.setTimeout(() => controller.abort(), timeoutDuration);
     const keepAlive = () => {
       window.clearTimeout(timeout);
@@ -706,12 +745,18 @@ export function EducationChatApp() {
         signal: controller.signal,
       });
       await readSseResponse(response, async (event, data) => {
+        // A ready turn can still be producing optional suggestions when the user
+        // starts the next action. Late events must not replace its new task.
+        if (abortRef.current !== controller || controller.signal.aborted) return;
         keepAlive();
+        if (event !== "message.delta") textBatch.flush();
         if (event === "message.delta") {
           const text = String((data as { text?: string }).text ?? "");
           if (!text) return;
+          streamSource += text;
           if (!streamId) {
             streamId = id("assistant");
+            rememberRetry();
             const scopeLabel =
               input.type === "choose" && input.choice === "full_solution"
                 ? "原题完整讲解"
@@ -727,10 +772,7 @@ export function EducationChatApp() {
               createdAt: new Date().toISOString(),
             });
           } else {
-            updateMessage(streamId, (message) => ({
-              ...message,
-              text: message.text + text,
-            }));
+            textBatch.push(text);
           }
           return;
         }
@@ -740,6 +782,7 @@ export function EducationChatApp() {
             updateMessage(streamId, (message) => ({
               ...message,
               text: "",
+              emphasis: undefined,
               status: "streaming",
             }));
           setLoadingLabel(
@@ -747,13 +790,33 @@ export function EducationChatApp() {
               (data as { reason?: string }).reason ?? "正在重新整理完整讲解",
             ),
           );
+          streamSource = "";
         }
-        if (event === "message.complete" && streamId)
+        if (event === "message.complete" && streamId) {
           finishStreamMessage(
             streamId,
             String((data as { scopeLabel?: string }).scopeLabel ?? "") ||
               undefined,
           );
+          if (surface === "chat" && streamSource.length >= 30 && streamSource.length <= 16000) {
+            const messageId = streamId, source = finalizeLearningMarkdown(streamSource);
+            const emphasisController = new AbortController();
+            const requests = emphasisRequestsRef.current;
+            if (requests.size >= 2) { const oldest = requests.values().next().value; oldest?.abort(); requests.delete(oldest!); }
+            requests.add(emphasisController);
+            void fetch(apiUrl("/learning/emphasis"), {
+              method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ stateToken: current.stateToken, source, context: JSON.stringify({ operation: input, scopeLabel: (data as { scopeLabel?: string }).scopeLabel }) }),
+              signal: AbortSignal.any([emphasisController.signal, AbortSignal.timeout(22000)]),
+            }).then(async (response) => {
+              if (!response.ok) return;
+              const result = await response.json() as { marks?: ChatMessage["emphasis"] };
+              if (emphasisController.signal.aborted || boardRestoreRequestIdRef.current !== current.session.requestId || !Array.isArray(result.marks)) return;
+              updateMessage(messageId, (message) => message.text === source && (message.status === "complete" || message.status === "finishing") ? { ...message, emphasis: result.marks!.slice(0, 3) } : message);
+            }).catch(() => { /* Optional decoration never interrupts learning or creates a retry gate. */ })
+              .finally(() => requests.delete(emphasisController));
+          }
+        }
         if (event === "flow.suggestions" && streamId) {
           const suggestions = (data as { suggestions?: SuggestedQuestion[] })
             .suggestions;
@@ -850,12 +913,12 @@ export function EducationChatApp() {
         if (event === "path.updated")
           upsertPath((data as { labels?: string[] }).labels ?? []);
         if (event === "answer.result") {
-          const result = data as { passed?: boolean; text?: string };
+          const result = data as { passed?: boolean; assisted?: boolean; text?: string };
           addMessage({
             id: id("result"),
             role: "system",
             kind: "result",
-            text: `${result.passed ? "✓" : "再看一步："} ${String(result.text ?? "")}`.trim(),
+            text: `${result.passed ? (result.assisted ? "已对照答案：" : "✓") : "再看一步："} ${String(result.text ?? "")}`.trim(),
             createdAt: new Date().toISOString(),
           });
         }
@@ -874,6 +937,10 @@ export function EducationChatApp() {
             });
         }
         if (event === "board.lesson") {
+          if (!BOARD_UI_ENABLED) return;
+          const { enrichBoardLessonWithSafeAids } = await import("@/lib/learning/board-aids");
+          const { compileBoardExperience } = await import("@/lib/learning/board-experience");
+          if (abortRef.current !== controller || controller.signal.aborted) return;
           const lesson = enrichBoardLessonWithSafeAids(
             current.session,
             data as BoardLesson,
@@ -908,6 +975,7 @@ export function EducationChatApp() {
           setSession(next.session);
           setStateToken(next.stateToken);
           receivedState = true;
+          setPendingRetry(null);
         }
         if (event === "flow.ready") {
           setBusy(false);
@@ -919,6 +987,7 @@ export function EducationChatApp() {
     } catch (error) {
       const superseded = isAbortError(error) && abortRef.current !== controller;
       if (superseded) return;
+      textBatch.flush();
       const closedBoard =
         isAbortError(error) && cancelReasonRef.current === "board-close";
       if (closedBoard) {
@@ -946,6 +1015,12 @@ export function EducationChatApp() {
         );
         return;
       }
+      if (isOptionalPracticeTurn(input)) {
+        setNotice("同类练习暂时没有生成成功，当前学习进度已保留。可以继续提问、选择其他操作，或再次点击生成练习。");
+        // This branch does not advance the required learning task. Its existing
+        // action is the retry entry; do not lock the composer behind a retry.
+        return;
+      }
       if (streamId)
         updateMessage(streamId, (message) =>
           message.status === "complete" || message.status === "finishing"
@@ -960,8 +1035,11 @@ export function EducationChatApp() {
       if (!receivedState)
         setRetry("重试这一步", () =>
           performTurn(current, input, surface, image),
+          streamId,
         );
     } finally {
+      if (abortRef.current === controller) textBatch.flush();
+      textBatch.discard();
       window.clearTimeout(timeout);
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -985,6 +1063,10 @@ export function EducationChatApp() {
   };
 
   const reset = () => {
+    setChatUiEpoch((epoch) => epoch + 1);
+    for (const request of emphasisRequestsRef.current) request.abort();
+    emphasisRequestsRef.current.clear();
+    storageWriter.cancel();
     abortRef.current?.abort();
     abortRef.current = null;
     for (const timer of messageFinishTimersRef.current.values())
@@ -1021,19 +1103,26 @@ export function EducationChatApp() {
   };
 
   const retry = async () => {
-    if (busy || !retryRef.current) return;
+    if (busy) return;
     const action = retryRef.current;
+    const recovered = restoredRetryRef.current;
+    if (!action && (!recovered || !session || recovered.requestId !== session.requestId || recovered.stateToken !== stateToken)) return;
     clearRetry();
-    await action();
+    if (action) await action();
+    else if (recovered && session) await performTurn({ session, stateToken }, recovered.input);
   };
 
-  const setRetry = (label: string, action: () => Promise<void>) => {
+  const setRetry = (label: string, action: () => Promise<void>, messageId: string | null = null) => {
     retryRef.current = action;
     setRetryLabel(label);
+    setRetryMessageId(messageId);
   };
   const clearRetry = () => {
     retryRef.current = null;
+    restoredRetryRef.current = null;
     setRetryLabel("");
+    setRetryMessageId(null);
+    setPendingRetry(null);
   };
 
   const askOnBoard = async (text: string) => {
@@ -1062,8 +1151,12 @@ export function EducationChatApp() {
     );
   };
 
-  const reopenBoard = () => {
+  const reopenBoard = async () => {
     if (!cachedBoardLesson) return;
+    const epoch = boardRestoreEpochRef.current;
+    try {
+    const { compileBoardExperience } = await import("@/lib/learning/board-experience");
+    if (boardRestoreEpochRef.current !== epoch) return;
     const experience = compileBoardExperience(cachedBoardLesson);
     const document = boardDocument ?? compileBoardDocument(experience);
     setBoardDocument(document);
@@ -1071,6 +1164,9 @@ export function EducationChatApp() {
       restoreBoardWorkspaceState(document, current),
     );
     setBoardExperience(experience);
+    } catch {
+      if (boardRestoreEpochRef.current === epoch) setNotice("板书暂时无法打开，请稍后重试。");
+    }
   };
 
   const updateBoardWorkspace = (next: BoardWorkspaceState) => {
@@ -1221,6 +1317,7 @@ export function EducationChatApp() {
   return (
     <>
       <LearningChat
+        key={chatUiEpoch}
         messages={messages}
         session={session}
         reasoningLevels={reasoningLevels}
@@ -1231,6 +1328,7 @@ export function EducationChatApp() {
         loadingLabel={loadingLabel}
         notice={notice}
         retryLabel={retryLabel}
+        retryMessageId={retryMessageId}
         reviewProblem={reviewProblem}
         onReasoningLevel={selectReasoningLevel}
         onFile={(file) => {
@@ -1244,6 +1342,19 @@ export function EducationChatApp() {
           setResponseCrop({ file, intent });
         }}
         onWhiteboard={setWhiteboardIntent}
+        onTranscribeStep={async (gateId, blob, signal) => {
+          if (!session || session.flow.activeGate?.id !== gateId) throw new Error("当前步骤已变化，请重新填写");
+          const form = new FormData();
+          form.set("stateToken", stateToken);
+          form.set("input", JSON.stringify({ type: "transcribe_step", gateId }));
+          form.set("image", new File([blob], "step-answer.png", { type: blob.type || "image/png" }));
+          let result: { text: string; confidence: number } | undefined;
+          await readSseResponse(await fetch(apiUrl("/learning/turn"), { method: "POST", body: form, credentials: "include", signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) }), (event, data) => {
+            if (event === "input.transcribed") result = data as { text: string; confidence: number };
+          });
+          if (!result) throw new Error("没有识别清楚，请重试；手写内容仍保留");
+          return result;
+        }}
         onSend={sendText}
         onQuestion={askCurrentQuestion}
         onChoice={choose}
@@ -1312,7 +1423,7 @@ export function EducationChatApp() {
           onCancel={() => setWhiteboardIntent(null)}
         />
       )}{" "}
-      {boardExperience && boardDocument && boardWorkspaceState && (
+      {BOARD_UI_ENABLED && boardExperience && boardDocument && boardWorkspaceState && (
         <BoardErrorBoundary onClose={closeBoard}>
           <LearningBoard
             experience={boardExperience}
@@ -1360,7 +1471,7 @@ export function understandingChoiceFromText(
     )
   )
     return "continue";
-  if (["我来试试", "让我试试", "试试"].includes(normalized)) return "try";
+  if (["这一步我来做", "我来试试", "让我试试", "试试"].includes(normalized)) return "try";
   if (
     [
       "没懂",
@@ -1551,9 +1662,10 @@ function reasoningLabel(level: ReasoningLevel) {
   return level === "light" ? "轻度" : level === "medium" ? "中" : "高";
 }
 function choiceLabel(choice: LearningChoice) {
+  if (choice === "view_step_answer") return "查看这个空的答案";
   if (choice === "full_solution") return "看完整讲解";
   if (choice === "continue") return "懂了，继续";
-  if (choice === "try") return "我来试试";
+  if (choice === "try") return "这一步我来做";
   if (choice === "view_board") return "用板书讲清楚";
   if (choice === "view_illustration") return "插画演示";
   if (choice === "start_recall") return "我看完了，收起讲解";
@@ -1598,8 +1710,8 @@ export function canReuseIllustration(
   )
     return false;
   if (
-    lesson.frameCount < 2 ||
-    lesson.frameCount > 6 ||
+    lesson.frameCount < 1 ||
+    lesson.frameCount > 10 ||
     lesson.frameCount !== lesson.frames.length
   )
     return false;

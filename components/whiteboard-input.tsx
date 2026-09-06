@@ -3,8 +3,12 @@
 import { useRef, useState } from "react";
 import { ReactSketchCanvas, type ReactSketchCanvasRef } from "react-sketch-canvas";
 import { CheckIcon, EraserIcon, PencilIcon, RedoIcon, TrashIcon, UndoIcon } from "./icons";
+import { RichLearningText } from "./rich-learning-text";
 
-export function WhiteboardInput({ title = "白板作答", taskLabel, submitLabel, hint = "写步骤、公式或画辅助线都可以，AI 会结合当前题目阅读", onConfirm, onCancel }: {
+export function WhiteboardInput({ title = "白板作答", taskLabel, submitLabel, pending = false, statusMessage, showTask = false, hint = "写步骤、公式或画辅助线都可以，AI 会结合当前题目阅读", onConfirm, onCancel }: {
+  pending?: boolean;
+  statusMessage?: string;
+  showTask?: boolean;
   title?: string;
   taskLabel: string;
   submitLabel: string;
@@ -24,7 +28,7 @@ export function WhiteboardInput({ title = "白板作答", taskLabel, submitLabel
   };
 
   const confirm = async () => {
-    if (!pathCount || busy) return;
+    if (!pathCount || busy || pending) return;
     setBusy(true); setError("");
     try {
       const dataUrl = await canvasRef.current?.exportImage("png");
@@ -36,15 +40,17 @@ export function WhiteboardInput({ title = "白板作答", taskLabel, submitLabel
     } finally { setBusy(false); }
   };
 
-  return <section className="fixed inset-0 z-[70] flex h-dvh flex-col bg-[#f5f4f0] text-stone-950" aria-label={title}>
+  return <section className="handwriting-screen fixed inset-0 z-[70] flex h-dvh flex-col bg-[#f5f4f0] text-stone-950" aria-label={title}>
     <header className="flex shrink-0 items-center justify-between border-b border-stone-200 bg-white/90 px-4 py-3 backdrop-blur-xl">
-      <button type="button" onClick={onCancel} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-stone-500">取消</button>
+      <button type="button" onClick={onCancel} className="min-h-11 shrink-0 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-stone-500">取消</button>
       <div className="min-w-0 px-3 text-center"><h2 className="text-sm font-bold">{title}</h2><p className="max-w-[52vw] truncate text-[10px] text-stone-400">{taskLabel}</p></div>
-      <button type="button" disabled={!pathCount || busy} onClick={confirm} className="min-h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white disabled:bg-stone-200 disabled:text-stone-400">{busy ? "处理中" : submitLabel}</button>
+      <button type="button" disabled={!pathCount || busy || pending} onClick={confirm} className="min-h-11 shrink-0 whitespace-nowrap rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white disabled:bg-stone-200 disabled:text-stone-400">{busy || pending ? "正在识别" : submitLabel}</button>
     </header>
 
-    <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-5">
-      <div className="mb-3 flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm">
+    <div className="handwriting-content flex min-h-0 flex-1 flex-col p-3 sm:p-5">
+      {showTask && <div className="mb-3 max-h-[24dvh] shrink-0 overflow-y-auto rounded-xl bg-white p-3 text-sm leading-6"><RichLearningText text={taskLabel}/></div>}
+      {statusMessage && <p role="status" className="mb-2 text-sm text-amber-800">{statusMessage}</p>}
+      <div className="handwriting-tools mb-3 flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm">
         <div className="flex gap-1">
           <ToolButton active={tool === "pen"} label="画笔" onClick={() => selectTool("pen")}><PencilIcon className="h-4 w-4"/></ToolButton>
           <ToolButton active={tool === "eraser"} label="橡皮" onClick={() => selectTool("eraser")}><EraserIcon className="h-4 w-4"/></ToolButton>
@@ -55,7 +61,7 @@ export function WhiteboardInput({ title = "白板作答", taskLabel, submitLabel
           <IconButton label="清空" onClick={() => canvasRef.current?.clearCanvas()}><TrashIcon className="h-4 w-4"/></IconButton>
         </div>
       </div>
-      <div className="whiteboard-paper min-h-0 flex-1 overflow-hidden rounded-[24px] border border-stone-200 bg-white shadow-[0_16px_50px_rgba(41,37,36,.1)]">
+      <div inert={pending} className="whiteboard-paper min-h-0 flex-1 overflow-hidden rounded-[24px] border border-stone-200 bg-white shadow-[0_16px_50px_rgba(41,37,36,.1)]">
         <ReactSketchCanvas
           ref={canvasRef}
           width="100%"

@@ -44,7 +44,7 @@ export function answerGate(kind: "node_answer" | "solution_recall_answer" | "ori
   return {
     id: gateId(kind), kind, title, prompt, nodeId,
     ...(answerChoices?.length ? { answerChoices: [...answerChoices] } : {}),
-    ...(kind === "transfer_answer" ? {} : { options: [{ ...boardOption }, { ...illustrationOption }, { ...understandingOptions[3] }] }),
+    ...(kind === "transfer_answer" ? {} : { options: [...(kind === "solution_recall_answer" ? [{ id: "not_understood" as const, label: "还没懂，再讲一下", emphasis: "secondary" as const }] : []), { ...boardOption }, { ...illustrationOption }, { ...understandingOptions[3] }] }),
   };
 }
 
@@ -125,7 +125,7 @@ export function assertFlowState(value: unknown, nodes: KnowledgeNode[], transfer
   if (flow.stage === "reviewed_complete" && (flow.activeGate !== null || !flow.viewedSolution || !flow.solutionRecallPassed)) throw new Error("学习结束状态不一致");
   if (flow.activeGate?.options !== undefined) {
     const options = flow.activeGate.options;
-    const allowed = new Set(["continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"]);
+    const allowed = new Set(["view_step_answer", "continue", "try", "not_understood", "full_solution", "view_board", "view_illustration", "start_recall", "retry_original", "practice_similar", "finish_review"]);
     if (!Array.isArray(options) || options.length < 1 || new Set(options.map((option) => option.id)).size !== options.length || options.some((option) => !allowed.has(option.id) || typeof option.label !== "string" || !option.label.trim())) throw new Error("当前学习任务的操作不合法");
     if (flow.activeGate.kind === "transfer_answer" && options.some((option) => option.id === "full_solution")) throw new Error("同类练习不能提供原题完整讲解");
   }

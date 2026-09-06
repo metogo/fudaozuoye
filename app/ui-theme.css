@@ -1,0 +1,313 @@
+/* Selected direction: floating controls, solid reading surfaces.
+   Screen-only: keep exported PDF pagination and colours independent. */
+@media screen {
+  html:has(> body.apple-ui) { background: #fdfdfd; touch-action: pan-y pinch-zoom; }
+  .apple-ui {
+    --paper: #fdfdfd;
+    --ink: #171c1a;
+    --muted: #6c7471;
+    --line: #e2e7e4;
+    --ui-accent: #006951;
+    --ui-accent-text: #005b49;
+    --ui-accent-pressed: #004e3d;
+    --ui-tint: #e5f2ec;
+    --ui-glass: rgba(250, 250, 251, .82);
+    --ui-edge: rgba(216, 217, 221, .78);
+    --ui-shadow: 0 12px 22px #20212a13, 0 2px 5px #20212a06;
+    --ui-rim: inset 0 0 0 5px #ffffff70, inset 0 0 0 6px #e1e3e65e;
+    --ui-tray: #f4f4f5;
+    --ui-tray-shadow: inset 0 2px 7px #24263206, inset 0 -1px 2px #ffffffb3, 0 7px 18px #2325300c;
+    --ui-control: #f6f6f7;
+    --ui-control-shadow: inset 0 1px 1px #fff, 0 9px 16px #2426321a, 0 2px 4px #24263205;
+    --ui-primary-shadow: inset 0 0 0 1px #ffffff1f, inset 0 1px 3px #99e2cc3d, 0 9px 18px #142c2426;
+    --ui-ease: cubic-bezier(.22, .8, .25, 1);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .apple-ui :where(button, label:has(input[type="file"]), input, textarea, select) {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .apple-ui :where(button, label:has(input[type="file"])) {
+    transition: background-color .18s, color .18s, box-shadow .18s, opacity .18s, scale .18s var(--ui-ease);
+  }
+  .apple-ui :where(button:not(:disabled):active, label:has(input[type="file"]:not(:disabled)):active) { scale: .97; }
+  .apple-ui :where(button:disabled) { cursor: not-allowed; }
+  .apple-ui :where(button, input, textarea, select):focus-visible,
+  .apple-ui label:has(input:focus-visible) { outline: 3px solid #429d82; outline-offset: 3px; }
+  .apple-ui .learning-chat-shell { background: var(--paper); border: 0; box-shadow: none; }
+  .apple-ui .chat-header {
+    position: relative; margin: max(20px, env(safe-area-inset-top)) 16px 6px;
+    padding: 7px 10px; min-height: 58px; gap: 4px;
+    border: 1px solid var(--ui-edge); border-radius: 999px;
+    background: var(--ui-glass); box-shadow: var(--ui-rim), var(--ui-shadow);
+    backdrop-filter: blur(16px) saturate(1.15); -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  }
+  .apple-ui .chat-header > div:first-child { gap: 10px; min-width: 0; }
+  .apple-ui .chat-header .brand-mark { width: 42px; height: 42px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .apple-ui .comma-companion { display: inline-grid; width: 38px; height: 38px; flex-shrink: 0; align-items: center; justify-items: center; isolation: isolate; pointer-events: none; }
+  .apple-ui .comma-companion__pose { grid-area: 1 / 1; display: block; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .16s ease; user-select: none; }
+  .apple-ui .comma-companion[data-state="idle"] .comma-companion__pose--idle,
+  .apple-ui .comma-companion[data-state="thinking"] .comma-companion__pose--thinking,
+  .apple-ui .comma-companion[data-state="ready"] .comma-companion__pose--ready { opacity: 1; }
+  .apple-ui .comma-companion[data-state="thinking"] { animation: comma-think 1.4s ease-in-out 3; }
+  .apple-ui .comma-companion[data-state="ready"] { animation: comma-arrive .55s var(--ui-ease) 1; }
+  .apple-ui .home-welcome-actor { position: fixed; top: 0; left: 0; z-index: 40; pointer-events: none; user-select: none; transform-origin: 0 0; }
+  .apple-ui .home-welcome-actor[hidden] { display: none; }
+  .apple-ui .home-welcome-actor[data-playing] { will-change: transform, opacity; }
+  .apple-ui .home-welcome-actor img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .apple-ui .home-welcome-actor img + img { opacity: 0; }
+  .apple-ui .lesson-chat-shell .next-turn-placeholder > div:first-child > .comma-companion { width: 32px; height: 32px; background: transparent; box-shadow: none; }
+  @keyframes comma-think { 0%, 100% { transform: rotate(0); } 45% { transform: translateY(-1px) rotate(-6deg); } }
+  @keyframes comma-arrive { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-2px) rotate(4deg); } 70% { transform: translateY(1px); } }
+  .apple-ui .chat-header > div > span:last-child:not(.brand-mark) { font-size: 12px; font-weight: 500; color: #242928; letter-spacing: 0; }
+  .apple-ui .chat-header-actions { gap: 0; padding: 0 3px; margin: -2px -1px -2px 0; background: #f8f8f980; border: 1px solid white; border-radius: 999px; box-shadow: 0 5px 12px #22252c08, inset 0 0 0 1px #fff9; }
+  .apple-ui .chat-header-actions:empty { display: none; }
+  .apple-ui .chat-header-actions button { color: var(--ui-accent-text); border-radius: 999px; padding-inline: 12px; font-size: 13px; white-space: nowrap; }
+  .apple-ui .chat-header .chat-export-trigger { padding: 0; width: 44px; }
+  .apple-ui .chat-header .chat-export-trigger span { display: none; }
+  .apple-ui .chat-header .chat-export-trigger svg { width: 21px; height: 21px; }
+  .apple-ui .chat-header-actions button + button { position: relative; border-left: 0; }
+  .apple-ui .chat-header-actions button + button::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: #e4e5e8; pointer-events: none; }
+  .apple-ui .lesson-chat-shell .chat-scroll { padding: 14px 24px 28px; scroll-padding-block: 20px; }
+  .apple-ui .chat-scroll { touch-action: pan-y pinch-zoom; }
+  .apple-ui .chat-scroll:focus-visible { outline: 2px solid #429d82; outline-offset: -2px; }
+  .apple-ui .lesson-chat-shell .chat-scroll > div { gap: 22px; }
+  .apple-ui .lesson-chat-shell .chat-message--student > div { margin-right: -12px; background: #dfefe8; color: var(--ink); border: 0; border-radius: 24px 24px 1px 24px; padding: 12px; box-shadow: inset 5px 7px 18px #e8f7f040; }
+  .apple-ui .chat-message--student > div > p { font-size: 14px; line-height: 24px; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher > div { position: relative; padding: 6px 0 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher > div > div:first-child:not(.copyable-learning-text) { margin-bottom: 14px; color: var(--ui-accent-text); font-size: 12px; letter-spacing: .025em; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-learning-text { color: var(--ink); font-size: 16px; line-height: 1.8; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-learning-text--compact { font-size: inherit; line-height: inherit; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-learning-text > .rich-heading:first-child,
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-heading--primary { font-size: 26px; line-height: 1.35; font-weight: 650; letter-spacing: 0; color: var(--ui-accent-text); margin-bottom: 20px; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-learning-text p { margin-block: 16px; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .rich-learning-text > p:last-child { margin-bottom: 0; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher .katex-display { color: var(--ui-accent-text); margin: 16px 0; padding: 4px 0; background: transparent; font-size: 1.08em; }
+  /* Only simple arithmetic gets the mock's bold sans face. Algebra, fractions,
+     roots and matrices retain KaTeX's mathematical metrics and typefaces. */
+  .apple-ui .lesson-chat-shell .rich-learning-text[data-arithmetic-displays] .katex-display .katex { font-family: inherit; font-weight: 600; }
+  .apple-ui .lesson-chat-shell .chat-message--teacher > div > div:first-child:not(.copyable-learning-text) .rich-learning-text { color: inherit; }
+  .apple-ui .lesson-chat-shell .copyable-learning-text__footer { position: relative; margin: 0; }
+  .apple-ui .lesson-chat-shell .copyable-learning-text__footer:has(button) { margin-top: 8px; min-height: 44px; }
+  .apple-ui .lesson-chat-shell .copyable-learning-text__feedback:not(.sr-only) { min-width: 0; max-width: 250px; overflow-wrap: anywhere; text-align: right; color: #6c7d73; }
+  .apple-ui .chat-message-reference { border-color: #bed8cc; }
+  .apple-ui .chat-message-reference__summary { color: #52695e; }
+  .apple-ui .chat-milestone { opacity: 1; color: #657269; }
+  .apple-ui .chat-milestone > span { width: 26px; height: 26px; background: #edf4ef; border: 0; color: var(--ui-accent); }
+  .apple-ui .chat-milestone .rich-learning-text { font-size: 12px; line-height: 1.6; }
+  .apple-ui .copyable-learning-text__copy { color: #6c7d73; }
+  .apple-ui .lesson-chat-shell .chat-gate { border-top: 1px solid var(--line); padding-top: 16px; }
+  .apple-ui .lesson-chat-shell .chat-gate > div:first-child { gap: 10px; margin: 0 0 10px; }
+  .apple-ui .lesson-chat-shell .chat-gate > div:first-child > .chat-gate__avatar { background: var(--ui-accent); width: 24px; height: 24px; margin-top: 2px; box-shadow: inset 2px 3px 5px #4cbca56b, inset 0 0 0 1px #ffffff47; }
+  .apple-ui .lesson-chat-shell .chat-gate > div:first-child p { color: var(--ui-accent-text); font-size: 14px; letter-spacing: .02em; }
+  .apple-ui .lesson-chat-shell .chat-gate h2 { font-size: 19px; line-height: 1.5; font-weight: 600; margin-top: 4px; }
+  .apple-ui .chat-gate[data-gate-kind="understanding"] > div:first-child > div { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+  .apple-ui .chat-gate[data-gate-kind="understanding"] h2 { margin: 0; font-size: 16px; }
+  .apple-ui .chat-gate__body:has(> .chat-gate__options) {
+    padding: 12px 12px 14px; margin-inline: -8px; border: 1px solid #e5e5e8; border-radius: 28px;
+    background: var(--ui-tray); box-shadow: var(--ui-tray-shadow);
+  }
+  .apple-ui .lesson-chat-shell .chat-gate__options { gap: 10px; }
+  .apple-ui .lesson-chat-shell .chat-gate__options > button,
+  .apple-ui .lesson-chat-shell .chat-gate__helpers > button {
+    min-width: 0; min-height: 50px; padding: 10px 12px; border-radius: 999px; border: 1.5px solid #ffffff;
+    background: var(--ui-control); box-shadow: var(--ui-control-shadow); color: var(--ui-accent-text); font-size: 14px; font-weight: 550;
+    text-decoration: none; gap: 8px;
+  }
+  .apple-ui .lesson-chat-shell .chat-gate__options > button[data-emphasis="primary"] { position: relative; background: var(--ui-accent); color: white; border-color: #529c89; min-height: 48px; padding-inline: 40px; font-size: 16px; letter-spacing: .035em; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .gate-action-icon { width: 21px; height: 21px; flex-shrink: 0; }
+  .apple-ui .gate-action-arrow { position: absolute; right: 19px; top: 50%; transform: translateY(-50%); width: 21px; height: 21px; flex-shrink: 0; }
+  .apple-ui .lesson-chat-shell .chat-gate__helpers { border: 0; margin-top: 12px; padding: 0; gap: 8px; }
+  .apple-ui .lesson-chat-shell .chat-gate__helpers > button { display: flex; width: 100%; min-height: 42px; }
+  .apple-ui .chat-gate__body > p { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  .apple-ui .learning-prompt { border-color: var(--line); background: #f5f8f6; border-radius: 22px; }
+  .apple-ui .learning-prompt > p { font-size: 12px; }
+  .apple-ui .step-blank { padding: 20px; background: white; border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 5px 20px #20392c06; }
+  .apple-ui .step-blank__sentence { line-height: 2.3; }
+  .apple-ui .step-blank__slot { color: var(--ui-accent); background: var(--ui-tint); border-color: #6ea38d; border-radius: 12px; padding: 4px 16px; }
+  .apple-ui .step-blank[data-answer-revealed] .step-blank__slot { border-style: solid; background: #dcefe5; }
+  .apple-ui .step-blank input { border-radius: 14px; min-height: 48px; font-size: 16px; }
+  .apple-ui .step-blank > p { font-size: 13px; line-height: 1.7; }
+  .apple-ui .step-blank > p:first-child { font-size: 15px; color: #48584e; }
+  .apple-ui .step-blank > button { color: var(--ui-accent); font-size: 13px; }
+  .apple-ui .step-blank__actions { margin-top: 8px; }
+  .apple-ui .step-blank__actions button { border-radius: 999px; border-color: white; background: var(--ui-control); box-shadow: var(--ui-control-shadow); }
+  .apple-ui .step-blank__actions button:first-child { background: var(--ui-accent); color: white; border-color: #529c89; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .lesson-chat-shell .suggested-question-trail { border: 0; padding-top: 4px; }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__heading { justify-content: center; margin-bottom: 12px; }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__heading h3 { color: var(--ui-accent); font-size: 14px; }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__branches { border-color: var(--line); border-radius: 22px; background: #f4f8f5; }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__question { padding: 14px 16px; }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__question + .suggested-question-trail__question { border-color: var(--line); }
+  .apple-ui .lesson-chat-shell .suggested-question-trail__question > span.min-w-0 > span:last-child { color: #6b7d72; }
+  .apple-ui .lesson-chat-shell .chat-composer { background: var(--paper); padding: 8px 16px max(28px, env(safe-area-inset-bottom)); backdrop-filter: none; }
+  .apple-ui .lesson-chat-shell .chat-composer .composer-surface,
+  .apple-ui .composer-surface { border: 1px solid var(--ui-edge); border-radius: 32px; padding: 7px; background: var(--ui-glass); box-shadow: var(--ui-rim), var(--ui-shadow); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .apple-ui .composer-surface:focus-within { border-color: #80b6a1; box-shadow: var(--ui-rim), 0 0 0 3px #448d7410; }
+  /* The capsule owns textarea focus, avoiding a second rectangular outline. */
+  .apple-ui .composer-surface:has(textarea:focus-visible) { border-color: #429d82; outline: 2px solid #429d82; outline-offset: 0; }
+  .apple-ui .composer-surface textarea:focus-visible { outline: none; }
+  .apple-ui .chat-composer__input-row { align-items: center; }
+  .apple-ui .chat-composer__input-row textarea { font-size: 16px; line-height: 24px; }
+  .apple-ui .chat-composer__input-row textarea::placeholder { color: #6a756e; }
+  .apple-ui .chat-composer__input-row textarea:placeholder-shown { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .apple-ui .chat-composer__input-row :is(button, label) { width: 44px; height: 44px; min-width: 44px; border-radius: 50%; }
+  .apple-ui .chat-composer__input-row [type="submit"] { background: var(--ui-accent); color: white; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .chat-composer__input-row [type="submit"]:disabled { background: #dbe9e2; color: #819b8f; box-shadow: inset 0 0 0 1px #ffffffb3; }
+  .apple-ui .chat-composer [aria-label="输入方式"] { padding-right: 3px; border-color: var(--line); }
+  .apple-ui .chat-composer [aria-label="输入方式"] > button { position: relative; }
+  .apple-ui .chat-composer [aria-label="输入方式"] > button::after { content: ""; position: absolute; right: 0; top: 12px; bottom: 12px; width: 1px; background: #e2e4e8; pointer-events: none; }
+  .apple-ui .chat-composer [aria-label="输入方式"] svg { width: 22px; height: 22px; }
+  .apple-ui .lesson-chat-shell .chat-composer > div:not(.composer-surface) { font-size: 12px; }
+  .apple-ui .chat-composer [class*="text-[9px]"] { font-size: 11px; letter-spacing: 0; color: #6a756e; }
+  .apple-ui .chat-composer [class*="text-[11px]"] { font-size: 12px; }
+  .apple-ui .chat-composer [class*="text-[10px]"] { font-size: 12px; }
+  .apple-ui .chat-composer > div:not(.composer-surface) > span:first-child { background: var(--ui-accent); }
+  .apple-ui .chat-new-message { background: #eef6f1; color: var(--ui-accent); border: 1px solid #d2e4da; box-shadow: var(--ui-shadow); font-size: 13px; }
+  .apple-ui .lesson-chat-shell .chat-composer.chat-composer--quoted { padding: 12px; border-radius: 26px; background: #f7fcf9; border-color: #badbcb; box-shadow: 0 12px 40px #163c2929; }
+  .apple-ui .chat-composer [aria-label="正在引用的文字"] { border: 0; border-radius: 14px; border-left: 3px solid var(--ui-accent); background: var(--ui-tint); }
+  .apple-ui .selection-ask-trigger { background: var(--ui-accent); box-shadow: inset 0 0 0 1px #ffffff40, 0 5px 16px #00483226; }
+  .apple-ui .selection-ear:active, .apple-ui .selection-ask-trigger:active { scale: 1; }
+  .apple-ui .chat-toast { top: max(86px, calc(env(safe-area-inset-top) + 74px)); background: #edf5f0; color: #254937; border: 1px solid #cbdfd3; border-radius: 24px; box-shadow: 0 12px 40px #23453320; font-size: 14px; }
+  .apple-ui .chat-toast button { border-radius: 999px; color: var(--ui-accent); background: white; font-size: 13px; }
+  .apple-ui .loading-whisper { border-color: var(--line); border-radius: 22px; background: #f3f7f4; }
+  .apple-ui .loading-whisper::before { display: none; }
+  .apple-ui .loading-whisper p, .apple-ui .next-turn-placeholder p { font-size: 13px; }
+  .apple-ui .next-turn-placeholder__preview { border: 0; border-radius: 24px; background: #eff4f0; }
+  .apple-ui .next-turn-placeholder__skeleton { background: #dbe8df; }
+  .apple-ui .completion-panel, .apple-ui .recognition-review { border-radius: 26px; border: 1px solid var(--line); box-shadow: var(--ui-shadow); background: #f1f7f3; color: var(--ink); padding: 24px; }
+  .apple-ui .completion-panel p { color: #65796c; font-size: 13px; line-height: 1.7; }
+  .apple-ui .completion-panel > p:first-child { color: var(--ui-accent); }
+  .apple-ui :is(.completion-panel, .recognition-review) button { min-height: 48px; border-radius: 999px; font-size: 14px; }
+  .apple-ui .completion-panel > div > button:first-child, .apple-ui .recognition-review > button, .apple-ui .recognition-review [aria-pressed="true"] { background: var(--ui-accent); color: white; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .completion-panel > div > button:not(:first-child) { color: #52665a; border-color: var(--line); }
+  .apple-ui .completion-panel > div > button:not(:first-child),
+  .apple-ui [aria-label="答案选项"] > button,
+  .apple-ui .chat-gate__body > button { background: var(--ui-control); border: 1px solid white; box-shadow: var(--ui-control-shadow); border-radius: 24px; color: var(--ui-accent-text); }
+  .apple-ui .recognition-review textarea { font-size: 16px; border-color: #b4cdbf; }
+  .apple-ui .recognition-review label { font-size: 13px; }
+  .apple-ui .recognition-review > div { border-color: var(--line); }
+  .apple-ui .home-chat-header { margin-bottom: 0; }
+  .apple-ui .home-chat-header > div > .home-brand:last-child:not(.brand-mark) { font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: .12em; color: #252b45; padding-left: 2px; }
+  .apple-ui .home-input-icon { width: 22px; height: 22px; margin-inline: 7px 3px; color: #737b78; }
+  .apple-ui .home-chat-scroll { padding: clamp(32px, 9dvh, 80px) 28px 0; }
+  .apple-ui .home-canvas { padding: 0 4px 36px; }
+  .apple-ui .home-welcome-greeting { font-size: 22px; color: var(--ui-accent); margin-bottom: 14px; }
+  .apple-ui .home-welcome-title { font-weight: 650; font-size: 36px; letter-spacing: -.035em; }
+  .apple-ui .home-welcome-hint { color: var(--muted); font-size: 15px; margin-top: 16px; }
+  .apple-ui .home-chat-composer { padding-inline: 24px; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .apple-ui .home-entry-actions { padding: 12px; border: 1px solid #e5e5e8; border-radius: 28px; background: var(--ui-tray); box-shadow: var(--ui-tray-shadow); margin-bottom: 22px; }
+  .apple-ui .home-camera-action { min-height: 60px; background: var(--ui-accent); border-radius: 999px; border: 1px solid #529c89; box-shadow: var(--ui-primary-shadow); font-size: 18px; }
+  .apple-ui .home-secondary-actions { margin: 10px 0 0; display: grid; gap: 10px; }
+  .apple-ui .home-secondary-action { min-height: 52px; justify-content: center; padding: 10px 16px; gap: 10px; font-size: 15px; border: 1.5px solid white; border-radius: 999px; background: var(--ui-control); color: var(--ui-accent-text); box-shadow: var(--ui-control-shadow); }
+  .apple-ui .home-secondary-action svg { color: inherit; width: 22px; height: 22px; }
+  .apple-ui .home-reasoning-picker { margin-top: 16px; }
+  .apple-ui .home-reasoning-picker > div { flex-wrap: wrap; }
+  .apple-ui .home-reasoning-picker > div > span { font-size: 12px; font-weight: 400; letter-spacing: .02em; color: #707874; }
+  .apple-ui .home-reasoning-picker > div > div { background: transparent; border: 0; padding: 0; gap: 4px; }
+  .apple-ui .home-reasoning-picker button { min-width: 44px; min-height: 44px; position: relative; justify-content: center; padding: 10px 8px; font-size: 12px; font-weight: 400; border-radius: 8px; border: 0; background: transparent; color: #707874; box-shadow: none; }
+  .apple-ui .home-reasoning-picker button::after { content: ""; position: absolute; bottom: 5px; left: 50%; width: 14px; height: 2px; border-radius: 1px; background: currentColor; opacity: 0; transform: translateX(-50%); pointer-events: none; }
+  .apple-ui .home-reasoning-picker button[aria-pressed="true"] { background: transparent; color: var(--ui-accent); font-weight: 600; box-shadow: none; }
+  .apple-ui .home-reasoning-picker button[aria-pressed="true"]::after { opacity: .65; }
+  .apple-ui .home-reasoning-picker button > span { display: none; }
+  .apple-ui .handwriting-screen { background: #f5f8f6; padding-top: env(safe-area-inset-top); }
+  .apple-ui .handwriting-screen > header { margin: 12px 16px 0; border: 1px solid var(--ui-edge); border-radius: 30px; padding: 6px; background: var(--ui-glass); box-shadow: var(--ui-rim), var(--ui-shadow); }
+  .apple-ui .handwriting-screen > header h2 { font-size: 15px; }
+  .apple-ui .handwriting-screen > header p { font-size: 12px; }
+  .apple-ui .handwriting-screen > header button { border-radius: 999px; color: var(--ui-accent); padding-inline: 14px; }
+  .apple-ui .handwriting-screen > header button:last-child:not(:disabled) { background: var(--ui-accent); color: white; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .handwriting-screen > header button:disabled { background: #e8eeeb; color: #81958a; box-shadow: inset 0 0 0 1px #ffffffb3; }
+  .apple-ui .handwriting-content { padding-bottom: max(16px, env(safe-area-inset-bottom)); max-width: 1100px; width: 100%; margin-inline: auto; }
+  .apple-ui .handwriting-content > p { font-size: 12px; line-height: 1.6; color: var(--muted); }
+  .apple-ui .handwriting-tools { padding: 5px; border-radius: 999px; border: 1px solid var(--ui-edge); box-shadow: var(--ui-rim), var(--ui-shadow); background: var(--ui-glass); flex-wrap: wrap; }
+  .apple-ui .handwriting-tools button { border-radius: 999px; min-height: 44px; color: var(--muted); }
+  .apple-ui .handwriting-tools [aria-pressed="true"] { color: var(--ui-accent); background: var(--ui-tint); }
+  .apple-ui .handwriting-tools svg { width: 21px; height: 21px; }
+  .apple-ui .handwriting-tools [aria-label="清空"] { color: #b44840; }
+  .apple-ui .whiteboard-paper { border-radius: 22px; border-color: var(--line); box-shadow: 0 4px 16px #20392c06; }
+  .apple-ui .cropper-panel { background: var(--paper); color: var(--ink); padding-top: max(20px, env(safe-area-inset-top)); }
+  .apple-ui .cropper-panel > header { margin: 0; padding: 8px 16px 20px; border: 0; border-radius: 0; background: transparent; box-shadow: none; align-items: flex-start; }
+  .apple-ui .cropper-panel > header button { border-radius: 999px; min-width: 44px; color: var(--ink); padding-inline: 4px; }
+  .apple-ui .cropper-panel > header button:last-child { color: var(--ui-accent); }
+  .apple-ui .cropper-panel > header p:first-child { font-size: 17px; line-height: 44px; font-weight: 600; }
+  .apple-ui .cropper-panel > header p:last-child { font-size: 12px; line-height: 20px; color: #7a817d; }
+  .apple-ui .cropper-media { padding-inline: 24px; }
+  .apple-ui .cropper-media > div { max-width: 760px; }
+  .apple-ui .cropper-media img { max-height: min(60dvh, calc(100dvh - 340px)); }
+  .apple-ui .cropper-footer { display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; gap: 14px; min-height: clamp(154px, 25dvh, 212px); padding: 20px 26px max(28px, env(safe-area-inset-bottom)); width: 100%; max-width: 812px; margin-inline: auto; }
+  .apple-ui .cropper-tools { margin: 0; gap: 12px; }
+  .apple-ui .cropper-tools button { display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #e2e5e3; border-radius: 999px; min-height: 44px; padding: 8px 15px; background: transparent; color: #335b4e; font-size: 14px; }
+  .apple-ui .cropper-tools svg { width: 21px; height: 21px; }
+  .apple-ui .cropper-footer > button { flex-shrink: 0; min-height: 54px; border-radius: 999px; background: var(--ui-accent); color: white; font-size: 17px; box-shadow: inset 0 1px 1px #ffffff24; }
+  .apple-ui .cropper-footer > p { color: #b13732; }
+  .apple-ui .crop-box { border-width: 1px; border-color: #79af9a; box-shadow: 0 0 0 9999px #273a3105; }
+  .apple-ui .crop-box[data-full-image="true"] { box-shadow: none; }
+  .apple-ui .crop-box button > span { border-color: #24664f; filter: none; width: 18px; height: 18px; border-top-width: 0; border-bottom-width: 0; border-left-width: 0; border-right-width: 0; }
+  .apple-ui .crop-box button > .border-t-4 { border-top-width: 2px; }
+  .apple-ui .crop-box button > .border-b-4 { border-bottom-width: 2px; }
+  .apple-ui .crop-box button > .border-l-4 { border-left-width: 2px; }
+  .apple-ui .crop-box button > .border-r-4 { border-right-width: 2px; }
+  .apple-ui .cropper-zoom { background: var(--paper); color: var(--ink); }
+  .apple-ui .cropper-zoom header { color: var(--muted); }
+  .apple-ui .cropper-zoom button { color: var(--ui-accent); border-radius: 999px; }
+  .apple-ui .cropper-zoom footer button { background: #edf3ef; }
+  @media (max-height: 600px) {
+    .apple-ui .cropper-panel { padding-top: env(safe-area-inset-top); }
+    .apple-ui .cropper-panel > header { padding-block: 0 4px; }
+    .apple-ui .cropper-footer { min-height: 0; padding-block: 8px max(12px, env(safe-area-inset-bottom)); gap: 8px; }
+    .apple-ui .cropper-media img { max-height: calc(100dvh - 220px); }
+  }
+  .apple-ui .conversation-export-dialog { border-radius: 28px; background: #f0f5f1; border-color: var(--line); }
+  .apple-ui .conversation-export-toolbar { background: var(--ui-glass); border-color: var(--line); }
+  .apple-ui .conversation-export-close { background: #e6eee8; color: var(--ui-accent); }
+  .apple-ui .conversation-export-actions { background: var(--ui-glass); border-color: var(--line); }
+  .apple-ui .conversation-export-actions button { background: var(--ui-accent); border-radius: 999px; min-height: 48px; font-size: 14px; box-shadow: var(--ui-primary-shadow); }
+  .apple-ui .conversation-export-help { font-size: 13px; }
+  .apple-ui .conversation-export-preview .conversation-document { border-radius: 6px; box-shadow: 0 4px 20px #163a2510; }
+  @media (hover: hover) {
+    .apple-ui .chat-header-actions button:hover, .apple-ui .home-secondary-action:hover, .apple-ui .chat-gate__helpers > button:hover { background: #ffffffd9; }
+    .apple-ui .lesson-chat-shell .chat-gate__options > button:not(:disabled):hover { filter: none; }
+    .apple-ui .home-camera-action:hover, .apple-ui .chat-gate__options > button[data-emphasis="primary"]:hover { background: #007158; filter: none; }
+  }
+  .apple-ui .home-camera-action:active,
+  .apple-ui .chat-gate__options > button[data-emphasis="primary"]:active,
+  .apple-ui .step-blank__actions button:first-child:active { background: var(--ui-accent-pressed); box-shadow: inset 0 2px 5px #003b3138, inset 0 0 0 1px #ffffff33, 0 2px 5px #142c2417; }
+  @media (min-width: 768px) {
+    .apple-ui .chat-header { margin-inline: 28px; }
+    .apple-ui .lesson-chat-shell .chat-scroll { padding-inline: 44px; }
+    .apple-ui .lesson-chat-shell .chat-composer { padding-inline: 28px; }
+    .apple-ui .home-chat-scroll, .apple-ui .home-chat-composer { padding-inline: 48px; }
+    .apple-ui .home-welcome-title { font-size: 44px; }
+    .apple-ui .home-secondary-actions { grid-template-columns: 1fr 1fr; }
+    .apple-ui .chat-header .chat-export-trigger { width: auto; padding-inline: 12px; }
+    .apple-ui .chat-header .chat-export-trigger span { display: inline; }
+  }
+  @media (max-width: 360px) {
+    .apple-ui .chat-header { margin-inline: 10px; padding: 5px; }
+    .apple-ui .chat-header > div:first-child { gap: 6px; }
+    .apple-ui .chat-header .brand-mark { width: 34px; height: 34px; }
+    .apple-ui .chat-header > div > span:last-child:not(.brand-mark) { font-size: 11px; }
+    .apple-ui .chat-header-actions button { padding-inline: 8px; font-size: 12px; }
+    .apple-ui .chat-header-actions { padding-inline: 0; }
+    .apple-ui .lesson-chat-shell .chat-scroll { padding-inline: 20px; }
+    .apple-ui .lesson-chat-shell .chat-gate__options > button { padding-inline: 8px; gap: 5px; font-size: 13px; }
+    .apple-ui .gate-action-icon { width: 18px; height: 18px; }
+    .apple-ui .step-blank { padding: 16px; }
+    .apple-ui .lesson-chat-shell .chat-composer { padding-inline: 10px; }
+    .apple-ui .handwriting-tools { border-radius: 22px; justify-content: center; gap: 4px; }
+    .apple-ui .handwriting-screen > header { margin-inline: 8px; }
+    .apple-ui .handwriting-screen > header button { font-size: 12px; padding-inline: 10px; }
+    .apple-ui .home-chat-scroll { padding-inline: 24px; }
+    .apple-ui .home-chat-composer { padding-inline: 20px; }
+  }
+  @media (max-width: 600px) { .apple-ui .conversation-export-dialog { border-radius: 0; } }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .apple-ui { --ui-glass: #fafcfb; --ui-edge: #8b9c91; }
+    .apple-ui .chat-header, .apple-ui .composer-surface { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .apple-ui *, .apple-ui *::before, .apple-ui *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+    .apple-ui :where(button, label):active { scale: 1; }
+  }
+}

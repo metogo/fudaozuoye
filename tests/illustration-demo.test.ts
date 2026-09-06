@@ -9,6 +9,7 @@ import { assembleTeachingLesson, compileTeachingProgram } from "@/lib/learning/p
 import { sealSession } from "@/lib/learning/server-state";
 import { teachingSceneSvg, type TeachingShape } from "@/lib/learning/teaching-scene";
 import type { ClientSessionState, IllustrationLesson, LearningSession, LearningTurnInput } from "@/lib/learning/types";
+import { genericProgram } from "./fixtures/general-teaching";
 
 const garden = "一个长方形菜园，长18米，宽12米。如果长增加4米，宽不变。1.新菜园的周长是多少米？2.新菜园的面积比原来增加了多少平方米？";
 const cases = [
@@ -83,37 +84,41 @@ describe("可核验分步演示", () => {
     scene.shapes.push({ id: "unsafe", kind: "label", x: 0, y: 0, text: '<script>alert("x")</script>' });
     expect(teachingSceneSvg(scene)).not.toContain("<script>");
   });
-  it("真实适配器只请求步骤分组，忽略模型发明的计算和图形", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ message: { content: JSON.stringify({ groups: [["given", "extend"], ["perimeter"], ["area"]], answer: "错误", shapes: "任意代码" }) } }] }));
+  it("真实适配器请求通用协议，计算与采样在隔离进程完成", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => Response.json({ choices: [{ message: { content: String(init?.body).includes("独立的原题") ? '{"verdict":"pass","issues":[]}' : JSON.stringify(genericProgram(garden)) } }] }));
     const onFrame = vi.fn(), lesson = await live(fetcher).generateIllustrationLesson(sessionFor(garden, "68米，48平方米"), onFrame);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(lesson.frameCount).toBe(3);
-    expect(onFrame).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(lesson.frameCount).toBe(2);
+    expect(onFrame).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(lesson)).not.toContain("错误");
     expect(JSON.stringify(lesson)).not.toContain("server-only-key");
     expect(String(fetcher.mock.calls[0][0])).not.toContain("images");
+    const auditBody = JSON.parse(String(fetcher.mock.calls[1][1]?.body));
+    expect(auditBody.max_tokens).toBe(350);
+    expect(JSON.stringify(auditBody)).not.toContain("submit_teaching_program");
+    expect(lesson.generationMetrics?.auditCount).toBe(1);
   });
-  it("规划5秒超时返回完整可信步骤；外部取消立即停止", async () => {
+  it("通用规划35秒超时无模板兜底；外部取消立即停止", async () => {
     vi.useFakeTimers();
     const fetcher: typeof fetch = async (_input, init) => new Promise((_resolve, reject) => {
       const abort = () => reject(new DOMException("Aborted", "AbortError"));
       if (init?.signal?.aborted) abort(); else init?.signal?.addEventListener("abort", abort, { once: true });
     });
     const s = sessionFor(garden, "68米，48平方米"), onFrame = vi.fn();
-    const pending = live(fetcher).generateIllustrationLesson(s, onFrame);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect((await pending).frameCount).toBe(4);
-    expect(onFrame).toHaveBeenCalledTimes(4);
+    const pending = expect(live(fetcher).generateIllustrationLesson(s, onFrame)).rejects.toThrow("35秒");
+    await vi.advanceTimersByTimeAsync(35000);
+    await pending;
+    expect(onFrame).not.toHaveBeenCalled();
     onFrame.mockClear();
     const c = new AbortController();
     const rejection = expect(live(fetcher).generateIllustrationLesson(s, onFrame, c.signal)).rejects.toMatchObject({ name: "AbortError" });
     c.abort(); await rejection;
     expect(onFrame).not.toHaveBeenCalled();
   });
-  it("未知题型在模型调用前拒绝", async () => {
-    const fetcher = vi.fn<typeof fetch>();
+  it("未知题型进入通用模型链路，失败最多修复一次", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ choices: [{ message: { content: "{}" } }] }));
     await expect(live(fetcher).generateIllustrationLesson(sessionFor("三角形求角度", "30度"), vi.fn())).rejects.toThrow();
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it("生成完成签发凭证，关闭才进入回忆，伪造凭证拒绝", async () => {
     const s = sessionFor(garden, "68米，48平方米"), body = await turn(s);
@@ -137,6 +142,15 @@ describe("可核验分步演示", () => {
     expect(illustrationFingerprint(browser)).toBe(illustrationFingerprint(s)); expect(canReuseIllustration(lesson, browser)).toBe(true);
     expect(canReuseIllustration({ ...lesson, receipt: undefined }, s)).toBe(false);
     expect(canReuseIllustration(lesson, { ...s, requestId: "another" })).toBe(false);
+  });
+  it("通用演示1至10帧都能复用，仍拒绝跨题和重复帧", () => {
+    const s = sessionFor(garden, "68米，48平方米");
+    const base = { ...assembleTeachingLesson(s, compileTeachingProgram(s)), receipt: "signed" };
+    for (const count of [1, 3, 7, 10]) {
+      const lesson = { ...base, frameCount: count, frames: Array.from({ length: count }, (_, i) => ({ ...base.frames[0], id: `frame-${i + 1}`, index: i + 1 })) };
+      expect(canReuseIllustration(lesson, s)).toBe(true);
+      expect(canReuseIllustration(lesson, { ...s, requestId: "different" })).toBe(false);
+    }
   });
 });
 

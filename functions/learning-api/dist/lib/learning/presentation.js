@@ -8,6 +8,7 @@ exports.assertBalancedLearningMarkup = assertBalancedLearningMarkup;
 exports.expandLearningMarkupRange = expandLearningMarkupRange;
 exports.parseLearningPrompt = parseLearningPrompt;
 exports.learningTextToPlainText = learningTextToPlainText;
+const step_answer_format_1 = require("./step-answer-format");
 function stripLearningChoiceLabel(source, index) {
     const label = String.fromCharCode(65 + index);
     return source.replace(new RegExp(`^(?:[（(]\\s*)?${label}\\s*[.．、:：)）]\\s*`), "").trim() || source;
@@ -98,6 +99,10 @@ function learningTextToPlainText(source) {
         .trim();
 }
 function preparePlainSegment(source) {
+    // Reuse the same conservative whole-fragment handling as answer slots.
+    const fragment = (0, step_answer_format_1.prepareStepAnswerMarkdown)(source);
+    if (fragment !== source)
+        return fragment;
     const formulas = [];
     const stash = (latex) => {
         const token = `\uE000${formulas.length}\uE001`;
@@ -105,6 +110,10 @@ function preparePlainSegment(source) {
         return token;
     };
     let text = structureSequentialItems(source);
+    text = text.replace(/[\\A-Za-z0-9{}()[\]^_+\-*/=<>|.,!≥≤≠ \t]+/g, (candidate) => {
+        const normalized = (0, step_answer_format_1.prepareStepAnswerMarkdown)(candidate);
+        return normalized === candidate ? candidate : `${candidate.match(/^\s*/)?.[0] ?? ""}${stash(normalized.slice(1, -1))}${candidate.match(/\s*$/)?.[0] ?? ""}`;
+    });
     text = text.replace(/((?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z](?:\s*[+\-−]\s*(?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z])*\s*=\s*(?:\d+\s*)?(?:sin|cos|tan|cot)\s*[A-Za-z](?:\s*(?:sin|cos|tan|cot)\s*[A-Za-z])*)/gi, (value) => stash(toLatex(value)));
     text = text.replace(/(\\frac\s*\{[^{}\n]+\}\s*\{[^{}\n]+\}|\\sqrt\s*\{[^{}\n]+\}|\\(?:sin|cos|tan|cot|angle|triangle)\s*[A-Za-z0-9]+)/g, (value) => stash(value));
     text = text.replace(/((?:\d+(?:\.\d+)?|[A-Za-z](?:[²³]|\^\s*\d+)?|\([^()\n，。；;:：]+\))(?:\s*[+\-−×÷*/]\s*(?:\d+(?:\.\d+)?|[A-Za-z](?:[²³]|\^\s*\d+)?|\([^()\n，。；;:：]+\)))+\s*(?:=|≤|≥|<|>)\s*(?:\d+(?:\.\d+)?|[A-Za-z](?:[²³]|\^\s*\d+)?)(?:\s*[+\-−×÷*/]\s*(?:\d+(?:\.\d+)?|[A-Za-z](?:[²³]|\^\s*\d+)?))*)/g, (value) => stash(toLatex(value)));

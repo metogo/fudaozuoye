@@ -12,6 +12,7 @@ const similar_1 = require("../../../lib/learning/http/similar");
 const transfer_1 = require("../../../lib/learning/http/transfer");
 const tutor_1 = require("../../../lib/learning/http/tutor");
 const turn_1 = require("../../../lib/learning/http/turn");
+const emphasis_1 = require("../../../lib/learning/http/emphasis");
 const verify_1 = require("../../../lib/learning/http/verify");
 const maximumRequestBytes = 8 * 1024 * 1024;
 const routes = {
@@ -26,6 +27,7 @@ const routes = {
     "POST /learning/similar": similar_1.postSimilarCheck,
     "POST /learning/tutor": tutor_1.postTutor,
     "POST /learning/turn": turn_1.postTurn,
+    "POST /learning/emphasis": emphasis_1.postEmphasis,
 };
 exports.main = (0, node_http_1.createServer)((request, response) => {
     void handle(request, response);

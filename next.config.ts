@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   basePath: basePath || undefined,
   poweredByHeader: false,
   reactStrictMode: true,
+  devIndicators: false,
 };
 
 export default nextConfig;

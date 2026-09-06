@@ -6,5 +6,7 @@ coverage
 .DS_Store
 *.tsbuildinfo
 outputs/
+output/
+tmp/
 work/
 out/

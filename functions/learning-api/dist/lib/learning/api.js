@@ -51,6 +51,14 @@ function parseSession(value) {
         if (!node.check || typeof node.check.prompt !== "string" || typeof node.check.answer !== "string" || !node.teaching || typeof node.teaching.explanation !== "string")
             throw new Error("知识节点教学内容不合法");
     }
+    if (session.flow?.activeGate?.kind === "step_answer") {
+        const blank = session.flow.activeGate.stepBlank;
+        if (!session.stepCheck || session.stepCheck.type !== "short_text" || !session.stepCheck.prompt || !session.stepCheck.answer || !blank || typeof blank.before !== "string" || typeof blank.after !== "string" || typeof blank.hint !== "string")
+            throw new Error("步骤填空数据不完整，请重新进入当前步骤");
+        const gate = session.flow.activeGate;
+        if (!gate.options?.some((option) => option.id === "view_step_answer"))
+            gate.options = [...(gate.options ?? []), { id: "view_step_answer", label: "查看这个空的答案", emphasis: "secondary" }];
+    }
     (0, flow_1.assertFlowState)(session.flow, session.nodes, session.transferCheck);
     (0, graph_1.assertGraphInvariants)(session);
     return session;

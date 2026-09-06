@@ -35,6 +35,7 @@ export type LearningFlowStage =
   | "complete";
 
 export type LearningGateKind =
+  | "step_answer"
   | "understanding"
   | "node_answer"
   | "solution_review"
@@ -45,6 +46,7 @@ export type LearningGateKind =
   | "needs_help";
 
 export type LearningChoice =
+  | "view_step_answer"
   | "continue"
   | "try"
   | "not_understood"
@@ -295,6 +297,10 @@ export interface IllustrationFrame {
   alt: string;
   imageUrl: string;
   scene?: import("./teaching-scene").TeachingScene;
+  visualNotes?: string[];
+  verification?: import("./teaching-program").TeachingVerification[];
+  schematic?: boolean;
+  sourceQuotes?: string[];
 }
 
 export interface IllustrationLesson {
@@ -305,6 +311,7 @@ export interface IllustrationLesson {
   title: string;
   frameCount: number;
   frames: IllustrationFrame[];
+  generationMetrics?: { totalMs: number; repairCount: number; protocolVersion: 2; auditCount?: number; auditMs?: number; auditVersion?: 1 };
 }
 
 export interface IllustrationAvailability {
@@ -387,6 +394,8 @@ export interface LearningGateOption {
 }
 
 export interface LearningGate {
+  stepBlank?: { before: string; after: string; hint: string };
+  stepAnswer?: { answer: string; explanation: string };
   id: string;
   kind: LearningGateKind;
   title: string;
@@ -430,11 +439,12 @@ export type LearningMilestone =
 
 export type LearningTurnInput =
   | { type: "start" }
-  | { type: "question"; text: string }
+  | { type: "question"; text: string; quote?: string }
   | { type: "image_question" }
   | { type: "choose"; gateId: string; choice: LearningChoice; boardContext?: BoardConversationMessage[] }
   | { type: "answer"; gateId: string; answer: string }
   | { type: "image_answer"; gateId: string }
+  | { type: "transcribe_step"; gateId: string }
   | { type: "choose_suggestion"; suggestionId: string }
   | { type: "acknowledge_illustration"; gateId: string; receipt: string }
   | { type: "retry_original" }
@@ -443,6 +453,7 @@ export type LearningTurnInput =
 export type ChatMessageKind = "user" | "assistant" | "milestone" | "path" | "result";
 
 export interface ChatMessage {
+  emphasis?: import("./learning-emphasis").LearningEmphasis[];
   id: string;
   role: "user" | "assistant" | "system";
   kind: ChatMessageKind;
@@ -563,6 +574,9 @@ export interface LearningSession {
   stage: SessionStage;
   evidence: AssessmentEvidence[];
   transferCheck: CheckItem | null;
+  solutionRecallCheck?: CheckItem;
+  stepCheck?: CheckItem;
+  stepAnswerViewedFor?: string;
   originalPassed: boolean;
   transferPassed: boolean;
   createdAt: string;

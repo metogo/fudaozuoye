@@ -1,5 +1,6 @@
 import { analyzeMock, expandMock, isBuiltInMockProblem, recognizeMock, similarCheckMock, solutionMock, transferCheckMock, verifyMock } from "../mock-engine";
 import { isSupportedSubjectBand } from "../curriculum";
+import { parseStepExercise } from "../step-exercise";
 import { adaptTeachingCopy, teachingBandOf } from "../grade-pedagogy";
 import { isConcreteRecallAnswer } from "../solution-recall";
 import { subjects, type BoardConversationMessage, type BoardLesson, type BoardSuggestion, type CheckItem, type GradeBand, type IllustrationFrame, type IllustrationLesson, type LearningSession, type ProblemSnapshot, type ProviderId, type ReasoningLevel, type SuggestedQuestion, type TutorScope } from "../types";
@@ -14,6 +15,11 @@ export const BUILT_IN_MOCK_IMAGE_DATA_URL = "data:image/jpeg;base64,demo";
 export const DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE = "演示模式只支持内置代表题，不支持自定义图片或文字题；请在 .env.local 中设置 AI_MOCK_MODE=false 并配置真实 AI 服务后再试";
 
 export class MockProviderAdapter implements ProviderAdapter {
+  async generateStepExercise(session: LearningSession, source: string) {
+    const node = session.nodes.find((item) => item.id === session.currentNodeId && item.kind === "concept");
+    const concept = node?.title ?? session.problemGuide?.keyClue ?? "原题条件";
+    return parseStepExercise({ sourceQuote: source.slice(0, 100), instruction: "补全当前步骤要用到的关系", before: `结合刚才的讲解，这一步先要关注的知识或条件是：`, after: "。", answer: concept, explanation: `只需写出与当前步骤有关的${concept}，不需要做完整题。`, hint: "回看刚才讲解中连接已知条件和目标的那条关系。" }, source);
+  }
   readonly modelId: string;
   readonly mode = "demo" as const;
 
