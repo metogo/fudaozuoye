@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import "./ui-theme.css";
+import "./home-editorial.css";
 
 export const metadata: Metadata = {
   title: "专注作业 持续理解",

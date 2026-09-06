@@ -1324,6 +1324,7 @@ export function EducationChatApp() {
         reasoningLevel={reasoningLevel}
         illustrationAvailability={illustrationAvailability}
         ready={ready}
+        homeMotionPaused={Boolean(cropFile || responseCrop || whiteboardIntent)}
         busy={busy}
         loadingLabel={loadingLabel}
         notice={notice}

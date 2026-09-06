@@ -9,9 +9,9 @@ import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/pr
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { gradeBandLabels } from "@/lib/learning/grade-pedagogy";
 import type { ChatMessage, IllustrationAvailability, LearningChoice, LearningGate, LearningSession, ProblemSnapshot, ReasoningAvailability, ReasoningLevel, SuggestedQuestion } from "@/lib/learning/types";
-import { ArrowIcon, BookIcon, CameraIcon, CheckIcon, DownloadIcon, ImageIcon, InfoIcon, KeyboardIcon, PencilIcon, QuestionIcon, RefreshIcon, SendIcon, SparkIcon, TutorIcon } from "./icons";
+import { ArrowIcon, BookIcon, CameraIcon, CheckIcon, ChevronIcon, DownloadIcon, ImageIcon, InfoIcon, KeyboardIcon, PencilIcon, QuestionIcon, RefreshIcon, SendIcon, SparkIcon, TutorIcon } from "./icons";
 import { CommaCompanion } from "./comma-companion";
-import { HomeWelcomeMotion } from "./home-welcome-motion";
+import { HomeWelcomeHero } from "./home-welcome-hero";
 import { RichLearningText, preloadLearningText } from "./lazy-rich-learning-text";
 import { CopyableLearningText } from "./copyable-learning-text";
 import { StepBlank } from "./step-blank";
@@ -24,6 +24,7 @@ import { BOARD_UI_ENABLED } from "@/lib/learning/ui-features";
 const ConversationExport = dynamic(() => import("./conversation-export").then((module) => module.ConversationExport), { ssr: false });
 
 interface LearningChatProps {
+  homeMotionPaused?: boolean;
   onTranscribeStep?: (gateId: string, blob: Blob, signal: AbortSignal) => Promise<{ text: string; confidence: number }>;
   messages: ChatMessage[];
   session: LearningSession | null;
@@ -246,7 +247,6 @@ export function LearningChat(props: LearningChatProps) {
   };
 
   return <main className={`learning-chat-shell mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden ${isHome ? "home-chat-shell" : "lesson-chat-shell bg-[#f7f6f2]"}`}>
-    <HomeWelcomeMotion active={isHome && props.ready && !props.busy}/>
     <header className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <CommaCompanion className="brand-mark" thinking={props.busy} canCelebrate={!props.notice && !hasPendingRetry}/>
@@ -260,7 +260,7 @@ export function LearningChat(props: LearningChatProps) {
     </header>
 
     <div ref={scrollRef} tabIndex={-1} aria-label="对话内容" onScroll={updateScrollState} className={`chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 sm:px-6 ${isHome ? "home-chat-scroll pb-5 pt-0" : "pb-7 pt-5"}`}>
-      {isHome ? <EmptyConversation ready={props.ready} fileError={fileError}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      {isHome ? <EmptyConversation ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <MessageList messages={visibleChatMessages} solutionDisplay={solutionDisplay} retryMessageId={props.retryLabel ? props.retryMessageId : null} busy={props.busy} onRetry={props.retryLabel ? props.onRetry : undefined}/>
         {props.reviewProblem && <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>}
         {props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn && <LoadingWhisper label={props.loadingLabel}/>}
@@ -299,15 +299,15 @@ export function LearningChat(props: LearningChatProps) {
       </button>}
       {isHome && <div className="home-entry-actions mx-auto max-w-2xl">
         <label className={`home-camera-action ${!props.ready ? "is-unavailable" : ""}`}>
-          <CameraIcon className="h-7 w-7"/><span>拍照发题</span>
+          <span className="home-camera-copy"><span>拍照发题</span><ArrowIcon/></span><span className="home-camera-lens"><CameraIcon/></span>
           <input aria-label="拍照发题" disabled={!props.ready} type="file" accept="image/*" capture="environment" className="sr-only" onChange={fileChange}/>
         </label>
         <div className="home-secondary-actions">
           <label className={`home-secondary-action ${!props.ready ? "is-unavailable" : ""}`}>
-            <ImageIcon className="h-6 w-6"/><span>从相册选择题目</span>
+            <ImageIcon className="h-6 w-6"/><span>从相册选择题目</span><ChevronIcon className="home-action-chevron"/>
             <input aria-label="从相册选择题目" disabled={!props.ready} type="file" accept="image/*" className="sr-only" onChange={fileChange}/>
           </label>
-          <button type="button" aria-label="白板写题" className="home-secondary-action" disabled={!props.ready} onClick={() => props.onWhiteboard("question")}><PencilIcon className="h-6 w-6"/><span>白板写题</span></button>
+          <button type="button" aria-label="白板写题" className="home-secondary-action" disabled={!props.ready} onClick={() => props.onWhiteboard("question")}><PencilIcon className="h-6 w-6"/><span>白板写题</span><ChevronIcon className="home-action-chevron"/></button>
         </div>
       </div>}
       {currentTask && !quote && <div className="mx-auto mb-2 flex max-w-2xl items-center gap-2 px-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><div className="min-w-0 flex-1"><span className="mr-1.5 text-[9px] font-semibold tracking-[.08em] text-stone-400">当前环节</span><span className="text-[11px] font-semibold text-stone-600">{currentTask.intent}</span></div>{answerMode && <button type="button" disabled={props.busy} onClick={() => { setQuestionGateId(questionMode ? null : gate?.id ?? null); setSelectedQuote(null); setInput(""); textareaRef.current?.focus(); }} className="min-h-11 shrink-0 rounded-xl px-2 text-[10px] font-semibold text-stone-500 transition hover:text-stone-900 disabled:opacity-40">{questionMode ? "返回作答" : "改为提问"}</button>}</div>}
@@ -347,15 +347,9 @@ export function chatJumpLabel(hasNewContent: boolean, hasSuggestionsBelow: boole
   return hasSuggestionsBelow ? hasNewContent ? "有新讲解 · 猜你想问 ↓" : "下面有猜你想问 ↓" : "有新讲解 ↓";
 }
 
-function EmptyConversation({ ready, fileError }: { ready: boolean; fileError: string }) {
+function EmptyConversation({ ready, fileError, motionPaused }: { ready: boolean; fileError: string; motionPaused?: boolean }) {
   return <section className="empty-chat home-canvas relative mx-auto w-full max-w-2xl px-3 pb-6 pt-8 sm:px-4 sm:pb-8">
-    <div className="home-hero max-w-xl">
-      <h1 className="home-welcome text-stone-950">
-        <span className="home-welcome-greeting mb-3 block text-base font-medium tracking-normal text-emerald-800 sm:text-lg">Hey，</span>
-        <span className="home-welcome-title block text-[clamp(1.8rem,7.5vw,2.75rem)] font-semibold leading-[1.25] tracking-[-.04em]">来一起解题吧</span>
-      </h1>
-      <p className="home-welcome-hint mt-4 text-[13px] leading-6 text-stone-500 sm:text-sm">拍张照，或写下题目。我们一步步来。</p>
-    </div>
+    <HomeWelcomeHero active={ready && !motionPaused}/>
     {(fileError || !ready) && <p className="relative z-10 mt-3 flex items-center gap-2 text-[9px] leading-5 text-red-700"><InfoIcon className="h-3.5 w-3.5 shrink-0"/>{fileError || "AI 服务正在准备"}</p>}
   </section>;
 }
