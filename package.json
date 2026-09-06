@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:performance": "node scripts/performance-audit.mjs",
     "test:real-model": "node scripts/real-model-regression.mjs",
     "test:e2e:real-users": "node --env-file=.env.local scripts/real-user-e2e.mjs",
@@ -44,11 +45,15 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.2",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.0",
     "vitest": "4.1.11"
   }
