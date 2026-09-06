@@ -39,4 +39,15 @@ describe("LearningIllustration", () => { beforeEach(() => { Object.definePropert
    rerender(<LearningIllustration lesson={null} frames={[]} expectedCount={0} busy={false} loadingLabel="" error="关键条件不足" canClose onClose={close} onRegenerate={vi.fn()}/>);
    expect(screen.getByRole("alert").textContent).toContain("部分条件还不清楚");
  });
+ it("将焦点留在插画对话框内，并把未分类失败转成安全说明", () => {
+   const close = vi.fn();
+   render(<LearningIllustration lesson={{ title: "图", frames, frameCount: 2 } as any} frames={[]} expectedCount={2} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={vi.fn()}/>);
+   const dialog = screen.getByRole("dialog");
+   const closeButton = screen.getByRole("button", { name: "关闭" });
+   expect(document.activeElement).toBe(closeButton);
+   fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+   expect(document.activeElement).toBe(screen.getAllByRole("button", { name: "重新生成" }).at(-1));
+   fireEvent.keyDown(dialog, { key: "Tab" });
+   expect(document.activeElement).toBe(closeButton);
+ });
 });
