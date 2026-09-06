@@ -239,6 +239,24 @@ describe("EducationChatApp", () => {
     expect(latestIllustration.expectedCount).toBe(1);
   });
 
+  it("插画生成失败只在插画页给出可重试反馈，不会让主学习任务失效", async () => {
+    const session = {
+      ...learnedSession,
+      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "view_illustration", label: "插画演示" }] } },
+    };
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session, stateToken: "x".repeat(48), messages: [] }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
+      .mockResolvedValueOnce(response("turn"));
+    vi.mocked(readSseResponse).mockRejectedValue(new Error("图解服务暂不可用"));
+    render(<EducationChatApp/>);
+    await screen.findByTestId("ready");
+    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
+    await waitFor(() => expect(latestIllustration.error).toContain("图解服务暂不可用"));
+    expect(latest.session.flow.activeGate.id).toBe("gate");
+    expect(latest.retryLabel).toBe("");
+  });
+
   it("读题中断时保留重试入口，重试不会清掉用户的原始提问", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
