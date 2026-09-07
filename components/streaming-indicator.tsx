@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "./ui-language";
 import { useEffect, useState } from "react";
 
 export type StreamingIndicatorStatus = "starting" | "streaming" | "finishing";
@@ -13,6 +14,7 @@ interface StreamingIndicatorProps {
 }
 
 export function StreamingIndicator({ status, compact = false }: StreamingIndicatorProps) {
+  const t = useUiText();
   const [waiting, setWaiting] = useState(false);
   const stateLabel = status === "starting" ? "正在准备" : status === "streaming" ? "正在输出" : "输出完成";
 
@@ -27,7 +29,7 @@ export function StreamingIndicator({ status, compact = false }: StreamingIndicat
     data-phase={status}
     data-waiting={status === "streaming" && waiting ? "true" : "false"}
     role="img"
-    aria-label={stateLabel}
+    aria-label={t(stateLabel)}
   >
     {status === "finishing" ? <svg viewBox="0 0 28 28" aria-hidden="true" focusable="false">
       <circle className="streaming-indicator__ring" cx="14" cy="14" r="9"/>
@@ -37,6 +39,6 @@ export function StreamingIndicator({ status, compact = false }: StreamingIndicat
         <path d="m23 5-1.6 1.7"/>
         <path d="M25.5 14h-2.2"/>
       </g>
-    </svg> : <><span className="streaming-indicator__ink-dot"/><span className="streaming-indicator__continuing">还在继续</span></>}
+    </svg> : <><span className="streaming-indicator__ink-dot"/><span className="streaming-indicator__continuing">{t("还在继续")}</span></>}
   </span>;
 }

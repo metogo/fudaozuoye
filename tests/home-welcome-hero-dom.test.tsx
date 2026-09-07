@@ -24,4 +24,21 @@ describe("HomeWelcomeHero", () => {
     expect(animateHomeCompanion).toHaveBeenCalledTimes(1);
     expect(animateHomeCompanion.mock.calls[0]?.[0]).toBeTruthy();
   });
+
+  it("暂停/恢复沿用本页介绍状态，卸载后重新进入会重新迎接", () => {
+    const stop = vi.fn();
+    animateHomeCompanion.mockReturnValue(stop);
+    const first = render(<HomeWelcomeHero active/>);
+    const visit = animateHomeCompanion.mock.calls[0][1];
+    expect(visit).toEqual({ introduced: false });
+    visit.introduced = true;
+    first.rerender(<HomeWelcomeHero active={false}/>);
+    expect(stop).toHaveBeenCalledTimes(1);
+    first.rerender(<HomeWelcomeHero active/>);
+    expect(animateHomeCompanion.mock.calls[1][1]).toBe(visit);
+    first.unmount();
+    render(<HomeWelcomeHero active/>);
+    expect(animateHomeCompanion.mock.calls[2][1]).toEqual({ introduced: false });
+    expect(animateHomeCompanion.mock.calls[2][1]).not.toBe(visit);
+  });
 });

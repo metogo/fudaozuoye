@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "./ui-language";
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, RefreshIcon, RedoIcon, ZoomIcon } from "./icons";
 
@@ -15,6 +16,7 @@ const minimumCropWidth = 15;
 const minimumCropHeight = 12;
 
 export function ImageCropper({ file, onConfirm, onCancel, title = "只保留一道题", hint = "拖动框移动，拖四角调整范围", confirmLabel = "裁剪并识别" }: { file: File; onConfirm: (blob: Blob, previewUrl: string) => void; onCancel: () => void; title?: string; hint?: string; confirmLabel?: string }) {
+  const t = useUiText();
   const [url, setUrl] = useState("");
   const [crop, setCrop] = useState<Crop>(initialCrop);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -132,35 +134,35 @@ export function ImageCropper({ file, onConfirm, onCancel, title = "只保留一�
 
   return <section className="cropper-panel fixed inset-x-0 top-0 z-50 flex flex-col bg-stone-950 text-white" style={viewportHeight ? { height: `${viewportHeight}px` } : undefined}>
     <header className="flex items-center justify-between px-5 py-4">
-      <button className="min-h-11 px-2 text-sm text-stone-300" onClick={onCancel}>取消</button>
-      <div className="text-center"><p className="text-sm font-semibold">{title}</p><p className="text-xs text-stone-400">{hint}</p></div>
-      <button type="button" disabled={busy} aria-label="重置裁剪区域" className="min-h-11 min-w-11 px-2 text-sm text-stone-300 disabled:opacity-40" onClick={() => setCrop(initialCrop)}><RefreshIcon className="h-5 w-5"/></button>
+      <button className="min-h-11 px-2 text-sm text-stone-300" onClick={onCancel}>{t("取消")}</button>
+      <div className="text-center"><p className="text-sm font-semibold">{t(title)}</p><p className="text-xs text-stone-400">{t(hint)}</p></div>
+      <button type="button" disabled={busy} aria-label={t("重置裁剪区域")} className="min-h-11 min-w-11 px-2 text-sm text-stone-300 disabled:opacity-40" onClick={() => setCrop(initialCrop)}><RefreshIcon className="h-5 w-5"/></button>
     </header>
     <div className="cropper-media flex min-h-0 flex-1 items-center overflow-hidden px-7">
       <div ref={containerRef} className="relative mx-auto w-fit max-w-full" onPointerMove={move} onPointerUp={() => setDrag(null)} onPointerCancel={() => setDrag(null)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {url ? <img src={url} alt="待裁剪的作业照片" className="block max-h-[min(60dvh,calc(100dvh-260px))] max-w-full"/> : <div className="flex h-64 w-[80vw] items-center justify-center text-sm text-stone-400">{error || "正在读取照片…"}</div>}
+        {url ? <img src={url} alt={t("待裁剪的作业照片")} className="block max-h-[min(60dvh,calc(100dvh-260px))] max-w-full"/> : <div className="flex h-64 w-[80vw] items-center justify-center text-sm text-stone-400">{error ? t(error) : t("正在读取照片…")}</div>}
         <div
           className="crop-box absolute cursor-move touch-none border-2 border-amber-300 shadow-[0_0_0_9999px_rgba(0,0,0,.16)]"
           data-full-image={crop.x === 0 && crop.y === 0 && crop.width === 100 && crop.height === 100}
           style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.width}%`, height: `${crop.height}%` }}
           onPointerDown={beginMove}
         >
-          <CropCorner handle="north-west" label="拖动左上角调整裁剪范围" onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
-          <CropCorner handle="north-east" label="拖动右上角调整裁剪范围" onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
-          <CropCorner handle="south-west" label="拖动左下角调整裁剪范围" onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
-          <CropCorner handle="south-east" label="拖动右下角调整裁剪范围" onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
+          <CropCorner handle="north-west" label={t("拖动左上角调整裁剪范围")} onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
+          <CropCorner handle="north-east" label={t("拖动右上角调整裁剪范围")} onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
+          <CropCorner handle="south-west" label={t("拖动左下角调整裁剪范围")} onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
+          <CropCorner handle="south-east" label={t("拖动右下角调整裁剪范围")} onPointerDown={beginResize} onKeyDown={nudgeCorner}/>
         </div>
       </div>
     </div>
     <footer className="cropper-footer px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-5">
       <div className="cropper-tools mb-3 flex justify-center gap-3">
-        <button type="button" disabled={busy || !url} onClick={() => setPreviewOpen(true)} className="min-h-11 rounded-xl bg-white/10 px-5 text-sm disabled:opacity-40"><ZoomIcon/>放大查看</button>
-        <button type="button" disabled={busy || !url} onClick={() => void rotate()} className="min-h-11 rounded-xl bg-white/10 px-5 text-sm disabled:opacity-40"><RedoIcon/>旋转90°</button>
+        <button type="button" disabled={busy || !url} onClick={() => setPreviewOpen(true)} className="min-h-11 rounded-xl bg-white/10 px-5 text-sm disabled:opacity-40"><ZoomIcon/>{t("放大查看")}</button>
+        <button type="button" disabled={busy || !url} onClick={() => void rotate()} className="min-h-11 rounded-xl bg-white/10 px-5 text-sm disabled:opacity-40"><RedoIcon/>{t("旋转90°")}</button>
       </div>
-      {error && <p className="mb-3 text-center text-sm text-red-300" role="alert">{error}</p>}
+      {error && <p className="mb-3 text-center text-sm text-red-300" role="alert">{t(error)}</p>}
       <button className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-stone-950 disabled:opacity-50" onClick={confirm} disabled={busy || !url}>
-        <CheckIcon className="h-5 w-5"/>{busy ? "正在处理图片…" : confirmLabel}
+        <CheckIcon className="h-5 w-5"/>{busy ? t("正在处理图片…") : t(confirmLabel)}
       </button>
     </footer>
     {previewOpen && <ImageZoomPreview url={url} onClose={() => setPreviewOpen(false)}/>}
@@ -197,6 +199,7 @@ export function zoomPreviewAt(view: ZoomView, scale: number, x: number, y: numbe
 }
 
 function ImageZoomPreview({ url, onClose }: { url: string; onClose: () => void }) {
+  const t = useUiText();
   const [view, setView] = useState<ZoomView>({ scale: 1, x: 0, y: 0 });
   const viewRef = useRef(view);
   const points = useRef(new Map<number, { x: number; y: number }>());
@@ -234,7 +237,7 @@ function ImageZoomPreview({ url, onClose }: { url: string; onClose: () => void }
       update({ ...viewRef.current, x: viewRef.current.x + event.clientX - previous.x, y: viewRef.current.y + event.clientY - previous.y });
     }
   };
-  return <div role="dialog" aria-modal="true" aria-label="放大查看图片" className="cropper-zoom absolute inset-0 z-10 flex flex-col bg-stone-950" onKeyDown={(event) => {
+  return <div role="dialog" aria-modal="true" aria-label={t("放大查看图片")} className="cropper-zoom absolute inset-0 z-10 flex flex-col bg-stone-950" onKeyDown={(event) => {
     if (event.key === "Escape") onClose();
     if (event.key === "Tab") {
       const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")].filter((button) => !button.disabled);
@@ -243,19 +246,19 @@ function ImageZoomPreview({ url, onClose }: { url: string; onClose: () => void }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }
   }}>
-    <header className="flex shrink-0 items-center justify-between gap-2 px-5 py-3"><p className="text-sm">双指缩放，单指移动</p><button ref={closeRef} type="button" onClick={onClose} className="min-h-11 px-3 text-sm">返回裁剪</button></header>
+    <header className="flex shrink-0 items-center justify-between gap-2 px-5 py-3"><p className="text-sm">{t("双指缩放，单指移动")}</p><button ref={closeRef} type="button" onClick={onClose} className="min-h-11 px-3 text-sm">{t("返回裁剪")}</button></header>
     <div ref={areaRef} className="flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden" onPointerDown={(event) => {
       event.preventDefault(); if (points.current.size >= 2) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       points.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }} onPointerMove={pointerMove} onPointerUp={(event) => points.current.delete(event.pointerId)} onPointerCancel={(event) => points.current.delete(event.pointerId)} onLostPointerCapture={(event) => points.current.delete(event.pointerId)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt="放大预览的作业照片" draggable={false} className="max-h-full max-w-full select-none object-contain" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}/>
+      <img src={url} alt={t("放大预览的作业照片")} draggable={false} className="max-h-full max-w-full select-none object-contain" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}/>
     </div>
     <footer className="flex shrink-0 items-center justify-center gap-3 px-3 pb-[max(24px,env(safe-area-inset-bottom))] pt-3">
-      <button type="button" disabled={view.scale <= 1} onClick={() => update(zoomPreviewAt(viewRef.current, viewRef.current.scale / 1.5, 0, 0))} className="min-h-11 rounded-xl bg-white/10 px-4 disabled:opacity-40">缩小</button>
-      <button type="button" aria-label="恢复适应屏幕" onClick={() => update({ scale: 1, x: 0, y: 0 })} className="min-h-11 px-3 tabular-nums">{Math.round(view.scale * 100)}%</button>
-      <button type="button" disabled={view.scale >= 6} onClick={() => update(zoomPreviewAt(viewRef.current, viewRef.current.scale * 1.5, 0, 0))} className="min-h-11 rounded-xl bg-white/10 px-4 disabled:opacity-40">放大</button>
+      <button type="button" disabled={view.scale <= 1} onClick={() => update(zoomPreviewAt(viewRef.current, viewRef.current.scale / 1.5, 0, 0))} className="min-h-11 rounded-xl bg-white/10 px-4 disabled:opacity-40">{t("缩小")}</button>
+      <button type="button" aria-label={t("恢复适应屏幕")} onClick={() => update({ scale: 1, x: 0, y: 0 })} className="min-h-11 px-3 tabular-nums">{Math.round(view.scale * 100)}%</button>
+      <button type="button" disabled={view.scale >= 6} onClick={() => update(zoomPreviewAt(viewRef.current, viewRef.current.scale * 1.5, 0, 0))} className="min-h-11 rounded-xl bg-white/10 px-4 disabled:opacity-40">{t("放大")}</button>
     </footer>
   </div>;
 }

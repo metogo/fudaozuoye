@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "./ui-language";
 import { useId, useRef, useState } from "react";
 import { buildLearningClipboardContent, writeLearningClipboard } from "@/lib/learning/copy-rich-text";
 // 图片复制暂时停用，实现保留在 lib/learning/copy-learning-image.ts，方便后续恢复。
@@ -15,6 +16,7 @@ interface CopyableLearningTextProps {
 }
 
 export function CopyableLearningText({ text, status, emphasis }: CopyableLearningTextProps) {
+  const t = useUiText();
   const proseRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pendingRef = useRef(false);
@@ -48,16 +50,16 @@ export function CopyableLearningText({ text, status, emphasis }: CopyableLearnin
     </div>
     <div className={`copyable-learning-text__footer relative flex items-center justify-end gap-2 ${canCopy ? "mt-1" : ""}`}>
     <span id={feedbackId} role="status" aria-live="polite" className={`copyable-learning-text__feedback text-xs leading-5 ${current && canCopy ? "text-stone-500" : "sr-only"}`}>
-      {current && canCopy ? current.message : ""}
+      {current && canCopy ? t(current.message) : ""}
     </span>
     {canCopy && <button
       ref={triggerRef}
       type="button"
       onClick={() => void copy()}
       disabled={current?.pending}
-      aria-label="复制讲解"
+      aria-label={t("复制讲解")}
       aria-describedby={current ? feedbackId : undefined}
-      title="复制文本"
+      title={t("复制文本")}
       className="copyable-learning-text__copy flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-400 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-600 disabled:opacity-50"
     >
       <CopyIcon className="copyable-learning-text__icon h-4 w-4"/>

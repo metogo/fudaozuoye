@@ -1,0 +1,18 @@
+/* Keep the compact switch legible inside the existing header controls. */
+.apple-ui .chat-header > div:first-child { flex: 1; min-width: 0; }
+.apple-ui .chat-header .ui-language-switch { margin-inline: 4px; padding: 2px; }
+.apple-ui .chat-header .ui-language-option { min-width: 36px; min-height: 36px; padding-inline: 8px; font-size: 12px; color: #66736e; }
+.apple-ui .chat-header .ui-language-option[aria-pressed="true"] { background: #065f46; color: #fff; }
+.apple-ui .chat-header .ui-language-option::before { display: none; }
+.apple-ui .chat-new-problem > svg { display: none; }
+html[lang="en"] .apple-ui .home-welcome-subtitle { font-size: clamp(21px, 5.4vw, 27px); }
+html[lang="en"] .apple-ui .home-companion .home-companion__name { letter-spacing: -.045em; }
+html[lang="en"] .apple-ui .chat-gate__options > button,
+html[lang="en"] .apple-ui .chat-gate__helpers > button { line-height: 1.4; padding-block: 12px; }
+@media (max-width: 480px) {
+  .apple-ui .chat-new-problem { display: grid; place-items: center; min-width: 40px; }
+  .apple-ui .chat-new-problem > svg { display: block; }
+  .apple-ui .chat-new-problem > span { display: none; }
+  .apple-ui .chat-header-actions .chat-export-trigger > span { display: none; }
+  html[lang="en"] .apple-ui .chat-header-actions > button { padding-inline: 7px; font-size: 11px; }
+}

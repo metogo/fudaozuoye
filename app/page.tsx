@@ -1,5 +1,6 @@
 import { EducationChatApp } from "@/components/education-chat-app";
+import { UiLanguageProvider } from "@/components/ui-language";
 
 export default function Home() {
-  return <EducationChatApp />;
+  return <UiLanguageProvider><EducationChatApp /></UiLanguageProvider>;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "./ui-language";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { learningPlainText } from "@/lib/learning/copy-rich-text";
@@ -8,6 +9,7 @@ import { learningPlainText } from "@/lib/learning/copy-rich-text";
 export function SelectionAsk({ root, disabled, onAsk }: {
   root: RefObject<HTMLDivElement | null>; disabled: boolean; onAsk: (text: string, range: Range) => void;
 }) {
+  const t = useUiText();
   const [selection, setSelection] = useState<{ text: string; left: number; top: number; anchorX: number; anchorY: number; start: { x: number; y: number; height: number }; end: { x: number; y: number; height: number } } | null>(null);
   const rangeRef = useRef<Range | null>(null);
   const dragRef = useRef<{ edge: "start" | "end"; offsetX: number; offsetY: number } | null>(null);
@@ -87,7 +89,7 @@ export function SelectionAsk({ root, disabled, onAsk }: {
       const point = selection[edge];
       const bounds = root.current?.getBoundingClientRect();
       if (bounds && (point.y < bounds.top || point.y + point.height > bounds.bottom)) return null;
-      return <button key={edge} type="button" aria-label={edge === "start" ? "拖动调整选区起点" : "拖动调整选区终点"} className="selection-ear" style={{ left: point.x, top: edge === "start" ? point.y - 22 : point.y + point.height - 22 }} onPointerDown={(event) => {
+      return <button key={edge} type="button" aria-label={edge === "start" ? t("拖动调整选区起点") : t("拖动调整选区终点")} className="selection-ear" style={{ left: point.x, top: edge === "start" ? point.y - 22 : point.y + point.height - 22 }} onPointerDown={(event) => {
         event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = { edge, offsetX: point.x - event.clientX, offsetY: point.y + point.height / 2 - event.clientY };
         setDragging(true);
@@ -95,6 +97,6 @@ export function SelectionAsk({ root, disabled, onAsk }: {
         <span aria-hidden="true" className={`selection-ear__dot selection-ear__dot--${edge}`}/>
       </button>;
     })}
-    {!dragging && <button type="button" aria-label="针对选中文字问一问" className="selection-ask-trigger fixed z-[80] min-h-11 -translate-x-1/2 select-none rounded-full bg-emerald-800 px-5 text-sm font-semibold text-white shadow-lg" style={{ left: selection.left, top: selection.top }} onPointerDown={(event) => event.preventDefault()} onClick={() => { if (rangeRef.current) onAsk(selection.text, rangeRef.current.cloneRange()); window.getSelection()?.removeAllRanges(); setSelection(null); }}>问一问</button>}
+    {!dragging && <button type="button" aria-label={t("针对选中文字问一问")} className="selection-ask-trigger fixed z-[80] min-h-11 -translate-x-1/2 select-none rounded-full bg-emerald-800 px-5 text-sm font-semibold text-white shadow-lg" style={{ left: selection.left, top: selection.top }} onPointerDown={(event) => event.preventDefault()} onClick={() => { if (rangeRef.current) onAsk(selection.text, rangeRef.current.cloneRange()); window.getSelection()?.removeAllRanges(); setSelection(null); }}>{t("问一问")}</button>}
   </>, document.body);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
+import { useUiText } from "./ui-language";
 import { useEffect, useState } from "react";
 
 interface CommaCompanionProps {
@@ -11,6 +12,7 @@ interface CommaCompanionProps {
 
 /** A local, fixed-size brand asset. It never owns input, scrolling or requests. */
 export function CommaCompanion({ thinking = false, canCelebrate = true, className = "" }: CommaCompanionProps) {
+  const t = useUiText();
   const [previousThinking, setPreviousThinking] = useState(thinking);
   const [arrived, setArrived] = useState(false);
   // Adjust only on a prop transition, not every render or initial mount.
@@ -24,7 +26,7 @@ export function CommaCompanion({ thinking = false, canCelebrate = true, classNam
     return () => window.clearTimeout(timer);
   }, [arrived]);
   const state = thinking ? "thinking" : arrived && canCelebrate ? "ready" : "idle";
-  return <span className={`comma-companion ${className}`} data-state={state} role="img" aria-label="专注作业">
+  return <span className={`comma-companion ${className}`} data-state={state} role="img" aria-label={t("专注作业")}>
     {(["idle", "thinking", "ready"] as const).map(pose => <img key={pose} className={`comma-companion__pose comma-companion__pose--${pose}`} src={`/brand/comma-${pose}.webp`} alt="" aria-hidden="true" width={192} height={192} decoding="async" draggable={false}/>)}
   </span>;
 }

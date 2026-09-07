@@ -1,19 +1,17 @@
-const INTRO_KEY = "home-comma-push-introduced-v1";
 const REST_MS = 18_000;
+export interface HomeCompanionVisit { introduced: boolean }
 
 /** Owns only local animations: no scroll locking, layout changes or model calls. */
-export function animateHomeCompanion(root: HTMLElement) {
+export function animateHomeCompanion(root: HTMLElement, visit: HomeCompanionVisit) {
   const actor = root.querySelector<HTMLElement>(".home-companion__actor");
   const letters = Array.from(root.querySelectorAll<HTMLElement>(".home-companion__letter"));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   let disposed = false;
   let visible = true;
   let ready = false;
-  let introduced = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let finishTimer: ReturnType<typeof setTimeout> | undefined;
   let animations: Animation[] = [];
-  try { introduced = window.sessionStorage.getItem(INTRO_KEY) === "1"; } catch { /* Private browsing still gets a local introduction. */ }
 
   const typing = () => document.activeElement?.matches("input, textarea, select, [contenteditable='true']");
   const allowed = () => !disposed && ready && visible && !reduced.matches && document.visibilityState === "visible" && !typing();
@@ -25,14 +23,13 @@ export function animateHomeCompanion(root: HTMLElement) {
   };
   const schedule = (delay = REST_MS) => {
     clearTimeout(timer);
-    if (allowed()) timer = setTimeout(() => play(!introduced), delay);
+    if (allowed()) timer = setTimeout(() => play(!visit.introduced), delay);
   };
   const play = (intro = false) => {
     if (!allowed() || !actor?.animate || animations.length) return;
     clearTimeout(timer);
     root.dataset.interacting = intro ? "introduce" : "nudge";
-    introduced = true;
-    try { window.sessionStorage.setItem(INTRO_KEY, "1"); } catch { /* Nonessential preference. */ }
+    visit.introduced = true;
     const duration = intro ? 2200 : 1500;
     try {
       const actorRect = actor.getBoundingClientRect();
@@ -81,12 +78,12 @@ export function animateHomeCompanion(root: HTMLElement) {
   reduced.addEventListener("change", onMotionPreference);
   const observer = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(([entry]) => {
     visible = entry.isIntersecting && entry.intersectionRatio >= .65;
-    pause(); schedule(introduced ? REST_MS : 450);
+    pause(); schedule(visit.introduced ? REST_MS : 450);
   }, { threshold: .65 });
   observer?.observe(root);
   const image = actor?.querySelector("img");
   const loaded = image?.decode ? image.decode() : Promise.resolve();
-  loaded.then(() => { if (!disposed) { ready = true; schedule(introduced ? REST_MS : 450); } }).catch(() => { /* Keep the text and all question inputs available if the asset fails. */ });
+  loaded.then(() => { if (!disposed) { ready = true; schedule(visit.introduced ? REST_MS : 450); } }).catch(() => { /* Keep the text and all question inputs available if the asset fails. */ });
 
   return () => {
     disposed = true;

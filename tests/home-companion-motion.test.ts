@@ -30,12 +30,48 @@ async function setup({ reduced = false, broken = false } = {}) {
     querySelectorAll: () => [0, 1, 2].map(i => ({ animate, getBoundingClientRect: () => ({ right: 60 + i * 40 }) })),
   });
   vi.stubGlobal("document", doc); vi.stubGlobal("window", win);
-  const dispose = animateHomeCompanion(root as unknown as HTMLElement);
+  const visit = { introduced: false };
+  const start = () => animateHomeCompanion(root as unknown as HTMLElement, visit);
+  const dispose = start();
   await Promise.resolve(); await Promise.resolve();
-  return { root, doc, win, media, animate, animations, dispose, disconnect, intersect };
+  return { root, doc, win, media, animate, animations, dispose, disconnect, intersect, visit, start };
 }
 
 describe("小逗号推名字", () => {
+  it("同一标签页刷新后仍立即介绍，不受旧会话标记影响", async () => {
+    const s = await setup();
+    s.win.sessionStorage.setItem("home-comma-push-introduced-v1", "1");
+    vi.advanceTimersByTime(450);
+    expect(s.root.dataset.interacting).toBe("introduce");
+    s.dispose();
+    const disposeRefresh = animateHomeCompanion(s.root as unknown as HTMLElement, { introduced: false });
+    await Promise.resolve();
+    vi.advanceTimersByTime(449);
+    expect(s.root.dataset.interacting).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(s.root.dataset.interacting).toBe("introduce");
+    expect(s.animate).toHaveBeenCalledTimes(8);
+    disposeRefresh();
+  });
+  it("同一次首页暂停后恢复只保留轻互动，不重新隐藏名字", async () => {
+    const s = await setup(); vi.advanceTimersByTime(450); s.dispose();
+    const disposeResume = s.start();
+    await Promise.resolve();
+    vi.advanceTimersByTime(450);
+    expect(s.root.dataset.interacting).toBeUndefined();
+    vi.advanceTimersByTime(18_000 - 450);
+    expect(s.root.dataset.interacting).toBe("nudge");
+    disposeResume();
+  });
+  it("卸载时尚未解码的图片不能消费本次欢迎机会", async () => {
+    const s = await setup(); s.dispose();
+    const disposeAgain = s.start(); disposeAgain();
+    await Promise.resolve();
+    vi.advanceTimersByTime(450);
+    expect(s.visit.introduced).toBe(false);
+    expect(s.animate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("首次介绍结束后仍会间歇回应，反复点击不会叠加动画", async () => {
     const s = await setup();
     vi.advanceTimersByTime(450);

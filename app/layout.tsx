@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 import "./ui-theme.css";
 import "./home-editorial.css";
+import "./ui-language.css";
 
 export const metadata: Metadata = {
   title: "专注作业 持续理解",

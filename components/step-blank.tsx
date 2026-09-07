@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "./ui-language";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -14,6 +15,7 @@ export function StepBlank({ gate, busy, onHint, onReveal, onContinue, onTranscri
   onContinue?: () => void;
   onTranscribe?: (gateId: string, blob: Blob, signal: AbortSignal) => Promise<{ text: string; confidence: number }>;
 }) {
+  const t = useUiText();
   const [draft, setValue] = useState<string | null>(null);
   const value = draft ?? gate.stepAnswer?.answer ?? "";
   const showingAnswer = Boolean(gate.stepAnswer && draft === null);
@@ -44,14 +46,14 @@ export function StepBlank({ gate, busy, onHint, onReveal, onContinue, onTranscri
     }
   };
   const blank = gate.stepBlank!;
-  return <section aria-label="当前步骤填空" className="step-blank" data-answer-revealed={showingAnswer || undefined}>
+  return <section aria-label={t("当前步骤填空")} className="step-blank" data-answer-revealed={showingAnswer || undefined}>
     {gate.prompt && <p className="mb-3 text-sm font-medium leading-6 text-stone-600">{gate.prompt}</p>}
-    <div className="step-blank__sentence"><RichLearningText text={blank.before} compact/><button type="button" className="step-blank__slot" aria-label={value ? "修改这个空的答案" : "点击填写这个空"} disabled={busy || recognizing} onClick={() => setOpen(true)}>{value ? <RichLearningText text={prepareStepAnswerMarkdown(value)} compact/> : "点击填写"}</button>{blank.after && <RichLearningText text={blank.after} compact/>}</div>
-    <p className="mt-3 text-xs leading-5 text-stone-500">只填这一个空，不用重做整题。点击空格可以手写。</p>
-    <button type="button" disabled={busy || recognizing} className="min-h-11 text-xs text-stone-500 underline underline-offset-4" onClick={() => setEditing(!editing)}>{editing ? "收起键盘修改" : "也可以用键盘填写 / 修改"}</button>
-    {editing && <input aria-label="修改填空答案" maxLength={300} value={value} disabled={busy || recognizing} onChange={(event) => setValue(event.target.value)} className="mb-3 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3"/>}
-    {!open && notice && <p role="status" className="mb-3 text-xs text-stone-600">{notice}</p>}
-    <div className="step-blank__actions grid grid-cols-2 gap-2"><button type="button" disabled={busy || recognizing || (showingAnswer ? !onContinue : !gate.stepAnswer && !onReveal)} onClick={() => { if (showingAnswer) { onContinue?.(); return; } setValue(null); setNotice(""); setEditing(false); if (!gate.stepAnswer) onReveal?.(); }} className="min-h-12 rounded-xl bg-stone-950 px-3 text-sm font-semibold text-white disabled:opacity-40">{showingAnswer ? "看懂了，继续" : "显示答案"}</button><button type="button" disabled={busy || recognizing} onClick={onHint} className="min-h-12 rounded-xl border border-stone-200 text-sm text-stone-600">给我一点提示</button></div>
-    {open && createPortal(<WhiteboardInput title="填写这一个空" taskLabel={`${gate.prompt ?? ""} ${blank.before} 【待填写】 ${blank.after}`} submitLabel="识别并填入" pending={recognizing} statusMessage={notice} showTask hint="只写空格里的内容；回填后还可以修改，不会自动提交。" onConfirm={(blob, url) => { void fill(blob, url); }} onCancel={() => { controllerRef.current?.abort(); controllerRef.current = null; setRecognizing(false); setOpen(false); }}/>, document.body)}
+    <div className="step-blank__sentence"><RichLearningText text={blank.before} compact/><button type="button" className="step-blank__slot" aria-label={value ? t("修改这个空的答案") : t("点击填写这个空")} disabled={busy || recognizing} onClick={() => setOpen(true)}>{value ? <RichLearningText text={prepareStepAnswerMarkdown(value)} compact/> : t("点击填写")}</button>{blank.after && <RichLearningText text={blank.after} compact/>}</div>
+    <p className="mt-3 text-xs leading-5 text-stone-500">{t("只填这一个空，不用重做整题。点击空格可以手写。")}</p>
+    <button type="button" disabled={busy || recognizing} className="min-h-11 text-xs text-stone-500 underline underline-offset-4" onClick={() => setEditing(!editing)}>{editing ? t("收起键盘修改") : t("也可以用键盘填写 / 修改")}</button>
+    {editing && <input aria-label={t("修改填空答案")} maxLength={300} value={value} disabled={busy || recognizing} onChange={(event) => setValue(event.target.value)} className="mb-3 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3"/>}
+    {!open && notice && <p role="status" className="mb-3 text-xs text-stone-600">{t(notice)}</p>}
+    <div className="step-blank__actions grid grid-cols-2 gap-2"><button type="button" disabled={busy || recognizing || (showingAnswer ? !onContinue : !gate.stepAnswer && !onReveal)} onClick={() => { if (showingAnswer) { onContinue?.(); return; } setValue(null); setNotice(""); setEditing(false); if (!gate.stepAnswer) onReveal?.(); }} className="min-h-12 rounded-xl bg-stone-950 px-3 text-sm font-semibold text-white disabled:opacity-40">{showingAnswer ? t("看懂了，继续") : t("显示答案")}</button><button type="button" disabled={busy || recognizing} onClick={onHint} className="min-h-12 rounded-xl border border-stone-200 text-sm text-stone-600">{t("给我一点提示")}</button></div>
+    {open && createPortal(<WhiteboardInput title={t("填写这一个空")} taskLabel={`${gate.prompt ?? ""} ${blank.before} 【待填写】 ${blank.after}`} submitLabel={t("识别并填入")} pending={recognizing} statusMessage={notice} showTask hint={t("只写空格里的内容；回填后还可以修改，不会自动提交。")} onConfirm={(blob, url) => { void fill(blob, url); }} onCancel={() => { controllerRef.current?.abort(); controllerRef.current = null; setRecognizing(false); setOpen(false); }}/>, document.body)}
   </section>;
 }
