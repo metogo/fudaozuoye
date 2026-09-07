@@ -43,7 +43,14 @@ const map = {
   ],
   edges: [{ from: "quadratic", to: "delta", kind: "prerequisite", reason: "解题前要判断根的情况。" }],
 };
-const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
+const frame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+const plan = { rootId: map.rootId, nodes: map.nodes.map(n => ({ id: n.id, parents: map.edges.filter(e => e.to === n.id).map(e => e.from) })) };
+const nodeEvent = (index: number) => ({ type: "node", node: map.nodes[index], edges: map.edges.filter(e => e.to === map.nodes[index].id) });
+const response = (body: { map?: typeof map; detail?: { summary: string; application: string }; error?: { message: string } }, ok = true) => body.map && ok ? new Response(
+  frame("map.plan", { type: "plan", plan }) +
+  map.nodes.map((_, index) => frame("map.node", nodeEvent(index))).join("") +
+  frame("complete", { total: map.nodes.length }), { headers: { "Content-Type": "text/event-stream" } }
+) : new Response(JSON.stringify(body), { status: ok ? 200 : 503, headers: { "Content-Type": "application/json" } });
 
 describe("ProblemKnowledgeMapPage", () => {
   const close = vi.fn();
@@ -54,17 +61,40 @@ describe("ProblemKnowledgeMapPage", () => {
     localStorage.clear();
     vi.stubGlobal("fetch", vi.fn());
     Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) });
-    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: vi.fn() });
-    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: vi.fn() });
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: vi.fn(function (this: HTMLDialogElement) { this.open = true; }) });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: vi.fn(function (this: HTMLDialogElement) { this.open = false; }) });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("展示等待倒计时，并在图谱请求成功后支持查看节点说明和整理", async () => {
+  it("退出及卸载时先关闭仍连接的原生弹层，并恢复入口焦点", () => {
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {}));
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    const connected: boolean[] = [];
+    vi.mocked(HTMLDialogElement.prototype.close).mockImplementation(function (this: HTMLDialogElement) { connected.push(this.isConnected); this.open = false; });
+    for (const exit of ["return", "cancel", "unmount"]) {
+      opener.focus();
+      const view = render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={() => view.unmount()}/>);
+      const dialog = document.querySelector("dialog")!;
+      screen.getByRole("button", { name: "返回对话" }).focus();
+      if (exit === "return") fireEvent.click(screen.getByRole("button", { name: "返回对话" }));
+      else if (exit === "cancel") fireEvent(dialog, new Event("cancel", { cancelable: true }));
+      else view.unmount();
+      expect(document.querySelector("dialog")).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    }
+    expect(connected).toEqual([true, true, true]);
+    opener.remove();
+  });
+
+  it("立即显示画布，并在图谱请求成功后支持查看节点说明和整理", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map })).mockResolvedValueOnce(response({ detail: { summary: "判别式说明", application: "本题要让判别式非负。" } }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    expect(screen.getByRole("timer", { name: "预计还需约 10 秒", hidden: true })).not.toBeNull();
-    await screen.findByTestId("flow");
-    expect(screen.getByText("2 / 2 个知识点")).not.toBeNull();
+    expect(screen.getByTestId("flow")).not.toBeNull();
+    expect(screen.getByText("正在梳理本题知识")).not.toBeNull();
+    expect(screen.queryByRole("timer", { hidden: true })).toBeNull();
+    await screen.findByText("根的判别式");
+    expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuetext")).toBe("已生成 2 / 2 个知识点");
     fireEvent.click(screen.getByText("根的判别式"));
     await screen.findByText("判别式说明");
     expect(screen.getByText("本题要让判别式非负。")).not.toBeNull();
@@ -80,20 +110,20 @@ describe("ProblemKnowledgeMapPage", () => {
     const first = render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
     expect((await screen.findByRole("alert", { hidden: true })).textContent).toContain("网络暂不可用");
     fireEvent.click(screen.getByRole("button", { name: /重试生成/, hidden: true }));
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     expect(fetch).toHaveBeenCalledTimes(2);
     first.unmount();
 
     localStorage.setItem("problem-knowledge-map-v2:request-1", JSON.stringify({ identity: JSON.stringify(session.problem), map }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="another-token" onClose={close}/>);
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
   it("详情失败时仍可浏览图谱，并允许单独重试说明", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map })).mockResolvedValueOnce(response({}, false)).mockResolvedValueOnce(response({ detail: { summary: "恢复说明", application: "恢复使用" } }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     fireEvent.click(screen.getByText("根的判别式"));
     expect(await screen.findByText("补充说明暂未加载，仍可浏览图谱。")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重试说明", hidden: true }));
@@ -103,7 +133,7 @@ describe("ProblemKnowledgeMapPage", () => {
   it("节点拖拽、空白处取消选择和分支展开都不会让图谱消失", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     expect(flowProps.nodes).toHaveLength(2);
     flowProps.onNodesChange([{ type: "position", id: "delta", position: { x: 480, y: 260 } }]);
     flowProps.onNodeDragStop();
@@ -124,7 +154,7 @@ describe("ProblemKnowledgeMapPage", () => {
     localStorage.setItem("problem-knowledge-map-v2:request-1", "not-json");
     vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     expect(fetch).toHaveBeenCalledTimes(1);
 
     const root = document.querySelector('[data-id="quadratic"]');
@@ -148,7 +178,7 @@ describe("ProblemKnowledgeMapPage", () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
     const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    await screen.findByTestId("flow");
+    await screen.findByText("根的判别式");
     flowProps.onNodeDragStop();
     await waitFor(() => expect(screen.getByText("浏览器暂时无法保存布局，本次仍可自由调整。")).not.toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "整理", hidden: true }));
@@ -156,13 +186,100 @@ describe("ProblemKnowledgeMapPage", () => {
     write.mockRestore();
   });
 
-  it("等待超过预计时间后明确告诉用户仍在生成，而不是伪装成进度", () => {
-    vi.useFakeTimers();
+  it("真实分块到达才增加计数，失败保留节点，不缓存半成品，关闭取消请求", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const cancelled = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; }, cancel: cancelled });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }));
+    const view = render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    expect(screen.getByTestId("flow")).not.toBeNull();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const send = async (event: string, data: unknown) => act(async () => { controller.enqueue(new TextEncoder().encode(frame(event, data))); });
+    await send("map.plan", { type: "plan", plan });
+    expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuenow")).toBe("0");
+    await send("map.node", nodeEvent(0));
+    expect(screen.getByText("一元二次方程")).not.toBeNull();
+    expect(screen.queryByText("根的判别式")).toBeNull();
+    expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuenow")).toBe("1");
+    const position = flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position;
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toBeNull();
+    await send("error", { message: "连接中断" });
+    expect(screen.getByText("一元二次方程")).not.toBeNull();
+    expect(screen.getByRole("alert", { hidden: true }).textContent).toBe("连接中断");
+    expect(flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position).toEqual(position);
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toBeNull();
+    await waitFor(() => expect(cancelled).toHaveBeenCalled());
+    view.unmount();
+    const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("生成期间查看根节点，后续节点和完成事件不会重复请求详情或移动视角", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }))
+      .mockResolvedValueOnce(response({ detail: { summary: "当前根节点", application: "用于本题" } }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
-    act(() => { vi.advanceTimersByTime(10_250); });
-    expect(screen.getByRole("timer", { name: "已等待 10 秒", hidden: true })).not.toBeNull();
-    expect(screen.getByText("比预计稍久，模型仍在生成，请再稍等。")).not.toBeNull();
-    expect(screen.getByText("时间为估计，并非生成进度")).not.toBeNull();
-    vi.useRealTimers();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const send = async (event: string, data: unknown) => act(async () => { controller.enqueue(new TextEncoder().encode(frame(event, data))); });
+    await send("map.plan", { type: "plan", plan });
+    await send("map.node", nodeEvent(0));
+    fireEvent.click(screen.getByText("一元二次方程"));
+    await screen.findByText("当前根节点");
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    const views = flowApi.setViewport.mock.calls.length;
+    const rootPosition = flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position;
+    await send("map.node", nodeEvent(1));
+    await send("complete", { total: 2 });
+    await waitFor(() => expect(screen.getByText("已全部生成")).not.toBeNull());
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position).toEqual(rootPosition);
+    expect(flowApi.setViewport).toHaveBeenCalledTimes(views);
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain("delta");
+  });
+
+  it("后面的独立节点先到达，不会与加载占位重复，也不移动已显示节点", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const send = async (event: string, data: unknown) => act(async () => { controller.enqueue(new TextEncoder().encode(frame(event, data))); });
+    const sibling = { ...map.nodes[1], id: "sibling", title: "方程的根" };
+    const largerPlan = { ...plan, nodes: [...plan.nodes, { id: sibling.id, parents: [map.rootId] }] };
+    await send("map.plan", { type: "plan", plan: largerPlan });
+    await send("map.node", nodeEvent(0));
+    await send("map.node", { type: "node", node: sibling, edges: [{ ...map.edges[0], to: sibling.id }] });
+    expect(screen.getByText("方程的根")).not.toBeNull();
+    expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuenow")).toBe("2");
+    const nodes = flowProps.nodes as { id: string; position: unknown; data: { pending?: boolean } }[];
+    expect(nodes.map(n => n.id)).toEqual([map.rootId, "sibling", "delta"]);
+    expect(nodes.find(n => n.id === "delta")?.data.pending).toBe(true);
+    const position = nodes.find(n => n.id === "sibling")!.position;
+    await send("map.node", nodeEvent(1));
+    await send("complete", { total: 3 });
+    expect(flowProps.nodes.find((n: { id: string }) => n.id === "sibling").position).toEqual(position);
+    expect(screen.getByText("已全部生成")).not.toBeNull();
+  });
+
+  it("收到较大清单后浏览器不再在48秒取消，退出仍取消并清理预算", async () => {
+    vi.useFakeTimers();
+    try {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }));
+      const view = render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const largerPlan = { rootId: map.rootId, nodes: [plan.nodes[0], ...Array.from({ length: 15 }, (_, i) => ({ id: `k${i}`, parents: [map.rootId] }))] };
+      await act(async () => { controller.enqueue(new TextEncoder().encode(frame("map.plan", { type: "plan", plan: largerPlan }) + frame("map.node", nodeEvent(0)))); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(48000); });
+      const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
+      expect(signal.aborted).toBe(false);
+      expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuemax")).toBe("16");
+      view.unmount();
+      expect(signal.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      controller.close();
+    } finally { vi.useRealTimers(); }
   });
 });

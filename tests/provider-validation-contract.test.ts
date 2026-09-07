@@ -35,6 +35,57 @@ const problem: ProblemSnapshot = {
 };
 
 describe("模型返回的题目与会话契约", () => {
+  it.each([undefined, null, "", "   "])("未提取到可选作答（%s）不阻断完整题目的识别", (childWork) => {
+    const result = { ...problem, recognized: true, childWork };
+    if (childWork === undefined) delete (result as { childWork?: unknown }).childWork;
+    const parsed = parseProblem(result);
+    expect(parsed.childWork).toBe("");
+    expect(parsed.text).toBe(problem.text);
+    expect(parsed.visualContext).toMatchObject({ related: true, affectsSolving: true, facts: visual.facts, confidence: visual.confidence });
+  });
+
+  it.each([0, 42, false, true, [], ["先算一边"], {}, { answer: "先算一边" }])("异常作答结构（%j）不得静默丢弃", (childWork) => {
+    expect(() => parseProblem({ ...problem, recognized: true, childWork })).toThrow("学生已有作答格式不合法");
+  });
+
+  it("作答缺省时仍检查必需的题干、配图和置信度", () => {
+    const result = { ...problem, recognized: true, childWork: null };
+    expect(() => parseProblem({ ...result, text: "" })).toThrow("完整题干");
+    expect(() => parseProblem({ ...result, visualContext: undefined })).toThrow("题图相关性判断");
+    expect(() => parseProblem({ ...result, confidence: 0.3 })).toThrow(NonRepairableValidationError);
+  });
+
+  it("只去除作答首尾空白，保留换行、公式和错误答案，不修改输入", () => {
+    const childWork = " \n第一步：$6+6=13$\n答：13厘米。\t ";
+    const result = Object.freeze({ ...problem, recognized: true, childWork });
+    const parsed = parseProblem(result);
+    expect(parsed.childWork).toBe("第一步：$6+6=13$\n答：13厘米。");
+    expect(result.childWork).toBe(childWork);
+    expect(problemEvidenceSources(parsed)).toContainEqual({ type: "child_work", text: parsed.childWork });
+  });
+
+  it.each([undefined, null, "", "\n\t　"])("空作答（%s）不产生虚假的学生作答证据", childWork => {
+    const parsed = parseProblem({ ...problem, recognized: true, childWork });
+    expect(problemEvidenceSources(parsed)).not.toContainEqual(expect.objectContaining({ type: "child_work" }));
+    expect(problemEvidenceSources(parsed)).toContainEqual({ type: "problem", text: visual.facts[0].text });
+  });
+
+  it.each([
+    { label: "学科", fields: { subject: "unknown" }, error: "学科不合法" },
+    { label: "学段", fields: { gradeBand: "大学" }, error: "学段不合法" },
+    { label: "置信度格式", fields: { confidence: null }, error: "置信度不合法" },
+    { label: "置信度上界", fields: { confidence: 1.01 }, error: "置信度不合法" },
+    { label: "配图归属矛盾", fields: { visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 1 } }, error: "题干明确指向配图" },
+    { label: "关键题图不清晰", fields: { visualContext: { ...visual, confidence: 0.54 } }, error: "关键条件无法可靠识别" },
+  ])("省略作答不会绕过$label校验", ({ fields, error }) => {
+    expect(() => parseProblem({ ...problem, recognized: true, childWork: undefined, ...fields })).toThrow(error);
+  });
+
+  it("作答为空时仍允许恰好达到最低置信度的题干与题图", () => {
+    const result = parseProblem({ ...problem, recognized: true, childWork: null, confidence: 0.55, visualContext: { ...visual, confidence: 0.55 } });
+    expect(result).toMatchObject({ childWork: "", confidence: 0.55, visualContext: { confidence: 0.55, facts: visual.facts } });
+  });
+
   it("接受规范化的分类、嵌套答案和结构化板书建议", () => {
     const recognized = parseProblem({
       recognized: true,

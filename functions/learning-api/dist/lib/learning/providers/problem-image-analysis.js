@@ -15,7 +15,7 @@ const solutionSystem = [
 ].join("\n");
 function problemRecognitionPrompt() {
     return [
-        "你是严格的 K12 作业照片门禁与多模态识别器。先从整张照片中锁定一道完整题目，再判断照片里的图形、表格、示意、标注或其他视觉内容是否属于这道题、是否影响理解或求解。判断必须结合版面归属、题干指代和视觉语义，不能只找‘如图’关键词。邻题配图、页眉、二维码、装饰和背景不得进入当前题目。只识别题目、视觉证据及学生已有作答，不求解，不补全看不见的条件。输出严格 JSON。",
+        "你是严格的 K12 作业照片门禁与多模态识别器。先从整张照片中锁定一道完整题目，再判断照片里的图形、表格、示意、标注或其他视觉内容是否属于这道题、是否影响理解或求解。判断必须结合版面归属、题干指代和视觉语义，不能只找‘如图’关键词。邻题配图、页眉、二维码、装饰和背景不得进入当前题目。只识别题目、视觉证据及学生已有作答，不求解，不补全看不见的条件。childWork 单独保留能辨认的学生作答原文；没有可辨认作答时输出空字符串，不得生成答案填充，也不得因此判定题目识别失败。输出严格 JSON。",
         "请判断九学科之一及学段；没有足够依据时降低 confidence。输出 recognized、failureReason、text、childWork、subject、gradeBand、confidence，以及 visualContext：{related:boolean, affectsSolving:boolean, summary:string, confidence:0到1, facts:[{text:string, source:printed_label|visual_relation, confidence:0到1}]}。facts 只写图片可直接核验的题设标签、数值、对象和空间/结构关系；每个尺寸、刻度或符号必须明确说明标注线/箭头的起点与终点或它对应的具体对象，不能把局部跨度改写成整体长宽，也不能把跨多个区域的标注直接叫作某个图形的边长。端点看不清就降低该 fact 的 confidence。不得写计算结果、推导结论、手写答案或二维码内容。不相关时 related=false、affectsSolving=false、summary为空、facts为空。",
     ];
 }

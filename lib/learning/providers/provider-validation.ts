@@ -77,7 +77,9 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
   const subject = normalizedSubject(result.subject);
   const recognizedBand = normalizedGradeBand(result.gradeBand);
   const confidence = normalizedConfidence(result.confidence);
-  if (typeof result.childWork !== "string") throw new Error("模型识别结果缺少学生已有作答字段");
+  // 作答是可选的识别结果：省略/null 只表示未提取到作答，不代表学生没有作答。
+  // 非空结构错误仍需重识别，不能把数组、对象等内容静默丢弃。
+  if (result.childWork != null && typeof result.childWork !== "string") throw new Error("模型识别结果中的学生已有作答格式不合法");
   if (!subject) throw new Error("模型识别结果中的学科不合法");
   if (!recognizedBand) throw new Error("模型识别结果中的学段不合法");
   if (confidence === null) throw new Error("模型识别结果中的置信度不合法");
@@ -87,7 +89,7 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
   if (!visualContext) throw new Error("照片识别结果缺少题图相关性判断");
   if (!visualContext.related && /(?:如图|见图|下图|图中|根据图|观察图)/.test(result.text)) throw new Error("题干明确指向配图，但题图相关性判断为不相关");
   if (visualContext.related && visualContext.affectsSolving && visualContext.confidence < 0.55) throw new NonRepairableValidationError("题图中的关键条件无法可靠识别，请重新拍摄并确保题干和配图完整清晰");
-  return { text: result.text.trim(), childWork: result.childWork.trim(), subject, gradeBand, confidence, userRevised: false, visualContext };
+  return { text: result.text.trim(), childWork: typeof result.childWork === "string" ? result.childWork.trim() : "", subject, gradeBand, confidence, userRevised: false, visualContext };
 }
 
 export function parseTextProblem(result: JsonObject, originalText: string): ProblemSnapshot {
@@ -150,6 +152,11 @@ export function rootOnlySession(session: LearningSession): LearningSession {
 
 export function pendingChatSession(problem: ProblemSnapshot, provider: ProviderId, reasoningLevel: ReasoningLevel, modelId: string, mode: LearningSession["mode"]): LearningSession {
   return { ...buildSession(problem, provider, reasoningLevel, modelId, [], PENDING_ORIGINAL_ANSWER, "标准解正在与首讲并行准备。", subjectPendingGuide(problem)), mode };
+}
+
+export function repairContext(prompt: string): string {
+  if (prompt.length <= 18_000) return prompt;
+  return `${prompt.slice(0, 7_000)}\n…中间课程目录省略…\n${prompt.slice(-11_000)}`;
 }
 
 export function edgeReason(node: KnowledgeNode, blueprint: KnowledgeBlueprint | undefined, targetTitle: string): string {

@@ -21,6 +21,32 @@ describe("图谱独立只读接口", () => {
     expect(JSON.stringify(session)).toBe(before);
   });
   it("损坏的凭证不能调用模型", async () => { vi.mocked(openSession).mockImplementation(() => { throw new Error("凭证损坏"); }); expect((await postKnowledgeMap(request())).status).toBe(400); expect(getSessionProviderAdapter).not.toHaveBeenCalled(); });
+  it("请求流式图谱时立即返回SSE，不等待整图生成", async () => {
+    vi.mocked(openSession).mockReturnValue({ problem: { text: "signed original" } } as never);
+    let cancel!: () => void;
+    const waiting = new Promise<void>(resolve => { cancel = resolve; });
+    const generateKnowledgeMap = vi.fn();
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeMap, streamKnowledgeMap: async () => { await waiting; throw new Error("已取消"); }, cancelPendingRequests: cancel } as never);
+    const response = await postKnowledgeMap(new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed", stream: true }) }));
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("map.start");
+    expect(generateKnowledgeMap).not.toHaveBeenCalled();
+    await reader.cancel();
+  });
+  it("生成中只有根节点也可查看说明，但仍验证原题证据", async () => {
+    const session = { problem: { text: "两个实数根" } };
+    vi.mocked(openSession).mockReturnValue(session as never);
+    const generateKnowledgeDetail = vi.fn().mockResolvedValue({ summary: "说明", application: "用途" });
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeDetail } as never);
+    const map = { version: 1, overviewOnly: true, rootId: "core", nodes: [{ id: "core", title: "判别式", evidence: "两个实数根" }], edges: [] };
+    const detailRequest = (partial: boolean) => new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed", map, nodeId: "core", partial }) });
+    expect((await postKnowledgeMap(detailRequest(false))).status).toBe(400);
+    expect((await postKnowledgeMap(detailRequest(true))).status).toBe(200);
+    map.nodes[0].evidence = "另一道题";
+    expect((await postKnowledgeMap(detailRequest(true))).status).toBe(400);
+    expect(generateKnowledgeDetail).toHaveBeenCalledTimes(1);
+  });
   it("详情只生成所选节点，先验证图谱属于当前原题", async () => {
     const session = { problem: { text: "两个实数根" } };
     const node = { id: "core", title: "判别式", summary: "判断根", application: "使用非负条件", evidence: "两个实数根" };

@@ -8,7 +8,7 @@ const { understandingGate } = require("../functions/learning-api/dist/lib/learni
 const adapter = new MockProviderAdapter("doubao");
 const session = await adapter.analyzeProblem(await adapter.recognizeProblem("data:image/jpeg;base64,demo"));
 session.flow.activeGate = understandingGate();
-session.flow.stage = "understanding";
+session.flow.stage = "core_explanation";
 const snapshot = { session, stateToken: "test-state-token-".repeat(5), messages: [{ id: "intro", role: "assistant", kind: "assistant", text: "先理解速度与路程之间的关系。\n".repeat(45), status: "complete", createdAt: new Date().toISOString() }] };
 const evidence = session.problem.text.slice(0, 200);
 const map = { version: 1, overviewOnly: true, rootId: "core", nodes: [
@@ -17,7 +17,7 @@ const map = { version: 1, overviewOnly: true, rootId: "core", nodes: [
   { id: "multiply", title: "乘法的意义", summary: "相同加数求和。", application: "用每小时路程乘时间。", evidence },
   { id: "divide", title: "除法的意义", summary: "把总量平均分。", application: "支撑单位量的计算。", evidence: "" },
 ], edges: [{ from: "core", to: "unit", kind: "prerequisite", reason: "速度就是单位时间的路程。" }, { from: "core", to: "multiply", kind: "application", reason: "单位速度乘时间得到路程。" }, { from: "unit", to: "divide", kind: "prerequisite", reason: "用总路程除以时间。" }] };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, channel: "chrome" });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const page = await context.newPage();
 const errors = [];
@@ -36,7 +36,9 @@ await page.route("**/learning/knowledge-map", async route => {
   requests++;
   if (hold) await new Promise(resolve => setTimeout(resolve, 15000));
   if (failNext) { failNext = false; return route.fulfill({ status: 503, json: { error: { message: "测试中的可恢复错误" } }, headers: cors }); }
-  return route.fulfill({ json: { map }, headers: cors });
+  const frame = (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const plan = { rootId: map.rootId, nodes: map.nodes.map(n => ({ id: n.id, parents: map.edges.filter(e => e.to === n.id).map(e => e.from) })) };
+  return route.fulfill({ contentType: "text/event-stream", body: frame("map.plan", { type: "plan", plan }) + map.nodes.map(node => frame("map.node", { type: "node", node, edges: map.edges.filter(e => e.to === node.id) })).join("") + frame("complete", { total: map.nodes.length }), headers: cors });
 });
 await page.addInitScript(data => { if (!sessionStorage.getItem("education-chat-session-v3")) sessionStorage.setItem("education-chat-session-v3", JSON.stringify(data)); }, snapshot);
 await mkdir("outputs/knowledge-map", { recursive: true });
@@ -46,7 +48,7 @@ try {
   await expect(page.getByText("测试中的可恢复错误")).toBeVisible();
   await page.getByRole("button", { name: "重试生成" }).click();
   await expect(page.locator('.react-flow__node[data-id="core"]')).toBeVisible();
-  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await expect(page.locator(".react-flow__node")).toHaveCount(4);
   expect(detailRequests).toBe(0);
   const core = page.locator('.react-flow__node[data-id="core"]');
   const original = await core.boundingBox();
@@ -66,6 +68,7 @@ try {
   await page.getByRole("button", { name: "本题知识图谱", exact: true }).click();
   await expect.poll(() => core.evaluate(e => e.style.transform)).toBe(movedTransform);
   expect(requests).toBe(2);
+  await page.getByRole("button", { name: "收起单位量的基础知识" }).click();
   await page.getByRole("button", { name: "展开单位量的基础知识" }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
   await page.getByRole("button", { name: "查看全图" }).click();
@@ -134,12 +137,11 @@ try {
   await page.evaluate(() => { for (const key of Object.keys(localStorage).filter(k => k.startsWith("problem-knowledge-map-v2:"))) localStorage.removeItem(key); });
   hold = true;
   await page.getByRole("button", { name: "本题知识图谱", exact: true }).click();
-  await expect(page.getByText("正在连接这道题的知识")).toBeVisible();
-  await expect(page.getByRole("timer")).toHaveAttribute("aria-label", /预计还需约 \d+ 秒/);
-  await page.screenshot({ path: "outputs/knowledge-map/loading-countdown.png" });
-  await expect(page.getByRole("timer")).toHaveAttribute("aria-label", /已等待 \d+ 秒/, { timeout: 12000 });
-  await expect(page.getByText("比预计稍久，模型仍在生成，请再稍等。")).toBeVisible();
-  await page.screenshot({ path: "outputs/knowledge-map/loading-overtime.png" });
+  await expect(page.getByText("正在梳理本题知识")).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveCount(0);
+  await expect(page.getByLabel("可拖拽的知识图谱")).toBeVisible();
+  await expect(page.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
+  await page.screenshot({ path: "outputs/knowledge-map/planning-canvas.png" });
   await page.setViewportSize({ width: 320, height: 700 });
   const titleBox = await page.getByRole("heading", { name: "本题知识图谱", exact: true }).boundingBox();
   const backBox = await page.getByRole("button", { name: "返回对话" }).boundingBox();

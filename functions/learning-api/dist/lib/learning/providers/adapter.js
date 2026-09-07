@@ -34,6 +34,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveProviderAdapter = exports.MockProviderAdapter = void 0;
+const knowledge_map_services_1 = require("./knowledge-map-services");
+const provider_validation_1 = require("./provider-validation");
 const math_quality_1 = require("../math-quality");
 const learning_emphasis_1 = require("../learning-emphasis");
 const emphasis_1 = require("./emphasis");
@@ -51,11 +53,12 @@ const request_controller_registry_1 = require("./request-controller-registry");
 const assessment_1 = require("./assessment");
 const student_response_1 = require("./student-response");
 const transient_fetch_1 = require("./transient-fetch");
-const provider_validation_1 = require("./provider-validation");
+const provider_validation_2 = require("./provider-validation");
 const problem_image_analysis_1 = require("./problem-image-analysis");
 const solution_1 = require("./solution");
 const general_teaching_1 = require("./general-teaching");
 const teaching_program_1 = require("../teaching-program");
+const provider_text_request_1 = require("./provider-text-request");
 var mock_adapter_1 = require("./mock-adapter");
 Object.defineProperty(exports, "MockProviderAdapter", { enumerable: true, get: function () { return mock_adapter_1.MockProviderAdapter; } });
 class LiveProviderAdapter {
@@ -80,14 +83,14 @@ class LiveProviderAdapter {
         void subject;
         void gradeBand;
         const [system, prompt] = (0, problem_image_analysis_1.problemRecognitionPrompt)();
-        return this.validatedJsonRequest(system, prompt, provider_validation_1.parseProblem, imageDataUrl);
+        return this.validatedJsonRequest(system, prompt, provider_validation_2.parseProblem, imageDataUrl);
     }
     async recognizeTextProblem(text) {
         return this.validatedJsonRequest("你是严格的 K12 作业题门禁与分类器。判断用户文字是否包含一道可以学习的数学、物理、化学、生物、语文、英语、历史、地理或政治题。不得求解、不得改写或复述原题。只输出严格 JSON。", JSON.stringify({
             task: "只判断原文是否为一道完整的 K12 单题，并判断九学科之一及学段；信息不足或混入多道题时返回 recognized=false",
             text,
             output: { recognized: true, failureReason: "", subject: "math", gradeBand: "junior", confidence: 0.9 },
-        }), (value) => (0, provider_validation_1.parseTextProblem)(value, text));
+        }), (value) => (0, provider_validation_2.parseTextProblem)(value, text));
     }
     async analyzeProblem(problem, onPhase) {
         const allowed = (0, curriculum_1.listConcepts)(problem.subject, problem.gradeBand).map((item) => ({
@@ -100,27 +103,27 @@ class LiveProviderAdapter {
         const result = await this.validatedJsonRequest((0, model_support_1.selectionSystemPrompt)(1, 4, (0, grade_pedagogy_1.teachingBandOf)(problem)), JSON.stringify({
             task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
             problem,
-            evidenceQuotes: (0, provider_validation_1.evidenceCandidates)((0, provider_validation_1.problemEvidenceSources)(problem)),
+            evidenceQuotes: (0, provider_validation_2.evidenceCandidates)((0, provider_validation_2.problemEvidenceSources)(problem)),
             output: (0, model_support_1.selectionOutputExample)(true),
             allowedConcepts: allowed,
         }), (value) => {
-            const analysis = (0, provider_validation_1.parseInitialAnalysisSelection)(value, problem, allowed);
+            const analysis = (0, provider_validation_2.parseInitialAnalysisSelection)(value, problem, allowed);
             (0, grade_pedagogy_1.assertGradeLanguage)(Object.values(analysis.problemGuide).join("。"), (0, grade_pedagogy_1.teachingBandOf)(problem), "题目引导", problem.text, "diagnosis");
             return analysis;
         }, undefined, (value, error) => {
-            if (!(0, provider_validation_1.isRecoverableReasonGroundingError)(error))
+            if (!(0, provider_validation_2.isRecoverableReasonGroundingError)(error))
                 throw error;
-            const analysis = (0, provider_validation_1.parseInitialAnalysisSelection)((0, blueprint_1.repairSelectionReasonGrounding)(value), problem, allowed);
+            const analysis = (0, provider_validation_2.parseInitialAnalysisSelection)((0, blueprint_1.repairSelectionReasonGrounding)(value), problem, allowed);
             (0, grade_pedagogy_1.assertGradeLanguage)(Object.values(analysis.problemGuide).join("。"), (0, grade_pedagogy_1.teachingBandOf)(problem), "题目引导", problem.text, "diagnosis");
             return analysis;
         });
         onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
-        const blueprints = await this.generateBlueprintBatch(result.selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
-        return (0, provider_validation_1.buildSession)(problem, this.id, this.reasoningLevel, this.modelId, blueprints, result.originalAnswer, result.originalExplanation, result.problemGuide);
+        const blueprints = await this.generateBlueprintBatch(result.selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_2.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
+        return (0, provider_validation_2.buildSession)(problem, this.id, this.reasoningLevel, this.modelId, blueprints, result.originalAnswer, result.originalExplanation, result.problemGuide);
     }
     async prepareChatSession(problem, onPhase) {
         onPhase?.("ready", "题目已读懂，正在准备核心思路");
-        return (0, provider_validation_1.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
+        return (0, provider_validation_2.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
     async completeChatSession(session, imageDataUrl) {
         const problem = session.problem;
@@ -131,10 +134,10 @@ class LiveProviderAdapter {
         if (audited)
             (0, problem_image_analysis_1.assertConfirmedVisualFactsPreserved)(problem, audited.visualContext);
         const result = audited?.solution ?? (this.config.protocol === "chat-completions"
-            ? await this.validatedStructuredRequest(system, prompt, (0, model_support_1.problemSolutionTool)(), provider_validation_1.parseProblemSolution)
-            : await this.validatedJsonRequest(system, prompt, provider_validation_1.parseProblemSolution));
+            ? await this.validatedStructuredRequest(system, prompt, (0, model_support_1.problemSolutionTool)(), provider_validation_2.parseProblemSolution)
+            : await this.validatedJsonRequest(system, prompt, provider_validation_2.parseProblemSolution));
         const completedProblem = audited?.visualContext && !problem.userRevised ? { ...problem, visualContext: audited.visualContext } : problem;
-        const completed = (0, provider_validation_1.buildSession)(completedProblem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
+        const completed = (0, provider_validation_2.buildSession)(completedProblem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
         return { ...completed, requestId: session.requestId, createdAt: session.createdAt };
     }
     async diagnoseProblem(session, onPhase) {
@@ -153,30 +156,30 @@ class LiveProviderAdapter {
         const selections = await this.validatedJsonRequest((0, model_support_1.selectionSystemPrompt)(1, 4, (0, grade_pedagogy_1.teachingBandOf)(problem)), JSON.stringify({
             task: "找出学生独立完成这道原题真正需要的 1 到 4 个直接前置知识；简单题只选 1 个，不得凑数",
             problem,
-            evidenceQuotes: (0, provider_validation_1.evidenceCandidates)((0, provider_validation_1.problemEvidenceSources)(problem)),
+            evidenceQuotes: (0, provider_validation_2.evidenceCandidates)((0, provider_validation_2.problemEvidenceSources)(problem)),
             output: (0, model_support_1.selectionOutputExample)(false),
             allowedConcepts: allowed,
         }), (value) => (0, blueprint_1.parseKnowledgeSelections)(value, {
             allowedConceptIds: allowed.map((item) => item.id),
-            evidenceSources: (0, provider_validation_1.problemEvidenceSources)(problem),
+            evidenceSources: (0, provider_validation_2.problemEvidenceSources)(problem),
             min: 1,
             max: 4,
             rejectAncestorPairs: true,
         }), undefined, (value, error) => {
-            if (!(0, provider_validation_1.isRecoverableReasonGroundingError)(error))
+            if (!(0, provider_validation_2.isRecoverableReasonGroundingError)(error))
                 throw error;
             return (0, blueprint_1.parseKnowledgeSelections)((0, blueprint_1.repairSelectionReasonGrounding)(value), {
                 allowedConceptIds: allowed.map((item) => item.id),
-                evidenceSources: (0, provider_validation_1.problemEvidenceSources)(problem),
+                evidenceSources: (0, provider_validation_2.problemEvidenceSources)(problem),
                 min: 1,
                 max: 4,
                 rejectAncestorPairs: true,
             });
         });
         onPhase?.("teaching", "已找到讲解起点，正在准备针对这道题的讲法和练习");
-        const blueprints = await this.generateBlueprintBatch(selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_1.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
+        const blueprints = await this.generateBlueprintBatch(selections, (selection, existingCheckPrompts, existingContentSignatures, avoidTeachingContent) => this.generateBlueprint(problem, selection, (0, provider_validation_2.problemEvidenceSources)(problem), { parentTitle: "原题", parentExplanation: (0, problem_evidence_1.problemEvidenceText)(problem) }, existingCheckPrompts, existingContentSignatures, avoidTeachingContent));
         const nodes = blueprints.map(blueprint_1.knowledgeNodeFromBlueprint);
-        return { nodes, edges: nodes.map((node, index) => ({ from: node.id, to: session.rootNodeId, reason: (0, provider_validation_1.edgeReason)(node, blueprints[index], "原题") })) };
+        return { nodes, edges: nodes.map((node, index) => ({ from: node.id, to: session.rootNodeId, reason: (0, provider_validation_2.edgeReason)(node, blueprints[index], "原题") })) };
     }
     async expandNode(session, targetNodeId, onPhase) {
         const target = session.nodes.find((node) => node.id === targetNodeId);
@@ -198,14 +201,14 @@ class LiveProviderAdapter {
                 simplification: target.simplification,
                 teachingExplanation: target.teaching.explanation,
             },
-            evidenceQuotes: (0, provider_validation_1.evidenceCandidates)((0, provider_validation_1.expansionEvidenceSources)(session.problem, target)),
+            evidenceQuotes: (0, provider_validation_2.evidenceCandidates)((0, provider_validation_2.expansionEvidenceSources)(session.problem, target)),
             output: (0, model_support_1.selectionOutputExample)(false),
             allowedPrerequisites: allowed,
             existingConceptIds: session.nodes.filter((node) => node.kind === "concept").map((node) => node.conceptId),
-        }), (value) => (0, blueprint_1.parseKnowledgeSelections)(value, (0, provider_validation_1.expansionSelectionOptions)(session.problem, target, concept.prerequisites)), undefined, (value, error) => {
-            if (!(0, provider_validation_1.isRecoverableReasonGroundingError)(error))
+        }), (value) => (0, blueprint_1.parseKnowledgeSelections)(value, (0, provider_validation_2.expansionSelectionOptions)(session.problem, target, concept.prerequisites)), undefined, (value, error) => {
+            if (!(0, provider_validation_2.isRecoverableReasonGroundingError)(error))
                 throw error;
-            return (0, blueprint_1.parseKnowledgeSelections)((0, blueprint_1.repairSelectionReasonGrounding)(value), (0, provider_validation_1.expansionSelectionOptions)(session.problem, target, concept.prerequisites));
+            return (0, blueprint_1.parseKnowledgeSelections)((0, blueprint_1.repairSelectionReasonGrounding)(value), (0, provider_validation_2.expansionSelectionOptions)(session.problem, target, concept.prerequisites));
         });
         const existingContentSignatures = session.nodes.filter((node) => node.kind === "concept").map((node) => (0, blueprint_1.blueprintContentSignature)({
             conceptId: node.conceptId,
@@ -215,7 +218,7 @@ class LiveProviderAdapter {
             teaching: node.teaching,
             check: node.check,
         }));
-        const evidenceSources = (0, provider_validation_1.expansionEvidenceSources)(session.problem, target);
+        const evidenceSources = (0, provider_validation_2.expansionEvidenceSources)(session.problem, target);
         onPhase?.("teaching", `已定位 ${selections.length} 个更简单前置，正在生成针对这道题的讲法与检查题`);
         const blueprints = await this.generateBlueprintBatch(selections, (selection, acceptedChecks, acceptedContent, avoidTeachingContent) => this.generateBlueprint(session.problem, selection, evidenceSources, { parentTitle: target.title, parentExplanation: target.teaching.explanation }, [...session.nodes.map((node) => node.check.prompt), ...acceptedChecks], [...existingContentSignatures, ...acceptedContent], avoidTeachingContent));
         const nodes = blueprints.map(blueprint_1.knowledgeNodeFromBlueprint);
@@ -224,7 +227,7 @@ class LiveProviderAdapter {
             edges: nodes.map((node, index) => ({
                 from: node.id,
                 to: target.id,
-                reason: (0, provider_validation_1.edgeReason)(node, blueprints[index], target.title),
+                reason: (0, provider_validation_2.edgeReason)(node, blueprints[index], target.title),
             })),
         };
     }
@@ -241,7 +244,7 @@ class LiveProviderAdapter {
             avoidTeachingContent,
             output: (0, model_support_1.teachingOutputExample)(),
         }), (value) => {
-            const detail = (0, provider_validation_1.normalizeBlueprintDetail)(value, selection.conceptId);
+            const detail = (0, provider_validation_2.normalizeBlueprintDetail)(value, selection.conceptId);
             const blueprint = (0, blueprint_1.parseKnowledgeBlueprints)({ nodes: [{ ...detail, ...selection }] }, {
                 allowedConceptIds: [selection.conceptId],
                 evidenceSources,
@@ -277,7 +280,7 @@ class LiveProviderAdapter {
                 : candidate;
             accepted.push(blueprint);
         }
-        (0, provider_validation_1.assertBlueprintBatchUnique)(accepted);
+        (0, provider_validation_2.assertBlueprintBatchUnique)(accepted);
         return accepted;
     }
     async verifyAnswer(check, answer) {
@@ -419,22 +422,19 @@ class LiveProviderAdapter {
         const raw = await this.textRequest(emphasis_1.emphasisSystem, (0, emphasis_1.emphasisPrompt)(session, source, context), undefined, true, 18000, undefined, 1200);
         return (0, learning_emphasis_1.parseLearningEmphasis)((0, model_support_1.parseJsonObject)(raw), source, (0, problem_evidence_1.problemEvidenceText)(session.problem));
     }
-    async generateKnowledgeMap(session) {
-        const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
-        const { parseKnowledgeMap, mapEvidence } = await Promise.resolve().then(() => __importStar(require("../knowledge-map")));
-        const raw = await this.textRequest(knowledgeMapSystem, knowledgeMapPrompt(session), undefined, true, 40000, undefined, 4800);
-        return parseKnowledgeMap({ ...resolveKnowledgeEvidence((0, model_support_1.parseJsonObject)(raw), session), overviewOnly: true }, mapEvidence(session));
+    generateKnowledgeMap(session) { return (0, knowledge_map_services_1.generateKnowledgeMap)(session, this.textRequest.bind(this)); }
+    async streamKnowledgeMap(session, emit) {
+        const { streamKnowledgeMap } = await Promise.resolve().then(() => __importStar(require("./knowledge-map-stream")));
+        const { MAP_NODE_TIMEOUT_MS } = await Promise.resolve().then(() => __importStar(require("../knowledge-map-deadline")));
+        try {
+            return await streamKnowledgeMap(session, (system, prompt) => this.textRequest(system, prompt, undefined, true, MAP_NODE_TIMEOUT_MS, undefined, 2600), emit);
+        }
+        catch (error) {
+            this.cancelPendingRequests();
+            throw error;
+        }
     }
-    async generateKnowledgeDetail(session, map, nodeId) {
-        const { knowledgeDetailSystem, knowledgeMapPrompt } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
-        const { parseKnowledgeDetail } = await Promise.resolve().then(() => __importStar(require("../knowledge-map")));
-        const node = map.nodes.find(n => n.id === nodeId);
-        if (!node)
-            throw new Error("知识点不存在");
-        const relations = map.edges.filter(e => e.from === nodeId || e.to === nodeId).map(e => ({ ...e, from: map.nodes.find(n => n.id === e.from)?.title, to: map.nodes.find(n => n.id === e.to)?.title }));
-        const raw = await this.textRequest(knowledgeDetailSystem, JSON.stringify({ original: knowledgeMapPrompt(session), node, relations }), undefined, true, 25000, undefined, 1400);
-        return parseKnowledgeDetail((0, model_support_1.parseJsonObject)(raw));
-    }
+    generateKnowledgeDetail(session, map, nodeId) { return (0, knowledge_map_services_1.generateKnowledgeDetail)(session, map, nodeId, this.textRequest.bind(this)); }
     async transcribeStudentAnswer(imageDataUrl, taskPrompt) {
         return (0, student_response_1.transcribeStudentResponse)(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
     }
@@ -446,8 +446,8 @@ class LiveProviderAdapter {
             currentFocus: node ? { title: node.title, evidence: node.diagnosticEvidence, reason: node.simplification } : { keyClue: session.problemGuide.keyClue, approach: session.problemGuide.approach },
         });
         if (this.config.protocol === "chat-completions")
-            return this.validatedStructuredRequest(system, prompt, (0, model_support_1.boardSuggestionTool)(), provider_validation_1.parseBoardSuggestion);
-        return this.validatedJsonRequest(`${system} 只输出严格 JSON。`, `${prompt}\n输出字段：recommended(boolean)、reason(string)、layout(relation|steps|comparison|formula)。`, provider_validation_1.parseBoardSuggestion);
+            return this.validatedStructuredRequest(system, prompt, (0, model_support_1.boardSuggestionTool)(), provider_validation_2.parseBoardSuggestion);
+        return this.validatedJsonRequest(`${system} 只输出严格 JSON。`, `${prompt}\n输出字段：recommended(boolean)、reason(string)、layout(relation|steps|comparison|formula)。`, provider_validation_2.parseBoardSuggestion);
     }
     async generateBoardLesson(session, scope, suggestion, context = []) {
         if (!suggestion.recommended)
@@ -473,9 +473,9 @@ class LiveProviderAdapter {
             return parse((0, model_support_1.parseJsonObject)(first));
         }
         catch (error) {
-            if (error instanceof provider_validation_1.NonRepairableValidationError)
+            if (error instanceof provider_validation_2.NonRepairableValidationError)
                 throw error;
-            const repaired = await this.textRequest(`${system}\n这是唯一一次修复机会。必须针对下方校验错误修正完整结果，不能只机械重复上一次输出。所有原文证据必须逐字复制，不能概括或改写；conceptId 与 evidence 不得改变。若错误涉及 simplification，它必须完整包含对应 evidence；若错误涉及 problemGuide.keyClue，它必须逐字包含题干中一段连续原文或已选择的 problem evidence。只输出严格 JSON。`, `${repairContext(prompt)}\n\n上一次输出未通过校验：${error instanceof Error ? error.message : "结构不合法"}\n上一次输出：${first.slice(0, 8000)}\n请重新完成原任务并输出完整 JSON。`, imageDataUrl, true, timeoutMs);
+            const repaired = await this.textRequest(`${system}\n这是唯一一次修复机会。必须针对下方校验错误修正完整结果，不能只机械重复上一次输出。所有原文证据必须逐字复制，不能概括或改写；conceptId 与 evidence 不得改变。若错误涉及 simplification，它必须完整包含对应 evidence；若错误涉及 problemGuide.keyClue，它必须逐字包含题干中一段连续原文或已选择的 problem evidence。只输出严格 JSON。`, `${(0, provider_validation_1.repairContext)(prompt)}\n\n上一次输出未通过校验：${error instanceof Error ? error.message : "结构不合法"}\n上一次输出：${first.slice(0, 8000)}\n请重新完成原任务并输出完整 JSON。`, imageDataUrl, true, timeoutMs);
             const repairedValue = (0, model_support_1.parseJsonObject)(repaired);
             try {
                 return parse(repairedValue);
@@ -496,7 +496,7 @@ class LiveProviderAdapter {
                 throw error;
             if (error instanceof errors_1.ServiceError && error.code === "PROVIDER_TIMEOUT")
                 throw error;
-            if (error instanceof provider_validation_1.NonRepairableValidationError)
+            if (error instanceof provider_validation_2.NonRepairableValidationError)
                 throw error;
             const reason = error instanceof Error ? error.message : "结构函数输出无效";
             const functionSchema = tool.function && typeof tool.function === "object" && !Array.isArray(tool.function)
@@ -546,41 +546,8 @@ class LiveProviderAdapter {
             release();
         }
     }
-    async textRequest(system, prompt, imageDataUrl, jsonMode = false, timeoutMs = 60_000, externalSignal, maxTokens = 3000) {
-        const controller = new AbortController();
-        const release = this.requests.track(controller);
-        const abort = () => controller.abort();
-        externalSignal?.addEventListener("abort", abort, { once: true });
-        this.requestSignal?.addEventListener("abort", abort, { once: true });
-        if (externalSignal?.aborted || this.requestSignal?.aborted)
-            controller.abort();
-        let timedOut = false;
-        const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-        try {
-            const response = await (0, transient_fetch_1.fetchWithTransientRetry)(this.fetcher, this.config.baseUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
-                body: JSON.stringify(this.config.protocol === "responses"
-                    ? (0, model_support_1.responsesBody)(this.modelId, system, prompt, imageDataUrl, maxTokens)
-                    : (0, model_support_1.chatBody)(this.modelId, system, prompt, imageDataUrl, jsonMode, this.id === "doubao", maxTokens)),
-                signal: controller.signal,
-            });
-            if (!response.ok)
-                throw (0, errors_1.providerError)(`模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
-            const payload = await response.json();
-            return (0, model_support_1.extractText)(payload, this.config.protocol);
-        }
-        catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError" && timedOut)
-                throw (0, errors_1.providerError)("模型响应超时，请稍后重试同一模型", 504);
-            throw error;
-        }
-        finally {
-            clearTimeout(timeout);
-            externalSignal?.removeEventListener("abort", abort);
-            this.requestSignal?.removeEventListener("abort", abort);
-            release();
-        }
+    textRequest(system, prompt, imageDataUrl, jsonMode = false, timeoutMs = 60_000, externalSignal, maxTokens = 3000) {
+        return (0, provider_text_request_1.requestModelText)({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, system, prompt, imageDataUrl, jsonMode, timeoutMs, externalSignal, maxTokens);
     }
     async streamTextRequest(system, prompt, onDelta, externalSignal, imageDataUrl, maxTokens = 3_000) {
         const controller = new AbortController();
@@ -662,8 +629,3 @@ class LiveProviderAdapter {
     }
 }
 exports.LiveProviderAdapter = LiveProviderAdapter;
-function repairContext(prompt) {
-    if (prompt.length <= 18_000)
-        return prompt;
-    return `${prompt.slice(0, 7_000)}\n…中间课程目录省略…\n${prompt.slice(-11_000)}`;
-}

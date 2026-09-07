@@ -14,6 +14,7 @@ const tutor_1 = require("../../../lib/learning/http/tutor");
 const turn_1 = require("../../../lib/learning/http/turn");
 const emphasis_1 = require("../../../lib/learning/http/emphasis");
 const knowledge_map_1 = require("../../../lib/learning/http/knowledge-map");
+const knowledge_connection_1 = require("../../../lib/learning/http/knowledge-connection");
 const verify_1 = require("../../../lib/learning/http/verify");
 const maximumRequestBytes = 8 * 1024 * 1024;
 const routes = {
@@ -30,6 +31,7 @@ const routes = {
     "POST /learning/turn": turn_1.postTurn,
     "POST /learning/emphasis": emphasis_1.postEmphasis,
     "POST /learning/knowledge-map": knowledge_map_1.postKnowledgeMap,
+    "POST /learning/knowledge-connection": knowledge_connection_1.postKnowledgeConnection,
 };
 exports.main = (0, node_http_1.createServer)((request, response) => {
     void handle(request, response);

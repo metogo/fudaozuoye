@@ -38,9 +38,9 @@ const clean = (v: unknown, max: number) => {
 const compact = (v: string) => v.replace(/\s+/g, "");
 
 /** Validates a rooted DAG; layout direction always follows root → dependency. */
-export function parseKnowledgeMap(value: unknown, evidenceSource: string): ProblemKnowledgeMap {
+export function parseKnowledgeMap(value: unknown, evidenceSource: string, partial = false): ProblemKnowledgeMap {
   const raw = record(value);
-  if (!Array.isArray(raw.nodes) || raw.nodes.length < 2 || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24) throw new Error("知识图谱规模不合法");
+  if (!Array.isArray(raw.nodes) || raw.nodes.length < (partial ? 1 : 2) || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24) throw new Error("知识图谱规模不合法");
   const nodes = raw.nodes.map((v) => {
     const n = record(v);
     const id = clean(n.id, 40);

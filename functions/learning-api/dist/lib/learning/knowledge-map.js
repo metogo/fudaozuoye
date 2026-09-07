@@ -24,9 +24,9 @@ const clean = (v, max) => {
 };
 const compact = (v) => v.replace(/\s+/g, "");
 /** Validates a rooted DAG; layout direction always follows root → dependency. */
-function parseKnowledgeMap(value, evidenceSource) {
+function parseKnowledgeMap(value, evidenceSource, partial = false) {
     const raw = record(value);
-    if (!Array.isArray(raw.nodes) || raw.nodes.length < 2 || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24)
+    if (!Array.isArray(raw.nodes) || raw.nodes.length < (partial ? 1 : 2) || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24)
         throw new Error("知识图谱规模不合法");
     const nodes = raw.nodes.map((v) => {
         const n = record(v);

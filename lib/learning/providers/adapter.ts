@@ -1,3 +1,5 @@
+import { generateKnowledgeMap, generateKnowledgeDetail } from "./knowledge-map-services";
+import { repairContext } from "./provider-validation";
 import { mathOutputInstruction } from "../math-quality";
 import { parseLearningEmphasis, type LearningEmphasis } from "../learning-emphasis";
 import { emphasisPrompt, emphasisSystem } from "./emphasis";
@@ -27,7 +29,6 @@ import {
   chatToolBody,
   diagnosticSystemPrompt,
   emitProviderDelta,
-  extractText,
   extractToolArguments,
   parseJsonObject,
   parseSimilarCheck,
@@ -50,37 +51,9 @@ import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution, probl
 import { generateValidatedSolution, streamValidatedSolution } from "./solution";
 import { generateGeneralTeaching } from "./general-teaching";
 import { generalTeachingTool } from "../teaching-program";
-export type AnalysisPhaseReporter = (key: string, label: string) => void;
-export interface ProviderAdapter {
-  generateKnowledgeMap?(session: LearningSession): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
-  generateKnowledgeDetail?(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string): Promise<import("../knowledge-map").KnowledgeDetail>;
-  selectEmphasis?(session: LearningSession, source: string, context: string): Promise<LearningEmphasis[]>;
-  readonly id: ProviderId;
-  readonly reasoningLevel: ReasoningLevel;
-  readonly modelId: string;
-  readonly mode: "demo" | "live";
-  recognizeProblem(imageDataUrl: string, subject?: ProblemSnapshot["subject"], gradeBand?: ProblemSnapshot["gradeBand"]): Promise<ProblemSnapshot>;
-  recognizeTextProblem(text: string): Promise<ProblemSnapshot>;
-  prepareChatSession(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
-  completeChatSession(session: LearningSession, imageDataUrl?: string): Promise<LearningSession>;
-  diagnoseProblem(session: LearningSession, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;
-  analyzeProblem(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
-  expandNode(session: LearningSession, targetNodeId: string, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;
-  verifyAnswer(check: CheckItem, answer: string): Promise<{ passed: boolean; explanation: string }>;
-  generateSimilarCheck(session: LearningSession, nodeId: string): Promise<CheckItem>;
-  generateTransferCheck(session: LearningSession): Promise<CheckItem>;
-  generateSolutionRecallCheck?(session: LearningSession, solution: string): Promise<CheckItem>;
-  generateStepExercise?(session: LearningSession, source: string): Promise<StepExercise>;
-  solveProblem(problem: ProblemSnapshot): Promise<string>;
-  streamSolution(problem: ProblemSnapshot, onDelta: (text: string) => void, onReset: () => void, signal?: AbortSignal): Promise<void>;
-  streamTutorReply(session: LearningSession, scope: TutorScope, question: string, onDelta: (text: string) => void, signal?: AbortSignal, imageDataUrl?: string, imageRole?: "problem" | "student"): Promise<void>;
-  suggestQuestions(session: LearningSession, scope: TutorScope, sourceText: string): Promise<SuggestedQuestion[]>;
-  transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }>;
-  decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion>;
-  generateBoardLesson(session: LearningSession, scope: TutorScope, suggestion: BoardSuggestion, context?: BoardConversationMessage[]): Promise<BoardLesson>;
-  generateIllustrationLesson(session: LearningSession, onFrame: (frame: IllustrationFrame, frameCount: number) => void, signal?: AbortSignal): Promise<IllustrationLesson>;
-  cancelPendingRequests(): void;
-}
+export type { ProviderAdapter, AnalysisPhaseReporter } from "./provider-contract";
+import type { ProviderAdapter, AnalysisPhaseReporter } from "./provider-contract";
+import { requestModelText } from "./provider-text-request";
 export { MockProviderAdapter } from "./mock-adapter";
 export class LiveProviderAdapter implements ProviderAdapter {
   readonly mode = "live" as const;
@@ -548,21 +521,15 @@ export class LiveProviderAdapter implements ProviderAdapter {
     const raw = await this.textRequest(emphasisSystem, emphasisPrompt(session, source, context), undefined, true, 18000, undefined, 1200);
     return parseLearningEmphasis(parseJsonObject(raw), source, problemEvidenceText(session.problem));
   }
-  async generateKnowledgeMap(session: LearningSession) {
-    const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await import("./knowledge-map");
-    const { parseKnowledgeMap, mapEvidence } = await import("../knowledge-map");
-    const raw = await this.textRequest(knowledgeMapSystem, knowledgeMapPrompt(session), undefined, true, 40000, undefined, 4800);
-    return parseKnowledgeMap({ ...resolveKnowledgeEvidence(parseJsonObject(raw), session), overviewOnly: true }, mapEvidence(session));
+  generateKnowledgeMap(session: LearningSession) { return generateKnowledgeMap(session, this.textRequest.bind(this)); }
+  async streamKnowledgeMap(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void) {
+    const { streamKnowledgeMap } = await import("./knowledge-map-stream");
+    const { MAP_NODE_TIMEOUT_MS } = await import("../knowledge-map-deadline");
+    try {
+      return await streamKnowledgeMap(session, (system, prompt) => this.textRequest(system, prompt, undefined, true, MAP_NODE_TIMEOUT_MS, undefined, 2600), emit);
+    } catch (error) { this.cancelPendingRequests(); throw error; }
   }
-  async generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string) {
-    const { knowledgeDetailSystem, knowledgeMapPrompt } = await import("./knowledge-map");
-    const { parseKnowledgeDetail } = await import("../knowledge-map");
-    const node = map.nodes.find(n => n.id === nodeId);
-    if (!node) throw new Error("知识点不存在");
-    const relations = map.edges.filter(e => e.from === nodeId || e.to === nodeId).map(e => ({ ...e, from: map.nodes.find(n => n.id === e.from)?.title, to: map.nodes.find(n => n.id === e.to)?.title }));
-    const raw = await this.textRequest(knowledgeDetailSystem, JSON.stringify({ original: knowledgeMapPrompt(session), node, relations }), undefined, true, 25000, undefined, 1400);
-    return parseKnowledgeDetail(parseJsonObject(raw));
-  }
+  generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string) { return generateKnowledgeDetail(session, map, nodeId, this.textRequest.bind(this)); }
   async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {
     return transcribeStudentResponse(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
   }
@@ -670,31 +637,8 @@ export class LiveProviderAdapter implements ProviderAdapter {
     } finally { clearTimeout(timeout); this.requestSignal?.removeEventListener("abort", abort); release(); }
   }
 
-  private async textRequest(system: string, prompt: string, imageDataUrl?: string, jsonMode = false, timeoutMs = 60_000, externalSignal?: AbortSignal, maxTokens = 3000): Promise<string> {
-    const controller = new AbortController();
-    const release = this.requests.track(controller);
-    const abort = () => controller.abort();
-    externalSignal?.addEventListener("abort", abort, { once: true });
-    this.requestSignal?.addEventListener("abort", abort, { once: true });
-    if (externalSignal?.aborted || this.requestSignal?.aborted) controller.abort();
-    let timedOut = false;
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-    try {
-      const response = await fetchWithTransientRetry(this.fetcher, this.config.baseUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` },
-        body: JSON.stringify(this.config.protocol === "responses"
-          ? responsesBody(this.modelId, system, prompt, imageDataUrl, maxTokens)
-          : chatBody(this.modelId, system, prompt, imageDataUrl, jsonMode, this.id === "doubao", maxTokens)),
-        signal: controller.signal,
-      });
-      if (!response.ok) throw providerError(`模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
-      const payload = await response.json() as JsonObject;
-      return extractText(payload, this.config.protocol);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError" && timedOut) throw providerError("模型响应超时，请稍后重试同一模型", 504);
-      throw error;
-    } finally { clearTimeout(timeout); externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); release(); }
+  private textRequest(system: string, prompt: string, imageDataUrl?: string, jsonMode = false, timeoutMs = 60_000, externalSignal?: AbortSignal, maxTokens = 3000): Promise<string> {
+    return requestModelText({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, system, prompt, imageDataUrl, jsonMode, timeoutMs, externalSignal, maxTokens);
   }
 
   private async streamTextRequest(system: string, prompt: string, onDelta: (text: string) => void, externalSignal?: AbortSignal, imageDataUrl?: string, maxTokens: number | null = 3_000): Promise<void> {
@@ -750,9 +694,4 @@ export class LiveProviderAdapter implements ProviderAdapter {
       throw error;
     } finally { controller.abort(); externalSignal?.removeEventListener("abort", abort); this.requestSignal?.removeEventListener("abort", abort); if (timeout) clearTimeout(timeout); clearTimeout(totalTimeout); release(); }
   }
-}
-
-function repairContext(prompt: string): string {
-  if (prompt.length <= 18_000) return prompt;
-  return `${prompt.slice(0, 7_000)}\n…中间课程目录省略…\n${prompt.slice(-11_000)}`;
 }
