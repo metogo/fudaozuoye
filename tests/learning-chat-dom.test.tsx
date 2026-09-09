@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import type { LearningSession, ProblemSnapshot, ChatMessage } from "@/lib/learning/types";
 import type { SelectionAsk } from "@/components/selection-ask";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <>{text}</>, CopyableLearningText: ({ text }: { text: string }) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: { text: string }) => <>{text}</> }));
@@ -73,6 +73,29 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
  it("任务卡和建议问题都可操作", () => { const p = { ...base, session, stateToken: "token", messages: [{ id: "a", role: "assistant", kind: "assistant", text: "讲解中断", status: "error", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions } satisfies ChatMessage], onChoice: vi.fn(), onSuggestion: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: "继续" })); expect(p.onChoice).toHaveBeenCalledWith(session.flow.activeGate, "continue"); fireEvent.click(screen.getByRole("button", { name: /为什么用判别式/ })); expect(p.onSuggestion).toHaveBeenCalledWith(session.flow.suggestedQuestions[0]); });
  it("识别待确认时要求图中条件，并将编辑结果回传", () => { const confirm = vi.fn(); const problem: ProblemSnapshot = { ...initialSession.problem, text: "图形题", visualContext: { related: true, affectsSolving: true, confidence: 0.5, facts: [], summary: "" } }; render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>); expect(screen.getByText("这道题依赖配图，请补全图中条件或重新拍摄。")).not.toBeNull(); fireEvent.change(screen.getByLabelText("图中信息"), { target: { value: "AB=3" } }); fireEvent.click(screen.getByRole("button", { name: "确认题目，开始讲解" })); expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ userRevised: true })); });
  it("两种完成态都会提供合适的后续学习动作", () => { const transfer = vi.fn(), fresh = vi.fn(), retry = vi.fn(); const completed: LearningSession = { ...session, originalPassed: true, flow: { ...session.flow, stage: "complete", activeGate: null } }; const view = render(<LearningChat {...base} session={completed} onRequestTransfer={transfer} onNewProblem={fresh}/>); expect(screen.getByText("你已经独立解决了这道原题")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "再练一道同类题" })); expect(transfer).toHaveBeenCalled(); fireEvent.click(screen.getAllByRole("button", { name: "开始新题" }).at(-1)!); expect(fresh).toHaveBeenCalled(); view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, stage: "reviewed_complete", activeGate: null } }} onRetryOriginal={retry} onRequestTransfer={transfer} onNewProblem={fresh}/>); fireEvent.click(screen.getByRole("button", { name: "遮住讲解，重做原题" })); expect(retry).toHaveBeenCalled(); });
+ it("知识图谱作为轮到你了的操作紧跟完整讲解，点击不推进学习", async () => {
+   const onChoice = vi.fn();
+   const withSolution: LearningSession = { ...session, flow: { ...session.flow, activeGate: { ...session.flow.activeGate!, options: [...session.flow.activeGate!.options!, { id: "full_solution", label: "看完整讲解", emphasis: "quiet" }] } } };
+   const view = render(<LearningChat {...base} session={withSolution} stateToken="token" onChoice={onChoice}/>);
+   const task = screen.getByRole("region", { name: "当前学习任务" });
+   const helpers = within(task).getByRole("group", { name: "辅助讲解" });
+   expect(within(helpers).getAllByRole("button").map(button => button.textContent)).toEqual(["看完整讲解", "查看完整知识图谱"]);
+   expect(screen.getAllByRole("button", { name: "本题知识图谱" })).toHaveLength(1);
+   fireEvent.click(within(helpers).getByRole("button", { name: "本题知识图谱" }));
+   expect(await screen.findByText("知识图谱页面")).not.toBeNull();
+   expect(onChoice).not.toHaveBeenCalled();
+   fireEvent.click(screen.getByRole("button", { name: "关闭图谱" }));
+   expect(within(task).getByRole("button", { name: "本题知识图谱" })).not.toBeNull();
+   view.rerender(<LearningChat {...base} session={{ ...withSolution, flow: { ...withSolution.flow, viewedSolution: true } }} stateToken="token"/>);
+   expect(screen.queryByRole("button", { name: "看完整讲解" })).toBeNull();
+   expect(within(screen.getByRole("region", { name: "当前学习任务" })).getByRole("button", { name: "本题知识图谱" })).not.toBeNull();
+ });
+ it.each([
+   { busy: true }, { retryLabel: "重试这一步" }, { stateToken: "" }, { reviewProblem: session.problem },
+ ])("图谱入口迁入任务区后仍遵守不可用状态 %j", overrides => {
+   render(<LearningChat {...base} session={session} stateToken="token" {...overrides}/>);
+   expect(screen.queryByRole("button", { name: "本题知识图谱" })).toBeNull();
+ });
  it("对话完成后可打开并关闭 PDF 导出和本题知识图谱", async () => {
    const ready = { ...session, flow: { ...session.flow, activeGate: null } };
    render(<LearningChat {...base} session={ready} stateToken="token" messages={[{ id: "m", role: "assistant", kind: "assistant", text: "讲解", status: "complete", createdAt: new Date().toISOString() }]}/>);

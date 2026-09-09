@@ -4,7 +4,7 @@
 
 import { UiLanguageSwitch, useUiText } from "./ui-language";
 import { MissingProblemImage } from "./missing-problem-image";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { flushSync } from "react-dom";
 import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/presentation";
@@ -281,8 +281,9 @@ export function LearningChat(props: LearningChatProps) {
           : <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>)}
         <ChatThinking active={props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn} label={props.loadingLabel}/>
         {isPreparingNextTurn && gate?.kind !== "step_answer" && <NextTurnPlaceholder/>}
-        {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}/>}
-        {!props.busy && !hasPendingRetry && !props.reviewProblem && props.session && props.stateToken && <KnowledgeMapPreview key={props.session.requestId} session={props.session} onOpen={openKnowledgeMap}/>}
+        {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}
+          knowledgeMapAction={!props.busy && !hasPendingRetry && !props.reviewProblem && props.session && props.stateToken ? <KnowledgeMapPreview key={props.session.requestId} session={props.session} onOpen={openKnowledgeMap}/> : null}/>}
+        {!gate && !props.busy && !hasPendingRetry && !props.reviewProblem && props.session && props.stateToken && <KnowledgeMapPreview key={props.session.requestId} session={props.session} onOpen={openKnowledgeMap}/>}
         {BOARD_UI_ENABLED && !props.busy && !hasPendingRetry && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>{t("再次查看刚才的板书")}</span><span className="text-[9px] font-normal text-stone-400">{t("不改变当前任务")}</span></button>}
         {!props.busy && props.session?.flow.stage === "complete" && !gate && <CompletionActions session={props.session} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {!props.busy && props.session?.flow.stage === "reviewed_complete" && !gate && <ReviewCompletionActions onRetryOriginal={props.onRetryOriginal} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
@@ -437,7 +438,7 @@ function SuggestedQuestionTrail({ suggestions, onSuggestion }: { suggestions: Su
   </section>;
 }
 
-function GateCard({ gate, busy = false, onTranscribeStep, answerChoices, choicesDerivedFromPrompt, allowFullSolution, onChoice, onAnswer }: { gate: LearningGate; busy?: boolean; onTranscribeStep?: LearningChatProps["onTranscribeStep"]; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; illustrationAvailability: IllustrationAvailability; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void }) {
+function GateCard({ gate, busy = false, onTranscribeStep, answerChoices, choicesDerivedFromPrompt, allowFullSolution, onChoice, onAnswer, knowledgeMapAction }: { gate: LearningGate; busy?: boolean; onTranscribeStep?: LearningChatProps["onTranscribeStep"]; answerChoices?: string[]; choicesDerivedFromPrompt: boolean; allowFullSolution: boolean; illustrationAvailability: IllustrationAvailability; onChoice: (gate: LearningGate, choice: LearningChoice) => void; onAnswer: (answer: string) => void; knowledgeMapAction?: ReactNode }) {
   const t = useUiText();
   // Hide illustrations for both new and previously saved gates; keep the underlying feature intact.
   const visibleOptions = (gate.options ?? []).filter((option) => option.id !== "view_illustration" && (BOARD_UI_ENABLED || option.id !== "view_board") && (allowFullSolution || option.id !== "full_solution"));
@@ -454,7 +455,7 @@ function GateCard({ gate, busy = false, onTranscribeStep, answerChoices, choices
       <AnswerChoices choices={answerChoices} stripLabels={choicesDerivedFromPrompt} onAnswer={onAnswer}/>
       {!answerChoices?.length && <p className="text-[11px] leading-5 text-stone-500">{t("请在下方输入你的答案并发送。")}</p>}
     </> : mainOptions.length ? <div className="chat-gate__options grid grid-cols-2 gap-2">{mainOptions.map((option) => <button type="button" key={option.id} data-emphasis={option.emphasis} onClick={() => onChoice(gate, option.id)} className={`min-h-11 rounded-xl px-3 text-xs font-semibold transition active:scale-[.98] ${gate.kind === "solution_review" ? "col-span-2" : ""} ${option.emphasis === "primary" ? "bg-stone-950 text-white" : option.emphasis === "quiet" ? "col-span-2 text-stone-400 underline decoration-stone-300 underline-offset-4" : "border border-stone-200 text-stone-700 hover:border-stone-400"}`}>{option.id === "try" && <PencilIcon className="gate-action-icon"/>}{option.id === "not_understood" && <QuestionIcon className="gate-action-icon"/>}<span>{option.id === "try" ? t("这一步我来做") : t(option.label)}</span>{option.emphasis === "primary" && <ArrowIcon className="gate-action-arrow"/>}</button>)}</div> : !helperOptions.length && <p className="text-[11px] leading-5 text-stone-500">{t("可以在下方继续描述哪里不懂。")}</p>}
-    {helperOptions.length > 0 && <div className="chat-gate__helpers" role="group" aria-label={t("辅助讲解")}>{helperOptions.map((option) => <button type="button" key={option.id} onClick={() => onChoice(gate, option.id)}>{option.id === "view_board" ? <PencilIcon className="gate-action-icon"/> : <BookIcon className="gate-action-icon"/>}<span>{t(option.label)}</span></button>)}</div>}
+    {(helperOptions.length > 0 || knowledgeMapAction) && <div className="chat-gate__helpers" role="group" aria-label={t("辅助讲解")}>{helperOptions.map((option) => <button type="button" key={option.id} onClick={() => onChoice(gate, option.id)}>{option.id === "view_board" ? <PencilIcon className="gate-action-icon"/> : <BookIcon className="gate-action-icon"/>}<span>{t(option.label)}</span></button>)}{knowledgeMapAction}</div>}
     </div>
   </section>;
 }

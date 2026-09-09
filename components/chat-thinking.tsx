@@ -3,7 +3,6 @@
 import { useUiText } from "./ui-language";
 import { useEffect, useState } from "react";
 import { thinkingPresentation } from "@/lib/learning/thinking-presentation";
-import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { CommaCompanion } from "./comma-companion";
 import styles from "./chat-thinking.module.css";
 
@@ -11,11 +10,9 @@ export function ChatThinking({ active, label }: { active: boolean; label: string
   const t = useUiText();
   const [previousActive, setPreviousActive] = useState(active);
   const [exiting, setExiting] = useState(false);
-  const [quoteIndex, setQuoteIndex] = useState(0);
   if (previousActive !== active) {
     setPreviousActive(active);
     setExiting(!active);
-    if (active) setQuoteIndex(index => (index + 1) % loadingLearningQuotes.length);
   }
   useEffect(() => {
     if (!exiting) return;
@@ -23,12 +20,20 @@ export function ChatThinking({ active, label }: { active: boolean; label: string
     return () => window.clearTimeout(timer);
   }, [exiting]);
   const content = thinkingPresentation(label);
-  const quote = loadingLearningQuotes[quoteIndex];
   if (!active && !exiting) return null;
-  return <div className={styles.shell} data-exiting={exiting} aria-hidden={!active}><div className={styles.clip}>
-      <div className={styles.content} role="status" aria-live="polite" aria-atomic="true" aria-label={t("小逗号正在思考")}>
-        <div className={styles.avatar} aria-hidden="true"><CommaCompanion thinking canCelebrate={false}/></div>
-        <div className={styles.copy}><div className={styles.eyebrow}>{t("小逗号正在思考")}<span className={styles.dots} aria-hidden="true"><i/><i/><i/></span></div><div key={t(content.title)} className={styles.phase}><h3>{t(content.title)}</h3><p>{t(content.description)}</p></div><blockquote className={styles.quote} aria-label={t("学习寄语")} aria-live="off"><p>“{t(quote.text)}”</p><cite>— {t(quote.source)}</cite></blockquote></div>
+  return <div className={`chat-thinking ${styles.shell}`} data-exiting={exiting} aria-hidden={!active}><div className={styles.clip}>
+      <div className="chat-thinking-card relative isolate flex w-full max-w-[420px] items-start gap-3.5 rounded-[24px] border border-[#e1eae3] bg-[#fbfdfb] px-4 py-5 sm:gap-4 sm:px-5" role="status" aria-live="polite" aria-atomic="true" aria-label={t("小逗号正在思考")}>
+        <svg className={`chat-thinking-border ${styles.border}`} aria-hidden="true" focusable="false">
+          <rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="23" pathLength="100"/>
+        </svg>
+        <div className={`chat-thinking-avatar ${styles.avatar}`} aria-hidden="true"><CommaCompanion thinking canCelebrate={false}/></div>
+        <div className="chat-thinking-copy min-w-0 flex-1">
+          <div className="chat-thinking-byline mb-2 text-[11px] leading-4 tracking-wide text-[#748578]">{t("小逗号正在思考")}</div>
+          <div key={t(content.title)} className={styles.phase}>
+            <h3 className="chat-thinking-title m-0 text-[17px] leading-7 font-semibold tracking-tight text-[#294b3d] [overflow-wrap:anywhere]">{t(content.title)}</h3>
+            <p className="chat-thinking-description mt-1 text-[13px] leading-[1.8] text-[#697a70] [overflow-wrap:anywhere]">{t(content.description)}</p>
+          </div>
+        </div>
       </div>
     </div></div>;
 }
