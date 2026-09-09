@@ -2,7 +2,11 @@
   "name": "learning-api",
   "private": true,
   "type": "commonjs",
-  "dependencies": { "mathjs": "15.2.0", "katex": "0.18.4" },
+  "dependencies": {
+    "@cloudbase/js-sdk": "3.8.2",
+    "katex": "0.18.4",
+    "mathjs": "15.2.0"
+  },
   "scripts": {
     "start": "node dist/functions/learning-api/src/index.js"
   }

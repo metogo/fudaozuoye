@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { animateHomeCompanion } = vi.hoisted(() => ({ animateHomeCompanion: vi.fn() }));
 vi.mock("@/lib/learning/home-companion-motion", () => ({ animateHomeCompanion }));
+vi.mock("@/components/home-question-count", () => ({ HomeQuestionCount: () => <p>已累计解题 10,000 次</p> }));
 import { HomeWelcomeHero } from "@/components/home-welcome-hero";
 
 describe("HomeWelcomeHero", () => {

@@ -2,6 +2,7 @@
 import type { ComponentProps } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/components/use-question-entry-reporting", () => ({ useQuestionEntryReporting: () => () => {} }));
 
 import type { LearningChat } from "@/components/learning-chat";
 let chat: ComponentProps<typeof LearningChat> | undefined;

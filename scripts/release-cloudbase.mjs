@@ -44,6 +44,7 @@ async function main() {
     // Code-only update deliberately avoids cloudbaserc envVariables interpolation/config replacement.
     deployBackend: () => run("tcb", ["fn", "code", "update", "learning-api", "--dir", "functions/learning-api", ...env, "--json"]),
     verifyBackend: async () => {
+      await (await import("./verify-question-statistics-release.mjs")).verifyQuestionStatistics(config.app.envVariables.NEXT_PUBLIC_API_BASE_URL);
       await (await import("./verify-recognition-release.mjs")).verifyRecognition();
       return (await import("./verify-knowledge-map-release.mjs")).verifyKnowledgeMaps();
     },

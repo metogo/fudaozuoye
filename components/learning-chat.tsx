@@ -267,7 +267,7 @@ export function LearningChat(props: LearningChatProps) {
         {!isHome && props.session && <span className="block truncate text-[10px] font-medium text-stone-400">{t("模型识别为{grade}题", { grade: t(gradeBandLabels[props.session.problem.gradeBand]) })}</span>}
       </div>
       <div className="chat-header-actions flex shrink-0 items-center gap-1">
-        <UiLanguageSwitch/>
+        {isHome && <UiLanguageSwitch/>}
         {props.messages.length > 0 && <button type="button" onClick={() => setExportOpen(true)} aria-label={t("导出 PDF")} title={t("导出当前全部对话")} className="chat-export-trigger flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-medium text-stone-500 transition hover:bg-white hover:text-emerald-800"><DownloadIcon className="h-[18px] w-[18px]"/><span className="hidden min-[380px]:inline">{t("导出 PDF")}</span></button>}
         {props.session && <button type="button" onClick={props.onNewProblem} aria-label={t("开始新题")} title={t("开始新题")} className="chat-new-problem min-h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 transition hover:bg-white hover:text-stone-900"><RefreshIcon className="h-[18px] w-[18px]"/><span>{t("开始新题")}</span></button>}
       </div>

@@ -48,6 +48,7 @@ import {
 import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint";
 import { BoardErrorBoundary } from "./board-error-boundary";
 import { LearningChat } from "./learning-chat";
+import { useQuestionEntryReporting } from "./use-question-entry-reporting";
 import { STREAMING_FINISH_MS } from "./streaming-indicator";
 const ImageCropper = dynamic(() => import("./image-cropper").then((module) => module.ImageCropper), { ssr: false });
 const WhiteboardInput = dynamic(() => import("./whiteboard-input").then((module) => module.WhiteboardInput), { ssr: false });
@@ -99,6 +100,7 @@ export function EducationChatApp() {
   // A new problem owns a fresh set of transient chat UI state (scroll hints,
   // quote selection, draft input and export dialog), not only fresh messages.
   const [chatUiEpoch, setChatUiEpoch] = useState(0);
+  const recordQuestionEntry = useQuestionEntryReporting(ready, chatUiEpoch);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [responseCrop, setResponseCrop] = useState<{
     file: File;
@@ -381,6 +383,7 @@ export function EducationChatApp() {
   const sendText = async (text: string) => {
     if (!session) {
       addMessage(userMessage(text));
+      if (messages.length === 0) recordQuestionEntry();
       await recognizeText(text);
       return;
     }
@@ -534,6 +537,7 @@ export function EducationChatApp() {
       };
       pendingImageMessageIdRef.current = message.id;
       addMessage(message);
+      if (!session && messages.length === 0) recordQuestionEntry();
     }
     await recognizeImage(blob);
   };

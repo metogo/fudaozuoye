@@ -3,6 +3,8 @@ import type { ProblemSnapshot } from "@/lib/learning/types";
 import type { ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const { recordQuestionEntry } = vi.hoisted(() => ({ recordQuestionEntry: vi.fn() }));
+vi.mock("@/components/use-question-entry-reporting", () => ({ useQuestionEntryReporting: () => recordQuestionEntry }));
 
 import type { LearningChat } from "@/components/learning-chat";
 let latest: ComponentProps<typeof LearningChat> | undefined;
@@ -65,6 +67,7 @@ const response = (stage: string, body: unknown = {}, ok = true) => ({ stage, ok,
 
 describe("EducationChatApp", () => {
   beforeEach(() => {
+    recordQuestionEntry.mockClear();
     latest = undefined;
     latestCrop = undefined;
     latestWhiteboard = undefined;
@@ -101,6 +104,7 @@ describe("EducationChatApp", () => {
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("assistant:先从判别式开始理解。:finishing"));
     expect(screen.getByTestId("messages").textContent).toContain("milestone:先抓条件:complete");
     expect(fetch).toHaveBeenCalledTimes(4);
+    expect(recordQuestionEntry).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "新题" }));
     expect(screen.getByTestId("messages").textContent).toBe("");
   });
@@ -146,6 +150,7 @@ describe("EducationChatApp", () => {
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
 
     // A recognized problem can still fail closed if analysis returns no graph; retry keeps it usable.
+    expect(recordQuestionEntry).toHaveBeenCalledTimes(1);
     await act(async () => { await latest!.onNewProblem(); });
     await act(async () => { await latest!.onConfirmProblem(learnedSession.problem); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有返回可用的学习路径"));
@@ -172,6 +177,7 @@ describe("EducationChatApp", () => {
     await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:question"); });
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
     expect(screen.getByTestId("messages").textContent).toContain("先看图形条件");
+    expect(recordQuestionEntry).toHaveBeenCalledTimes(1);
   });
 
   it("一轮学习流可处理路径、答案、转写、分支提示和恢复状态", async () => {
@@ -385,6 +391,10 @@ describe("EducationChatApp", () => {
     expect(screen.getByTestId("messages").textContent).toContain("user:请讲这道题");
     await act(async () => { await latest!.onRetry(); });
     expect(vi.mocked(readSseResponse)).toHaveBeenCalledTimes(2);
+    expect(recordQuestionEntry).toHaveBeenCalledTimes(1);
+    await act(async () => { latest!.onNewProblem(); });
+    await act(async () => { await latest!.onSend("第二道题"); });
+    expect(recordQuestionEntry).toHaveBeenCalledTimes(2);
   });
 
   it("恢复本地板书缓存时会先向服务核验，核验失败也不阻断原对话", async () => {

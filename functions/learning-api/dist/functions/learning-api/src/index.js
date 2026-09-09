@@ -16,10 +16,13 @@ const emphasis_1 = require("../../../lib/learning/http/emphasis");
 const knowledge_map_1 = require("../../../lib/learning/http/knowledge-map");
 const knowledge_connection_1 = require("../../../lib/learning/http/knowledge-connection");
 const verify_1 = require("../../../lib/learning/http/verify");
+const question_statistics_1 = require("../../../lib/learning/http/question-statistics");
 const maximumRequestBytes = 8 * 1024 * 1024;
 const routes = {
     "POST /consent": consent_1.postConsent,
     "GET /providers": providers_1.getProviders,
+    "GET /learning/statistics": question_statistics_1.getQuestionStatistics,
+    "POST /learning/statistics": question_statistics_1.postQuestionEntry,
     "POST /learning/analyze": analyze_1.postAnalyze,
     "POST /learning/board-cache": board_cache_1.postBoardCache,
     "POST /learning/expand": expand_1.postExpand,

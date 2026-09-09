@@ -15,6 +15,8 @@ vi.mock("@/components/step-blank", () => ({ StepBlank: () => <div>填空</div> }
 vi.mock("@/components/conversation-export", () => ({ ConversationExport: ({ onClose }: { onClose: () => void }) => <div role="dialog">导出预览<button onClick={onClose}>关闭导出</button></div> }));
 vi.mock("@/components/problem-knowledge-map", () => ({ ProblemKnowledgeMapPage: ({ onClose }: { onClose: () => void }) => <div role="dialog">知识图谱页面<button onClick={onClose}>关闭图谱</button></div> }));
 import { LearningChat } from "@/components/learning-chat";
+import { UiLanguageProvider } from "@/components/ui-language";
+import { UI_LOCALE_KEY } from "@/lib/ui-copy";
 
 const base: ComponentProps<typeof LearningChat> = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
 const initialSession = analyzeMock(recognizeMock("math", "junior"), "doubao");
@@ -42,6 +44,32 @@ describe("缺图补拍入口", () => {
 const session: LearningSession = { ...initialSession, requestId: "r", problem: { ...initialSession.problem, text: "题目", gradeBand: "junior" }, nodes: [], flow: { ...initialSession.flow, stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂", emphasis: "secondary" }] } } };
 describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
  it("首页校验文件、选择推理强度并发送文本题目", () => { const p = { ...base, onFile: vi.fn(), onReasoningLevel: vi.fn(), onSend: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: /轻度/ })); expect(p.onReasoningLevel).toHaveBeenCalledWith("light"); const file = new File(["x"], "a.txt", { type: "text/plain" }); fireEvent.change(screen.getByLabelText("从相册选择题目"), { target: { files: [file] } }); expect(screen.getAllByText("请选择图片文件")).toHaveLength(2); fireEvent.change(screen.getByLabelText("输入题目或问题"), { target: { value: "x+1=2" } }); fireEvent.submit(screen.getByLabelText("输入题目或问题").closest("form")!); expect(p.onSend).toHaveBeenCalledWith("x+1=2"); });
+ it("中英入口只在首页显示，进入对话和返回首页不丢失语言选择", () => {
+   localStorage.removeItem(UI_LOCALE_KEY);
+   const page = (props: Partial<ComponentProps<typeof LearningChat>> = {}) => <UiLanguageProvider><LearningChat {...base} {...props}/></UiLanguageProvider>;
+   const view = render(page());
+   expect(screen.getByRole("group", { name: "界面语言" })).not.toBeNull();
+   fireEvent.click(screen.getByRole("button", { name: "English interface" }));
+   const messages: ChatMessage[] = [{ id: "question", role: "user", kind: "user", text: "中文题目不应被翻译", status: "complete", createdAt: new Date().toISOString() }];
+   view.rerender(page({ messages, busy: true }));
+   expect(screen.queryByRole("group", { name: /界面语言|Interface language/ })).toBeNull();
+   view.rerender(page({ messages, session }));
+   expect(screen.queryByRole("button", { name: "English interface" })).toBeNull();
+   expect(screen.getByRole("button", { name: "Export PDF" })).not.toBeNull();
+   expect(screen.getByText("中文题目不应被翻译")).not.toBeNull();
+   expect(localStorage.getItem(UI_LOCALE_KEY)).toBe("en");
+   view.rerender(page());
+   expect(screen.getByRole("button", { name: "English interface" }).getAttribute("aria-pressed")).toBe("true");
+   fireEvent.click(screen.getByRole("button", { name: "中文界面" }));
+   expect(screen.getByRole("group", { name: "界面语言" })).not.toBeNull();
+   localStorage.removeItem(UI_LOCALE_KEY);
+ });
+ it("尚未建立会话的识别确认和缺图页面也不显示语言切换", () => {
+   const view = render(<LearningChat {...base} reviewProblem={initialSession.problem}/>);
+   expect(screen.queryByRole("button", { name: "English interface" })).toBeNull();
+   view.rerender(<LearningChat {...base} reviewProblem={{ ...initialSession.problem, missingVisualInformation: ["阴影区域的边界"] }}/>);
+   expect(screen.queryByRole("button", { name: "English interface" })).toBeNull();
+ });
  it("任务卡和建议问题都可操作", () => { const p = { ...base, session, stateToken: "token", messages: [{ id: "a", role: "assistant", kind: "assistant", text: "讲解中断", status: "error", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions } satisfies ChatMessage], onChoice: vi.fn(), onSuggestion: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: "继续" })); expect(p.onChoice).toHaveBeenCalledWith(session.flow.activeGate, "continue"); fireEvent.click(screen.getByRole("button", { name: /为什么用判别式/ })); expect(p.onSuggestion).toHaveBeenCalledWith(session.flow.suggestedQuestions[0]); });
  it("识别待确认时要求图中条件，并将编辑结果回传", () => { const confirm = vi.fn(); const problem: ProblemSnapshot = { ...initialSession.problem, text: "图形题", visualContext: { related: true, affectsSolving: true, confidence: 0.5, facts: [], summary: "" } }; render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>); expect(screen.getByText("这道题依赖配图，请补全图中条件或重新拍摄。")).not.toBeNull(); fireEvent.change(screen.getByLabelText("图中信息"), { target: { value: "AB=3" } }); fireEvent.click(screen.getByRole("button", { name: "确认题目，开始讲解" })); expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ userRevised: true })); });
  it("两种完成态都会提供合适的后续学习动作", () => { const transfer = vi.fn(), fresh = vi.fn(), retry = vi.fn(); const completed: LearningSession = { ...session, originalPassed: true, flow: { ...session.flow, stage: "complete", activeGate: null } }; const view = render(<LearningChat {...base} session={completed} onRequestTransfer={transfer} onNewProblem={fresh}/>); expect(screen.getByText("你已经独立解决了这道原题")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "再练一道同类题" })); expect(transfer).toHaveBeenCalled(); fireEvent.click(screen.getAllByRole("button", { name: "开始新题" }).at(-1)!); expect(fresh).toHaveBeenCalled(); view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, stage: "reviewed_complete", activeGate: null } }} onRetryOriginal={retry} onRequestTransfer={transfer} onNewProblem={fresh}/>); fireEvent.click(screen.getByRole("button", { name: "遮住讲解，重做原题" })); expect(retry).toHaveBeenCalled(); });

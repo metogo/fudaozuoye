@@ -4,6 +4,7 @@
 import { useUiText } from "./ui-language";
 import { useEffect, useRef } from "react";
 import { animateHomeCompanion } from "@/lib/learning/home-companion-motion";
+import { HomeQuestionCount } from "./home-question-count";
 
 export function HomeWelcomeHero({ active }: { active: boolean }) {
   const t = useUiText();
@@ -30,6 +31,6 @@ export function HomeWelcomeHero({ active }: { active: boolean }) {
       </span>
       <span className="home-welcome-subtitle">{t("陪你一起解题。")}</span>
     </h1>
-    <p className="home-welcome-hint">{t("拍张照，或写下题目。")}<br/>{t("我们一步步来。")}</p>
+    <HomeQuestionCount active={active}/>
   </div>;
 }

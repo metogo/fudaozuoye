@@ -13,12 +13,15 @@ import { postEmphasis } from "../../../lib/learning/http/emphasis";
 import { postKnowledgeMap } from "../../../lib/learning/http/knowledge-map";
 import { postKnowledgeConnection } from "../../../lib/learning/http/knowledge-connection";
 import { postVerify } from "../../../lib/learning/http/verify";
+import { getQuestionStatistics, postQuestionEntry } from "../../../lib/learning/http/question-statistics";
 
 const maximumRequestBytes = 8 * 1024 * 1024;
 
 const routes: Record<string, (request: Request) => Promise<Response> | Response> = {
   "POST /consent": postConsent,
   "GET /providers": getProviders,
+  "GET /learning/statistics": getQuestionStatistics,
+  "POST /learning/statistics": postQuestionEntry,
   "POST /learning/analyze": postAnalyze,
   "POST /learning/board-cache": postBoardCache,
   "POST /learning/expand": postExpand,

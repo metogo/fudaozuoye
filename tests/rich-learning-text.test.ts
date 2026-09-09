@@ -93,7 +93,7 @@ describe("AI 教学内容排版", () => {
     expect(html).toContain("Hey,");
     expect(html).toContain('aria-label="Hey，小逗号陪你一起解题。"');
     expect(html).toContain("陪你一起解题。");
-    expect(html).toContain("拍张照，或写下题目。<br/>我们一步步来。");
+    expect(html).toContain("home-question-count");
     expect(html.indexOf("home-reasoning-picker")).toBeGreaterThan(html.indexOf("</textarea>"));
     expect(html.match(/type="file"/g)).toHaveLength(2);
     expect(html).toContain('capture="environment"');
