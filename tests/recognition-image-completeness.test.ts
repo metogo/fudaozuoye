@@ -77,4 +77,24 @@ describe.each(["chat-completions", "responses"] as const)("%s 识别链路", pro
     await expect(adapter.analyzeProblem(problem)).rejects.toThrow("阴影区域的边界");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+
+  it("有图题复核使用明确必填结构，遗漏复核结果时携带原图和结构修复", async () => {
+    const visualContext = { related: true, affectsSolving: true, summary: "长方形边长标注", confidence: 0.99,
+      facts: [{ text: "长方形上边标注8厘米", source: "printed_label", confidence: 0.99 }] };
+    const answer = { originalAnswer: "22厘米", originalExplanation: "长8厘米、宽3厘米，周长为两倍的长宽之和。" };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response(answer)).mockResolvedValueOnce(response({ ...answer, visualContext }));
+    const adapter = new LiveProviderAdapter(config, fetcher);
+    const pending = await adapter.prepareChatSession(parseProblem({ ...recognized, visualContext }));
+    const completed = await adapter.completeChatSession(pending, image);
+    expect(completed.problem.visualContext?.facts).toEqual(visualContext.facts);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const [, request] of fetcher.mock.calls) {
+      const body = String(request?.body);
+      expect(body).toContain(image);
+      expect(body).toContain("outputSchema");
+      expect(body).toContain("visualContext");
+      expect(body).toContain("required");
+    }
+    expect(String(fetcher.mock.calls[1][1]?.body)).toContain("多模态分析缺少题图复核结果");
+  });
 });

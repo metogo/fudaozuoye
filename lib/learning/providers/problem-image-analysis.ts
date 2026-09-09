@@ -11,6 +11,31 @@ const solutionSystem = [
   "解题依据出现数学或物理公式时，必须使用 KaTeX 兼容的 LaTeX：行内写成 $...$，独立公式写成 $$...$$。所有字段不得包含 HTML。",
 ].join("\n");
 
+const auditedSolutionSchema = {
+  type: "object", additionalProperties: false,
+  required: ["originalAnswer", "originalExplanation", "visualContext"],
+  properties: {
+    originalAnswer: { type: "string", description: "可核验的标准答案" },
+    originalExplanation: { type: "string", description: "联合题干和图中条件的完整解题依据" },
+    visualContext: {
+      type: "object", additionalProperties: false,
+      required: ["related", "affectsSolving", "summary", "confidence", "facts"],
+      properties: {
+        related: { type: "boolean" }, affectsSolving: { type: "boolean" },
+        summary: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 },
+        facts: { type: "array", maxItems: 16, items: {
+          type: "object", additionalProperties: false, required: ["text", "source", "confidence"],
+          properties: {
+            text: { type: "string", description: "重新核对原图后可直接验证的条件，标注须对应具体对象或端点" },
+            source: { type: "string", enum: ["printed_label", "visual_relation"] },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+          },
+        } },
+      },
+    },
+  },
+};
+
 export function problemRecognitionPrompt(): [string, string] {
   const completenessInstruction = "\n同时必须输出 missingVisualInformation 字符串数组。必须区分照片中是否实际存在本题配图，与当前可读文字是否提供了必要题设。仅有文字的截图，即使写着‘如图／见图／下图／图中’，也不能凭这些词假定配图存在或强制要求补图；文字已交代对象、数值和关系时，related=false 且 missingVisualInformation=[]，正常保留题目。只有必要条件实际缺失且必须从未拍到的图中读取时，missingVisualInformation 列出具体缺少的条件（最多8条，每条180字以内，例如‘阴影区域的边界’、‘电路元件的连接方式’），不得填写猜测值。看得清题干但缺配图仍输出 recognized=true，保留完整 text 和 childWork；不能当成照片模糊，也不能把缺失条件写进 facts。没有缺失时必须返回空数组。";
   const instructions: [string, string] = [
@@ -28,14 +53,14 @@ export function problemSolutionRequest(problem: ProblemSnapshot, auditImage: boo
     ? `${solutionSystem}\n当前附图已经被识别为属于本题。必须联合题干和原图核验所有条件后再作答，并重新输出 visualContext。visualContext 只保留解题确实会用到的可见条件，排除邻题、二维码、装饰、手写答案和无关位置描述。对尺寸、刻度或符号，必须先核对标注线/箭头的真实起点和终点，再描述它覆盖的区间；禁止把局部跨度改写成整体长宽，或把跨多个区域的跨度改写成单个图形边长。originalExplanation 必须使用这些端点关系完成推导，不能只因数值碰巧得到结果。端点不清时必须降低对应置信度。`
     : solutionSystem;
   if (auditImage && problem.userRevised) system += "\n用户已经人工确认或修正题干与 visualContext；解题必须以这些确认内容为准，不得用图片重识别静默覆盖。输出的 visualContext.facts 必须逐条原样保留用户确认的 facts，并把这些事实及 visualContext.confidence 设为 1；originalAnswer 与 originalExplanation 不得与它们冲突。";
+  if (auditImage) system += "\n必须严格按 outputSchema 输出完整 JSON，顶层必含 originalAnswer、originalExplanation、visualContext 三个字段。visualContext 必须是复核后的对象，不是字符串；不得省略，不得嵌套在 result 或 output 中。";
   const prompt = JSON.stringify({
     task: "完整求解原题，只返回后续验题必需的标准答案和可复核解题依据",
     problem,
-    output: {
+    ...(auditImage ? { outputSchema: auditedSolutionSchema } : { output: {
       originalAnswer: "标准答案",
       originalExplanation: "足以复核答案的完整解题依据",
-      ...(auditImage ? { visualContext: "重新对照原图，只保留当前题目解题所需且能直接核验的视觉条件；结构与输入 visualContext 相同" } : {}),
-    },
+    } }),
   });
   return { system, prompt };
 }
