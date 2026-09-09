@@ -15,7 +15,8 @@ export async function verifyRecognition() {
   try {
     const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
     await page.route("**/*", route => route.abort());
-    for (const fixture of fixtures) {
+    // Repeated text-only cases catch probabilistic confusion between OCR text and diagram labels.
+    for (const fixture of [...fixtures, fixtures[0], fixtures[0]]) {
       await page.setContent(`<main style="background:white;color:black;padding:32px;width:620px;font:28px/1.8 sans-serif">${fixture.html}</main>`);
       const image = await page.locator("main").screenshot();
       const consent = await fetch(`${apiBase}/consent`, { method: "POST", headers: { Origin: appOrigin }, signal: AbortSignal.timeout(15000) });
@@ -29,7 +30,7 @@ export async function verifyRecognition() {
       const problem = events.find(e => e.name === "recognized")?.data;
       assert.ok(problem?.text?.trim(), `${fixture.name}: 没有完整识别结果`);
       assert.equal(events.find(e => e.name === "complete")?.data.mode, "live");
-      assert.equal(problem.visualContext?.related, fixture.related, `${fixture.name}: 配图归属错误`);
+      assert.equal(problem.visualContext?.related, fixture.related, `${fixture.name}: 配图归属错误 ${JSON.stringify(problem.visualContext)}`);
       assert.equal(Boolean(problem.missingVisualInformation?.length), fixture.missing, `${fixture.name}: 必要条件完整性错误`);
       if (fixture.related) assert.ok(problem.visualContext.facts.length > 0, "配图证据不得为空");
       else assert.deepEqual(problem.visualContext.facts, [], "纯文字照片不得生成图形证据");
