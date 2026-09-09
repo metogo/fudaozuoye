@@ -425,9 +425,8 @@ class LiveProviderAdapter {
     generateKnowledgeMap(session) { return (0, knowledge_map_services_1.generateKnowledgeMap)(session, this.textRequest.bind(this)); }
     async streamKnowledgeMap(session, emit) {
         const { streamKnowledgeMap } = await Promise.resolve().then(() => __importStar(require("./knowledge-map-stream")));
-        const { MAP_NODE_TIMEOUT_MS } = await Promise.resolve().then(() => __importStar(require("../knowledge-map-deadline")));
         try {
-            return await streamKnowledgeMap(session, (system, prompt) => this.textRequest(system, prompt, undefined, true, MAP_NODE_TIMEOUT_MS, undefined, 2600), emit);
+            return await streamKnowledgeMap(session, (system, prompt, timeoutMs) => this.textRequest(system, prompt, undefined, true, timeoutMs, undefined, 2600), emit);
         }
         catch (error) {
             this.cancelPendingRequests();

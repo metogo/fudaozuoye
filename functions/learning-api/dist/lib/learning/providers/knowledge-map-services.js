@@ -36,11 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateKnowledgeMap = generateKnowledgeMap;
 exports.generateKnowledgeDetail = generateKnowledgeDetail;
 const model_support_1 = require("./model-support");
+const knowledge_map_validation_1 = require("./knowledge-map-validation");
 async function generateKnowledgeMap(session, request) {
     const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
     const { parseKnowledgeMap, mapEvidence } = await Promise.resolve().then(() => __importStar(require("../knowledge-map")));
-    const raw = await request(knowledgeMapSystem, knowledgeMapPrompt(session), undefined, true, 40000, undefined, 4800);
-    return parseKnowledgeMap({ ...resolveKnowledgeEvidence((0, model_support_1.parseJsonObject)(raw), session), overviewOnly: true }, mapEvidence(session));
+    return (0, knowledge_map_validation_1.requestMapValue)((system, prompt, timeout) => request(system, prompt, undefined, true, timeout, undefined, 4800), knowledgeMapSystem, knowledgeMapPrompt(session), value => parseKnowledgeMap({ ...resolveKnowledgeEvidence(value, session), overviewOnly: true }, mapEvidence(session)), 40000);
 }
 async function generateKnowledgeDetail(session, map, nodeId, request) {
     const { knowledgeDetailSystem, knowledgeMapPrompt } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));

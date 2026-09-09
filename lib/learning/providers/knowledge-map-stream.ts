@@ -1,9 +1,9 @@
-import { mapEvidence, type MapConcept, type MapRelation } from "../knowledge-map";
-import { applyMapEvent, finishMapDraft, type KnowledgeMapDraft, type KnowledgeMapEvent, type KnowledgeMapPlan } from "../knowledge-map-stream";
+import { mapEvidence, type MapRelation } from "../knowledge-map";
+import { applyMapEvent, finishMapDraft, type KnowledgeMapDraft, type KnowledgeMapEvent } from "../knowledge-map-stream";
 import type { LearningSession } from "../types";
-import { knowledgeMapPrompt, knowledgeMapRules, resolveKnowledgeEvidence } from "./knowledge-map";
-import { parseJsonObject } from "./model-support";
-import { MAP_NODE_CONCURRENCY } from "../knowledge-map-deadline";
+import { knowledgeMapPrompt, knowledgeMapRules } from "./knowledge-map";
+import { MAP_NODE_CONCURRENCY, MAP_NODE_TIMEOUT_MS, MAP_PLAN_TIMEOUT_MS } from "../knowledge-map-deadline";
+import { requestMapValue, validateMapPlan, validateMapRelations, type MapRequest } from "./knowledge-map-validation";
 
 const planInstruction = `先确定知识清单，不生成关系说明。只输出JSON：{"rootId":"core","nodes":[{"id":"core","title":"核心概念","evidenceId":"e1","parents":[]},{"id":"k1","title":"基础概念","evidenceId":"e1","parents":["core"]}]}。
 nodes 包含最终全部知识点，父节点先于子节点；parents列出它的所有父节点编号。根编号core，其余依次k1、k2等。不要输出edges。
@@ -14,14 +14,12 @@ kind只能是prerequisite（需要先理解）或application（结合使用）�
 
 /** Fixed plan first; bounded node work emits as soon as its validated parents are ready. */
 export async function streamKnowledgeMap(session: LearningSession,
-  request: (system: string, prompt: string) => Promise<string>,
+  request: MapRequest,
   emit: (event: KnowledgeMapEvent) => void) {
   const prompt = knowledgeMapPrompt(session), evidence = mapEvidence(session);
-  const planned = parseJsonObject(await request(`${knowledgeMapRules}\n${planInstruction}`, prompt));
-  let draft: KnowledgeMapDraft = applyMapEvent({ plan: null, map: null }, { type: "plan", plan: planned as unknown as KnowledgeMapPlan }, evidence);
-  const plan = draft.plan!;
-  const concepts = resolveKnowledgeEvidence(planned, session).nodes as MapConcept[];
-  if (concepts.some(n => typeof n.title !== "string" || !n.title.trim() || n.title.length > 30) || new Set(concepts.map(n => n.title.trim())).size !== concepts.length) throw new Error("知识清单名称不完整或重复");
+  const { plan, concepts } = await requestMapValue(request, `${knowledgeMapRules}\n${planInstruction}`, prompt,
+    value => validateMapPlan(value, session), MAP_PLAN_TIMEOUT_MS);
+  let draft: KnowledgeMapDraft = applyMapEvent({ plan: null, map: null }, { type: "plan", plan }, evidence);
   const accept = (index: number, edges: MapRelation[]) => {
     draft = applyMapEvent(draft, { type: "node", node: concepts[index], edges }, evidence);
     emit({ type: "node", node: draft.map!.nodes.at(-1)!, edges: draft.map!.edges.filter(e => e.to === concepts[index].id) });
@@ -46,10 +44,10 @@ export async function streamKnowledgeMap(session: LearningSession,
     try {
       while (!failed && cursor < plan.nodes.length) {
         const index = cursor++, node = plan.nodes[index];
-        const data = parseJsonObject(await request(relationInstruction, JSON.stringify({ problem: JSON.parse(prompt), node: { title: concepts[index].title, evidence: concepts[index].evidence }, parents: node.parents.map(id => { const parent = concepts.find(n => n.id === id)!; return { title: parent.title, evidence: parent.evidence }; }) })));
+        const edges = await requestMapValue(request, relationInstruction, JSON.stringify({ problem: JSON.parse(prompt), node: { title: concepts[index].title, evidence: concepts[index].evidence }, parents: node.parents.map(id => { const parent = concepts.find(n => n.id === id)!; return { title: parent.title, evidence: parent.evidence }; }) }),
+          value => validateMapRelations(value, node), MAP_NODE_TIMEOUT_MS);
         if (failed) return;
-        if (!Array.isArray(data.relations) || data.relations.length !== node.parents.length) throw new Error("知识点的关系未完整返回");
-        ready.set(index, data.relations.map((edge, i) => ({ kind: edge.kind, reason: edge.reason, from: node.parents[i], to: node.id })));
+        ready.set(index, edges);
         publishReady();
       }
     } catch (error) { failed = true; throw error; }

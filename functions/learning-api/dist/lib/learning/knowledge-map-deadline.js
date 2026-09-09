@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAP_NODE_TIMEOUT_MS = exports.MAP_NODE_CONCURRENCY = void 0;
+exports.MAP_PLAN_TIMEOUT_MS = exports.MAP_NODE_TIMEOUT_MS = exports.MAP_NODE_CONCURRENCY = void 0;
 exports.createMapDeadline = createMapDeadline;
 /** Shared by the model scheduler, server stream and browser watchdog. */
 exports.MAP_NODE_CONCURRENCY = 2;
 exports.MAP_NODE_TIMEOUT_MS = 30000;
-const PLAN_TIMEOUT_MS = 45000;
+exports.MAP_PLAN_TIMEOUT_MS = 45000;
 // Leave 10 seconds for a clean error response before the configured 180s function limit.
 const TOTAL_TIMEOUT_MS = 170000;
 function createMapDeadline(transportGraceMs = 0) {
@@ -16,7 +16,7 @@ function createMapDeadline(transportGraceMs = 0) {
         clearTimeout(timer);
         timer = setTimeout(() => controller.abort(new DOMException("图谱生成超时", "TimeoutError")), Math.max(0, milliseconds) + transportGraceMs);
     };
-    arm(PLAN_TIMEOUT_MS);
+    arm(exports.MAP_PLAN_TIMEOUT_MS);
     return {
         signal: controller.signal,
         planned(total) {

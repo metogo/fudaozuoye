@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
+import type { ComponentProps } from "react";
+import type { ChatMessage } from "@/lib/learning/types";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/components/board-workspace", () => ({ BoardWorkspace: () => <div>板书内容</div> }));
 vi.mock("@/components/board-visual", () => ({ BoardVisualFigure: () => <div>旧图示</div> }));
-vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</> }));
+vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <>{text}</> }));
 import { LearningBoard } from "@/components/learning-board";
 
-const props: any = { experience: { title: "判别式板书", returnLabel: "回到判别式", quality: { status: "safe_fallback", reason: "缺少充分依据" }, scenes: [], legacyVisual: { kind: "relation" } }, document: {}, workspaceState: {}, sourceMessages: [], messages: [{ id: "u", role: "user", kind: "user", text: "为什么", surface: "board", status: "complete" }, { id: "a", role: "assistant", kind: "assistant", text: "因为判别式", surface: "board", status: "complete" }], busy: false, loadingLabel: "", notice: "网络短暂中断", retryLabel: "重试", onWorkspaceChange: vi.fn(), onAsk: vi.fn(), onRegenerate: vi.fn(), onClose: vi.fn(), onRetry: vi.fn() };
+const props: ComponentProps<typeof LearningBoard> = { experience: { version: 1, key: "board", legacyWorkspaceKey: "legacy", learningGoal: "判断根", layout: "steps", annotations: [], title: "判别式板书", returnLabel: "回到判别式", quality: { status: "safe_fallback", reason: "缺少充分依据" }, scenes: [], legacyVisual: { kind: "relation", title: "关系图", evidence: "题干条件", caption: "条件之间的关系", elements: [] } }, document: { version: 1, key: "board", legacyWorkspaceKey: "legacy", title: "判别式", learningGoal: "判断根", nodes: [] }, workspaceState: { version: 1, documentKey: "board", mode: "overview", activeNodeId: "", nodes: [] }, sourceMessages: [], messages: [{ id: "u", createdAt: "2026-09-09T00:00:00Z", role: "user" as const, kind: "user", text: "为什么", surface: "board", status: "complete" }, { id: "a", createdAt: "2026-09-09T00:00:00Z", role: "assistant", kind: "assistant", text: "因为判别式", surface: "board", status: "complete" }], busy: false, loadingLabel: "", notice: "网络短暂中断", retryLabel: "重试", onWorkspaceChange: vi.fn(), onAsk: vi.fn(), onRegenerate: vi.fn(), onClose: vi.fn(), onRetry: vi.fn() };
 describe("LearningBoard", () => {
  beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(HTMLElement.prototype, "getBoundingClientRect", { configurable: true, value: () => ({ height: 50 }) }); });
  afterEach(cleanup);
@@ -14,7 +16,7 @@ describe("LearningBoard", () => {
  it("安全降级提示允许重新生成完整板书", () => { const regenerate = vi.fn(); render(<LearningBoard {...props} onRegenerate={regenerate}/>); fireEvent.click(screen.getByRole("button", { name: "重试完整板书" })); expect(regenerate).toHaveBeenCalled(); });
  it("忙碌完成后提示未读回答，展开面板可查看流式状态", () => { const { rerender } = render(<LearningBoard {...props} busy loadingLabel="正在回答" notice="" retryLabel=""/>); rerender(<LearningBoard {...props} busy={false} loadingLabel="" notice="" retryLabel=""/>); expect(screen.getByLabelText("有新的板书回答")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: /板书问答/ })); expect(screen.getByText("因为判别式")).not.toBeNull(); });
  it("等待模型时保留板书上下文，并且只展示最近的问答", () => {
-   const messages = Array.from({ length: 8 }, (_, index) => ({ id: `m${index}`, role: "user", kind: "user", text: `内容${index}`, surface: "board", status: "complete" }));
+   const messages: ChatMessage[] = Array.from({ length: 8 }, (_, index) => ({ id: `m${index}`, createdAt: "2026-09-09T00:00:00Z", role: "user" as const, kind: "user", text: `内容${index}`, surface: "board", status: "complete" }));
    render(<LearningBoard {...props} messages={messages} busy loadingLabel="正在整理理由" notice="" retryLabel=""/>);
    fireEvent.click(screen.getByRole("button", { name: /板书问答/ }));
    expect(screen.getAllByRole("status").some((item) => item.textContent?.includes("正在整理理由"))).toBe(true);
@@ -31,10 +33,10 @@ describe("LearningBoard", () => {
      addEventListener: (name: string, listener: () => void) => viewportListeners.set(name, listener),
      removeEventListener: (name: string) => viewportListeners.delete(name),
    } });
-   const messages = [
-     { id: "u", role: "user", kind: "user", text: "为什么这样做", surface: "board", status: "complete" },
-     { id: "s", role: "assistant", kind: "assistant", text: "正在推导", surface: "board", status: "streaming" },
-     { id: "e", role: "assistant", kind: "assistant", text: "网络中断", surface: "board", status: "error" },
+   const messages: ChatMessage[] = [
+     { id: "u", createdAt: "2026-09-09T00:00:00Z", role: "user" as const, kind: "user", text: "为什么这样做", surface: "board", status: "complete" },
+     { id: "s", createdAt: "2026-09-09T00:00:00Z", role: "assistant", kind: "assistant", text: "正在推导", surface: "board", status: "streaming" },
+     { id: "e", createdAt: "2026-09-09T00:00:00Z", role: "assistant", kind: "assistant", text: "网络中断", surface: "board", status: "error" },
    ];
    render(<LearningBoard {...props} experience={{ ...props.experience, quality: undefined }} messages={messages} busy onClose={onClose} onAsk={onAsk} notice="" retryLabel=""/>);
    expect(screen.getByText("旧图示")).not.toBeNull();
@@ -55,13 +57,13 @@ describe("LearningBoard", () => {
  });
  it("已被场景表达的旧图示不重复渲染，空白和忙碌输入不会发送", () => {
    const ask = vi.fn();
-   const { rerender } = render(<LearningBoard {...props} onAsk={ask} experience={{ ...props.experience, legacyVisual: { kind: "geometry" }, scenes: [{ visual: { kind: "geometry_model" } }] }}/>);
+   const { rerender } = render(<LearningBoard {...props} onAsk={ask} experience={{ ...props.experience, legacyVisual: { kind: "geometry", title: "几何图", evidence: "题干条件", caption: "原图", elements: [] }, scenes: [{ id: "geometry", title: "几何", content: "看图", tone: "plain", intent: "extract", sourceMessageIds: [], medium: "text", elements: [], actions: [], visual: { kind: "geometry_model", title: "几何图", evidence: "题干条件", caption: "原图", points: [], objects: [] } }] }}/>);
    expect(screen.queryByText("旧图示")).toBeNull();
    fireEvent.click(screen.getByRole("button", { name: /板书问答/ }));
    const input = screen.getByLabelText("围绕当前板书提问");
    fireEvent.submit(input.closest("form")!);
    expect(ask).not.toHaveBeenCalled();
-   rerender(<LearningBoard {...props} onAsk={ask} busy experience={{ ...props.experience, legacyVisual: { kind: "geometry" }, scenes: [{ visual: { kind: "geometry_model" } }] }}/>);
+   rerender(<LearningBoard {...props} onAsk={ask} busy experience={{ ...props.experience, legacyVisual: { kind: "geometry", title: "几何图", evidence: "题干条件", caption: "原图", elements: [] }, scenes: [{ id: "geometry", title: "几何", content: "看图", tone: "plain", intent: "extract", sourceMessageIds: [], medium: "text", elements: [], actions: [], visual: { kind: "geometry_model", title: "几何图", evidence: "题干条件", caption: "原图", points: [], objects: [] } }] }}/>);
    fireEvent.change(screen.getByLabelText("围绕当前板书提问"), { target: { value: "问题" } });
    fireEvent.submit(screen.getByLabelText("围绕当前板书提问").closest("form")!);
    expect(ask).not.toHaveBeenCalled();

@@ -9,10 +9,10 @@ const target = () => analyzeMock(recognizeMock("math", "primary"), "doubao").nod
 
 describe("模型协议边界", () => {
   it("公开的工具契约包含固定函数名与受限参数", () => {
-    expect((transferCheckTool().function as any).name).toBe("submit_transfer_check");
-    expect((problemSolutionTool().function as any).parameters.required).toEqual(["originalAnswer", "originalExplanation"]);
-    expect((boardSuggestionTool().function as any).parameters.properties.layout.enum).toEqual(["relation", "steps", "comparison", "formula"]);
-    expect((similarCheckTool("choice").function as any).parameters.properties.type.enum).toEqual(["choice"]);
+    expect(transferCheckTool()).toHaveProperty("function.name", "submit_transfer_check");
+    expect(problemSolutionTool()).toHaveProperty("function.parameters.required", ["originalAnswer", "originalExplanation"]);
+    expect(boardSuggestionTool()).toHaveProperty("function.parameters.properties.layout.enum", ["relation", "steps", "comparison", "formula"]);
+    expect(similarCheckTool("choice")).toHaveProperty("function.parameters.properties.type.enum", ["choice"]);
   });
 
   it("相似选择题保留实际选项文字，并拒绝重复、错类型与错误答案", () => {

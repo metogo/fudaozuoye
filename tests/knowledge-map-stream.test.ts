@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { applyMapEvent, finishMapDraft, mapPlanPositions, parseMapPlan, readMapStream } from "@/lib/learning/knowledge-map-stream";
 import { streamKnowledgeMap } from "@/lib/learning/providers/knowledge-map-stream";
 import { LiveProviderAdapter } from "@/lib/learning/providers/adapter";
@@ -40,18 +40,17 @@ describe("图谱真实流式协议", () => {
     const run = streamKnowledgeMap(session, async (_s, prompt) => {
       if (calls++ === 0) return JSON.stringify(bigger);
       active++; maxActive = Math.max(maxActive, active);
-      const nodeTitle = JSON.parse(prompt).node.title;
+      const input = JSON.parse(prompt);
+      if (input.previousOutput) { active--; return JSON.stringify({ relations: [] }); }
+      const nodeTitle = input.node.title;
       const text = await new Promise<string>(resolve => pending.set(bigger.nodes.find(n => n.title === nodeTitle)!.id, resolve));
       active--; return text;
     }, e => { if (e.type === "node") emitted.push(e.node.id); });
-    await Promise.resolve(); await Promise.resolve();
-    expect(pending.size).toBe(2);
+    await vi.waitFor(() => expect(pending.size).toBe(2));
     pending.get("other")!(JSON.stringify({ relations: [relation] }));
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    expect(emitted).toEqual(["core", "other"]);
+    await vi.waitFor(() => expect(emitted).toEqual(["core", "other"]));
     pending.get("base")!(JSON.stringify({ relations: [relation] }));
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    expect(emitted).toEqual(["core", "other", "base"]);
+    await vi.waitFor(() => expect(emitted).toEqual(["core", "other", "base"]));
     pending.get("last")!(JSON.stringify({ relations: [] }));
     await expect(run).rejects.toThrow();
     expect(maxActive).toBe(2);
@@ -69,8 +68,7 @@ describe("图谱真实流式协议", () => {
       if (JSON.parse(prompt).node.title === "正方形边长") return new Promise(resolve => { release = resolve; });
       return JSON.stringify({ relations: [relation] });
     }, event => { if (event.type === "node") emitted.push(event.node.id); });
-    for (let i = 0; i < 8; i++) await Promise.resolve();
-    expect(emitted).toEqual(["core", "sibling"]);
+    await vi.waitFor(() => expect(emitted).toEqual(["core", "sibling"]));
     release(JSON.stringify({ relations: [relation] }));
     await run;
     expect(emitted).toEqual(["core", "sibling", "base", "child"]);

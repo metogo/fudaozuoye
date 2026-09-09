@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
+import type { IllustrationFrame, IllustrationLesson } from "@/lib/learning/types";
+import type { TeachingScene } from "@/lib/learning/teaching-scene";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</> }));
-vi.mock("@/components/teaching-scene", () => ({ TeachingScene: ({ alt }: any) => <div>场景 {alt}</div> }));
+vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <>{text}</> }));
+vi.mock("@/components/teaching-scene", () => ({ TeachingScene: ({ alt }: { alt: string }) => <div>场景 {alt}</div> }));
 import { LearningIllustration } from "@/components/learning-illustration";
-const frames: any[] = [{ id: "f1", index: 1, title: "找条件", alt: "条件图", imageUrl: "https://example.com/a.png", calculation: "a=1", visualNotes: ["注意条件"] }, { id: "f2", index: 2, title: "算结果", alt: "结果图", imageUrl: "https://example.com/b.png", calculation: "$x=2$", scene: { shapes: [] } }];
+const emptyScene: TeachingScene = { version: 1, template: "general", worldId: "world", stageIds: [], shapes: [], sourceQuotes: [] };
+const lessonBase: Pick<IllustrationLesson, "version" | "requestId" | "problemFingerprint"> = { version: 1, requestId: "illustration", problemFingerprint: "problem" };
+const frames: IllustrationFrame[] = [{ id: "f1", index: 1, transition: "", title: "找条件", alt: "条件图", imageUrl: "https://example.com/a.png", calculation: "a=1", visualNotes: ["注意条件"] }, { id: "f2", index: 2, transition: "", title: "算结果", alt: "结果图", imageUrl: "https://example.com/b.png", calculation: "$x=2$", scene: emptyScene }];
 describe("LearningIllustration", () => { beforeEach(() => { Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() }); }); afterEach(cleanup);
- it("可浏览帧、使用键盘关闭并重新生成", () => { const close = vi.fn(), regenerate = vi.fn(); render(<LearningIllustration lesson={{ title: "分步图", frames, frameCount: 2 } as any} frames={[]} expectedCount={2} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={regenerate}/>); expect(screen.getByText("找条件")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "下一幅" })); expect(screen.getByText("算结果")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "重新生成" })); expect(regenerate).toHaveBeenCalled(); fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" }); expect(close).toHaveBeenCalled(); });
+ it("可浏览帧、使用键盘关闭并重新生成", () => { const close = vi.fn(), regenerate = vi.fn(); render(<LearningIllustration lesson={{ ...lessonBase, title: "分步图", frames, frameCount: 2 }} frames={[]} expectedCount={2} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={regenerate}/>); expect(screen.getByText("找条件")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "下一幅" })); expect(screen.getByText("算结果")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "重新生成" })); expect(regenerate).toHaveBeenCalled(); fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" }); expect(close).toHaveBeenCalled(); });
  it("空结果显示可行动错误与重试", () => { const regenerate = vi.fn(); render(<LearningIllustration lesson={null} frames={[]} expectedCount={0} busy={false} loadingLabel="" error="网络连接失败" canClose onClose={vi.fn()} onRegenerate={regenerate}/>); expect(screen.getByRole("alert").textContent).toContain("暂时无法连接生成服务"); fireEvent.click(screen.getByRole("button", { name: "重试" })); expect(regenerate).toHaveBeenCalled(); });
  it("生成中会解释等待状态，失效图片可在当前位置重新生成", () => {
    const regenerate = vi.fn(), close = vi.fn();
@@ -14,7 +18,7 @@ describe("LearningIllustration", () => { beforeEach(() => { Object.definePropert
    expect(screen.getByText("正在把原题拆成分步图解")).not.toBeNull();
    expect(screen.getByRole("status").textContent).toContain("正在准备图解");
    expect((screen.getByRole("button", { name: "关闭" }) as HTMLButtonElement).disabled).toBe(true);
-   view.rerender(<LearningIllustration lesson={{ title: "图", frames: [frames[0]], frameCount: 1 } as any} frames={[]} expectedCount={1} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={regenerate}/>);
+   view.rerender(<LearningIllustration lesson={{ ...lessonBase, title: "图", frames: [frames[0]], frameCount: 1 }} frames={[]} expectedCount={1} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={regenerate}/>);
    fireEvent.error(screen.getByAltText("条件图"));
    expect(screen.getByText("这幅临时图片已失效")).not.toBeNull();
    fireEvent.click(screen.getAllByRole("button", { name: "重新生成" }).at(0)!);
@@ -26,8 +30,8 @@ describe("LearningIllustration", () => { beforeEach(() => { Object.definePropert
  });
  it("展示已到达的帧、示意图说明和不同失败原因，同时不允许生成中关闭", () => {
    const close = vi.fn();
-   const partial = [{ ...frames[0], scene: { shapes: [{ id: "line" }] }, schematic: true }, frames[1]];
-   const { rerender } = render(<LearningIllustration lesson={null} frames={partial as any} expectedCount={3} busy loadingLabel="" error="" canClose={false} onClose={close} onRegenerate={vi.fn()}/>);
+   const partial: IllustrationFrame[] = [{ ...frames[0], scene: { ...emptyScene, shapes: [{ id: "line", kind: "line", x1: 0, y1: 0, x2: 1, y2: 1, color: "outline" }] }, schematic: true }, frames[1]];
+   const { rerender } = render(<LearningIllustration lesson={null} frames={partial} expectedCount={3} busy loadingLabel="" error="" canClose={false} onClose={close} onRegenerate={vi.fn()}/>);
    expect(screen.getByText("正在完成后续图解…")).not.toBeNull();
    expect(screen.getByText("示意图不按比例，请以标注与算式为准。")).not.toBeNull();
    fireEvent.click(screen.getByRole("button", { name: "2. 算结果" }));
@@ -41,7 +45,7 @@ describe("LearningIllustration", () => { beforeEach(() => { Object.definePropert
  });
  it("将焦点留在插画对话框内，并把未分类失败转成安全说明", () => {
    const close = vi.fn();
-   render(<LearningIllustration lesson={{ title: "图", frames, frameCount: 2 } as any} frames={[]} expectedCount={2} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={vi.fn()}/>);
+   render(<LearningIllustration lesson={{ ...lessonBase, title: "图", frames, frameCount: 2 }} frames={[]} expectedCount={2} busy={false} loadingLabel="" error="" canClose onClose={close} onRegenerate={vi.fn()}/>);
    const dialog = screen.getByRole("dialog");
    const closeButton = screen.getByRole("button", { name: "关闭" });
    expect(document.activeElement).toBe(closeButton);

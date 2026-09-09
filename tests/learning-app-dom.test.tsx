@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningApp } from "@/components/learning-app";
@@ -6,12 +7,13 @@ import { LearningApp } from "@/components/learning-app";
 const { createReportFile } = vi.hoisted(() => ({ createReportFile: vi.fn(async () => new File(["report"], "学习报告.png", { type: "image/png" })) }));
 vi.mock("@/lib/learning/report", () => ({ createReportFile }));
 
-let latestWorkspace: any;
+import type { LearningWorkspace } from "@/components/learning-workspace";
+let latestWorkspace: ComponentProps<typeof LearningWorkspace> | undefined;
 
 vi.mock("@/components/capture-step", () => ({ CaptureStep: ({ ready, onFile }: { ready: boolean; onFile: (file: File) => void }) => <div><p>capture:{String(ready)}</p><button onClick={() => onFile(new File(["x"], "q.png", { type: "image/png" }))}>上传题目</button></div> }));
 vi.mock("@/components/image-cropper", () => ({ ImageCropper: ({ onConfirm, onCancel }: { onConfirm: (blob: Blob, url: string) => void; onCancel: () => void }) => <div><button onClick={() => onConfirm(new Blob(["x"]), "blob:q")}>确认裁剪</button><button onClick={onCancel}>取消裁剪</button></div> }));
 vi.mock("@/components/review-step", () => ({ PreparationStep: ({ phase, onConfirm, onCancel }: { phase: string; onConfirm: () => void; onCancel: () => void }) => <div><p>prepare:{phase}</p><button onClick={onConfirm}>开始学习</button><button onClick={onCancel}>停止</button></div> }));
-vi.mock("@/components/learning-workspace", () => ({ LearningWorkspace: (props: any) => {
+vi.mock("@/components/learning-workspace", () => ({ LearningWorkspace: (props: ComponentProps<typeof LearningWorkspace>) => {
   latestWorkspace = props;
   return <div><p>learning</p><p data-testid="workspace-notice">{props.notice}</p><button onClick={props.onReset}>新题</button></div>;
 } }));
@@ -128,17 +130,17 @@ describe("学习应用状态机", () => {
     vi.stubGlobal("fetch", fetch);
     render(<LearningApp/>);
     await screen.findByText("learning");
-    await latestWorkspace.onExpand("root");
+    await latestWorkspace!.onExpand("root");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("已向下拆到"));
-    await latestWorkspace.onSimilar("root");
+    await latestWorkspace!.onSimilar("root");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("同知识点新题"));
-    await latestWorkspace.onVerify("root", "42");
+    await latestWorkspace!.onVerify("root", "42");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("回答正确"));
     const solution = vi.fn();
-    await latestWorkspace.onSolution(solution);
+    await latestWorkspace!.onSolution(solution);
     expect(solution).toHaveBeenCalledWith("完整解答");
     const tutor = vi.fn();
-    await latestWorkspace.onTutor("node", "为什么", tutor);
+    await latestWorkspace!.onTutor({ kind: "node", nodeId: "node" }, "为什么", tutor);
     expect(tutor).toHaveBeenCalledWith("追问回答");
   });
 
@@ -156,7 +158,7 @@ describe("学习应用状态机", () => {
     vi.stubGlobal("fetch", fetch);
     render(<LearningApp/>);
     await screen.findByText("learning");
-    await latestWorkspace.onExpand("root");
+    await latestWorkspace!.onExpand("root");
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     expect(String(fetch.mock.calls[1][0])).toContain("/learning/verify");
     expect(String(fetch.mock.calls[2][0])).toContain("/learning/transfer");
@@ -174,12 +176,12 @@ describe("学习应用状态机", () => {
     vi.stubGlobal("fetch", fetch);
     render(<LearningApp/>);
     await screen.findByText("learning");
-    await latestWorkspace.onExpand("root");
+    await latestWorkspace!.onExpand("root");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("拆解失败"));
-    await latestWorkspace.onSimilar("root");
+    await latestWorkspace!.onSimilar("root");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("同类题失败"));
     const delta = vi.fn();
-    await latestWorkspace.onSolution(delta);
+    await latestWorkspace!.onSolution(delta);
     expect(delta).toHaveBeenCalledWith("答案生成失败，请稍后重试。");
     expect(screen.getByText("learning")).not.toBeNull();
   });
@@ -193,7 +195,7 @@ describe("学习应用状态机", () => {
     Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
     render(<LearningApp/>);
     await screen.findByText("learning");
-    await latestWorkspace.onShare();
+    await latestWorkspace!.onShare();
     expect(createReportFile).toHaveBeenCalledWith(session);
     expect(click).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toContain("报告已保存为图片"));
@@ -214,12 +216,12 @@ describe("学习应用状态机", () => {
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
     render(<LearningApp/>);
     await screen.findByText("learning");
-    await latestWorkspace.onVerify("root", "42");
+    await latestWorkspace!.onVerify("root", "42");
     await waitFor(() => expect(screen.getByTestId("workspace-notice").textContent).toBe("答案暂不可核验"));
-    await latestWorkspace.onGenerateTransfer();
+    await latestWorkspace!.onGenerateTransfer();
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
-    await expect(latestWorkspace.onTutor("node", "为什么", vi.fn())).rejects.toThrow("追问服务断开");
-    await latestWorkspace.onShare();
+    await expect(latestWorkspace!.onTutor({ kind: "node", nodeId: "node" }, "为什么", vi.fn())).rejects.toThrow("追问服务断开");
+    await latestWorkspace!.onShare();
     expect(share).toHaveBeenCalledWith(expect.objectContaining({ title: "回溯学学习报告" }));
     expect(screen.getByText("learning")).not.toBeNull();
   });

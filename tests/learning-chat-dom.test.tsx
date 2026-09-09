@@ -1,24 +1,29 @@
 // @vitest-environment jsdom
+import type { ComponentProps } from "react";
+import type { LearningSession, ProblemSnapshot, ChatMessage } from "@/lib/learning/types";
+import type { SelectionAsk } from "@/components/selection-ask";
+import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</>, CopyableLearningText: ({ text }: any) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
-vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: any) => <>{text}</> }));
+vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <>{text}</>, CopyableLearningText: ({ text }: { text: string }) => <>{text}</>, preloadLearningText: vi.fn(() => Promise.resolve()) }));
+vi.mock("@/components/copyable-learning-text", () => ({ CopyableLearningText: ({ text }: { text: string }) => <>{text}</> }));
 vi.mock("@/components/home-welcome-hero", () => ({ HomeWelcomeHero: () => <div>欢迎</div> }));
-vi.mock("@/components/selection-ask", () => ({ SelectionAsk: ({ disabled, onAsk }: any) => <><button type="button" disabled={disabled} onClick={() => onAsk("判别式大于等于零", {} as Range)}>选择文字提问</button><button type="button" disabled={disabled} onClick={() => onAsk("字".repeat(12001), {} as Range)}>选择超长文字</button></> }));
+vi.mock("@/components/selection-ask", () => ({ SelectionAsk: ({ disabled, onAsk }: ComponentProps<typeof SelectionAsk>) => <><button type="button" disabled={disabled} onClick={() => onAsk("判别式大于等于零", {} as Range)}>选择文字提问</button><button type="button" disabled={disabled} onClick={() => onAsk("字".repeat(12001), {} as Range)}>选择超长文字</button></> }));
 vi.mock("@/components/quote-composer-motion", () => ({ QuoteComposerMotion: () => null }));
 vi.mock("@/components/comma-companion", () => ({ CommaCompanion: () => <i>逗号</i> }));
 vi.mock("@/components/step-blank", () => ({ StepBlank: () => <div>填空</div> }));
-vi.mock("@/components/conversation-export", () => ({ ConversationExport: ({ onClose }: any) => <div role="dialog">导出预览<button onClick={onClose}>关闭导出</button></div> }));
-vi.mock("@/components/problem-knowledge-map", () => ({ ProblemKnowledgeMapPage: ({ onClose }: any) => <div role="dialog">知识图谱页面<button onClick={onClose}>关闭图谱</button></div> }));
+vi.mock("@/components/conversation-export", () => ({ ConversationExport: ({ onClose }: { onClose: () => void }) => <div role="dialog">导出预览<button onClick={onClose}>关闭导出</button></div> }));
+vi.mock("@/components/problem-knowledge-map", () => ({ ProblemKnowledgeMapPage: ({ onClose }: { onClose: () => void }) => <div role="dialog">知识图谱页面<button onClick={onClose}>关闭图谱</button></div> }));
 import { LearningChat } from "@/components/learning-chat";
 
-const base: any = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
-const session: any = { requestId: "r", problem: { text: "题目", gradeBand: "junior" }, nodes: [], flow: { stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂" }] } } };
+const base: ComponentProps<typeof LearningChat> = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
+const initialSession = analyzeMock(recognizeMock("math", "junior"), "doubao");
+const session: LearningSession = { ...initialSession, requestId: "r", problem: { ...initialSession.problem, text: "题目", gradeBand: "junior" }, nodes: [], flow: { ...initialSession.flow, stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂", emphasis: "secondary" }] } } };
 describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
  it("首页校验文件、选择推理强度并发送文本题目", () => { const p = { ...base, onFile: vi.fn(), onReasoningLevel: vi.fn(), onSend: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: /轻度/ })); expect(p.onReasoningLevel).toHaveBeenCalledWith("light"); const file = new File(["x"], "a.txt", { type: "text/plain" }); fireEvent.change(screen.getByLabelText("从相册选择题目"), { target: { files: [file] } }); expect(screen.getAllByText("请选择图片文件")).toHaveLength(2); fireEvent.change(screen.getByLabelText("输入题目或问题"), { target: { value: "x+1=2" } }); fireEvent.submit(screen.getByLabelText("输入题目或问题").closest("form")!); expect(p.onSend).toHaveBeenCalledWith("x+1=2"); });
- it("任务卡和建议问题都可操作", () => { const p = { ...base, session, stateToken: "token", messages: [{ id: "a", role: "assistant", kind: "assistant", text: "讲解中断", status: "error", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions }], onChoice: vi.fn(), onSuggestion: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: "继续" })); expect(p.onChoice).toHaveBeenCalledWith(session.flow.activeGate, "continue"); fireEvent.click(screen.getByRole("button", { name: /为什么用判别式/ })); expect(p.onSuggestion).toHaveBeenCalledWith(session.flow.suggestedQuestions[0]); });
- it("识别待确认时要求图中条件，并将编辑结果回传", () => { const confirm = vi.fn(); const problem: any = { text: "图形题", visualContext: { related: true, affectsSolving: true, facts: [], summary: "" } }; render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>); expect(screen.getByText("这道题依赖配图，请补全图中条件或重新拍摄。")).not.toBeNull(); fireEvent.change(screen.getByLabelText("图中信息"), { target: { value: "AB=3" } }); fireEvent.click(screen.getByRole("button", { name: "确认题目，开始讲解" })); expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ userRevised: true })); });
- it("两种完成态都会提供合适的后续学习动作", () => { const transfer = vi.fn(), fresh = vi.fn(), retry = vi.fn(); const completed = { ...session, originalPassed: true, flow: { ...session.flow, stage: "complete", activeGate: null } }; const view = render(<LearningChat {...base} session={completed} onRequestTransfer={transfer} onNewProblem={fresh}/>); expect(screen.getByText("你已经独立解决了这道原题")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "再练一道同类题" })); expect(transfer).toHaveBeenCalled(); fireEvent.click(screen.getAllByRole("button", { name: "开始新题" }).at(-1)!); expect(fresh).toHaveBeenCalled(); view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, stage: "reviewed_complete", activeGate: null } }} onRetryOriginal={retry} onRequestTransfer={transfer} onNewProblem={fresh}/>); fireEvent.click(screen.getByRole("button", { name: "遮住讲解，重做原题" })); expect(retry).toHaveBeenCalled(); });
+ it("任务卡和建议问题都可操作", () => { const p = { ...base, session, stateToken: "token", messages: [{ id: "a", role: "assistant", kind: "assistant", text: "讲解中断", status: "error", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions } satisfies ChatMessage], onChoice: vi.fn(), onSuggestion: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: "继续" })); expect(p.onChoice).toHaveBeenCalledWith(session.flow.activeGate, "continue"); fireEvent.click(screen.getByRole("button", { name: /为什么用判别式/ })); expect(p.onSuggestion).toHaveBeenCalledWith(session.flow.suggestedQuestions[0]); });
+ it("识别待确认时要求图中条件，并将编辑结果回传", () => { const confirm = vi.fn(); const problem: ProblemSnapshot = { ...initialSession.problem, text: "图形题", visualContext: { related: true, affectsSolving: true, confidence: 0.5, facts: [], summary: "" } }; render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>); expect(screen.getByText("这道题依赖配图，请补全图中条件或重新拍摄。")).not.toBeNull(); fireEvent.change(screen.getByLabelText("图中信息"), { target: { value: "AB=3" } }); fireEvent.click(screen.getByRole("button", { name: "确认题目，开始讲解" })); expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ userRevised: true })); });
+ it("两种完成态都会提供合适的后续学习动作", () => { const transfer = vi.fn(), fresh = vi.fn(), retry = vi.fn(); const completed: LearningSession = { ...session, originalPassed: true, flow: { ...session.flow, stage: "complete", activeGate: null } }; const view = render(<LearningChat {...base} session={completed} onRequestTransfer={transfer} onNewProblem={fresh}/>); expect(screen.getByText("你已经独立解决了这道原题")).not.toBeNull(); fireEvent.click(screen.getByRole("button", { name: "再练一道同类题" })); expect(transfer).toHaveBeenCalled(); fireEvent.click(screen.getAllByRole("button", { name: "开始新题" }).at(-1)!); expect(fresh).toHaveBeenCalled(); view.rerender(<LearningChat {...base} session={{ ...session, flow: { ...session.flow, stage: "reviewed_complete", activeGate: null } }} onRetryOriginal={retry} onRequestTransfer={transfer} onNewProblem={fresh}/>); fireEvent.click(screen.getByRole("button", { name: "遮住讲解，重做原题" })); expect(retry).toHaveBeenCalled(); });
  it("对话完成后可打开并关闭 PDF 导出和本题知识图谱", async () => {
    const ready = { ...session, flow: { ...session.flow, activeGate: null } };
    render(<LearningChat {...base} session={ready} stateToken="token" messages={[{ id: "m", role: "assistant", kind: "assistant", text: "讲解", status: "complete", createdAt: new Date().toISOString() }]}/>);
@@ -40,10 +45,10 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
  });
  it("答案任务支持点击选项、白板和拍照作答，失败消息能在原位置重试", () => {
    const onSend = vi.fn(), onWhiteboard = vi.fn(), onResponsePhoto = vi.fn(), onRetry = vi.fn();
-   const answerSession = {
+   const answerSession: LearningSession = {
      ...session,
-     nodes: [{ id: "n", check: { choices: ["A. 4", "B. 5"] } }],
-     flow: { ...session.flow, activeGate: { id: "answer", nodeId: "n", kind: "node_answer", title: "做一道小题", prompt: "请选择答案", options: [{ id: "not_understood", label: "没懂" }] } },
+     nodes: [{ ...initialSession.nodes[0], id: "n", check: { ...initialSession.nodes[0].check!, choices: ["A. 4", "B. 5"] } }],
+     flow: { ...session.flow, activeGate: { id: "answer", nodeId: "n", kind: "node_answer", title: "做一道小题", prompt: "请选择答案", options: [{ id: "not_understood", label: "没懂", emphasis: "secondary" }] } },
    };
    const view = render(<LearningChat {...base} session={answerSession} onSend={onSend} onWhiteboard={onWhiteboard} onResponsePhoto={onResponsePhoto} messages={[]}/>);
    fireEvent.click(screen.getByRole("button", { name: "A 4" }));
@@ -60,7 +65,7 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
  });
  it("图像复核可切换为辅助或无关图，避免把空图中条件提交给模型", () => {
    const confirm = vi.fn();
-   const problem: any = { text: "图形题", visualContext: { related: true, affectsSolving: true, facts: [], summary: "" } };
+   const problem: ProblemSnapshot = { ...initialSession.problem, text: "图形题", visualContext: { related: true, affectsSolving: true, confidence: 0.5, facts: [], summary: "" } };
    render(<LearningChat {...base} session={session} reviewProblem={problem} onConfirmProblem={confirm}/>);
    const submit = screen.getByRole("button", { name: "确认题目，开始讲解" });
    expect(submit.hasAttribute("disabled")).toBe(true);
@@ -74,8 +79,8 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
  });
  it("流式消息、下一步占位、结果和错误反馈都保持在对话主线内", () => {
    const retry = vi.fn();
-   const flowing = { ...session, flow: { ...session.flow, activeGate: { ...session.flow.activeGate, kind: "node_answer" } } };
-   const messages: any[] = [
+   const flowing: LearningSession = { ...session, flow: { ...session.flow, activeGate: { ...session.flow.activeGate!, kind: "node_answer" } } };
+   const messages: ChatMessage[] = [
      { id: "m", role: "system", kind: "milestone", text: "已找到关键条件", status: "complete", createdAt: new Date().toISOString() },
      { id: "p", role: "system", kind: "path", text: "原题 → 平方根", status: "complete", createdAt: new Date().toISOString() },
      { id: "r", role: "system", kind: "result", text: "✓ 回答正确", status: "complete", createdAt: new Date().toISOString() },
@@ -94,9 +99,9 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
  });
  it("答案任务可切换为针对当前步骤的提问，再无缝回到答案输入", () => {
    const onQuestion = vi.fn(), onSend = vi.fn(), onWhiteboard = vi.fn();
-   const answerSession = {
+   const answerSession: LearningSession = {
      ...session,
-     flow: { ...session.flow, stage: "guided_reasoning", activeGate: { id: "answer", kind: "original_answer", title: "独立作答", prompt: "写出结果", options: [{ id: "not_understood", label: "没懂" }] } },
+     flow: { ...session.flow, stage: "guided_reasoning", activeGate: { id: "answer", kind: "original_answer", title: "独立作答", prompt: "写出结果", options: [{ id: "not_understood", label: "没懂", emphasis: "secondary" }] } },
    };
    render(<LearningChat {...base} session={answerSession} onQuestion={onQuestion} onSend={onSend} onWhiteboard={onWhiteboard}/>);
    expect(screen.getByLabelText("输入你的答案")).not.toBeNull();
@@ -142,7 +147,7 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
      if (this.closest(".suggested-question-trail")) return { top: 140, bottom: 180, width: 240, height: 40 } as DOMRect;
      return originalRect.call(this);
    });
-   const message = { id: "assistant-1", role: "assistant", kind: "assistant", text: "先确认题干条件。", status: "complete", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions } as any;
+   const message: ChatMessage = { id: "assistant-1", role: "assistant", kind: "assistant", text: "先确认题干条件。", status: "complete", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions };
    const view = render(<LearningChat {...base} session={session} messages={[message]}/>);
    fireEvent(window, new Event("resize"));
    const suggestionJump = await screen.findByRole("button", { name: "下面有猜你想问 ↓" });

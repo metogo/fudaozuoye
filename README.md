@@ -84,9 +84,13 @@ npm run build
 静态 H5 发布到 `/fudaozuoye`，实时接口由同环境的 HTTP 云函数 `learning-api` 承接，并通过 `/api` 网关访问；这样拍照、状态校验和 SSE 均保持同源。
 
 ```bash
-npm run build:function
-tcb fn deploy learning-api --dir functions/learning-api --httpFn
-tcb app deploy fudaozuoye --env-id mini-0324-100046523669-03b06729f --framework next --build-command "npm run build:cloudbase" --output-dir out --deploy-path /fudaozuoye --enable-git-ignore
+npm run release:cloudbase
 ```
+
+既有环境统一使用上述发布入口：本地构建与检查 → 仅更新后端代码 → 核对线上模型/密钥/运行配置未改变 → 真实小学数学、初中物理、高中化学图谱及详情验收 → 发布前端 → 在线浏览器验证节点、连线、导出与返回。任一步失败即停止；首页能打开、CLI 显示部署成功、Mock 测试通过都不能替代真实图谱验收。不要根据“本次只改了 UI”判断后端已是最新版。
+
+入口只更新现有函数代码，不创建函数或修改生产配置；首次建环境需单独确认。验收使用公开样例，真实调用模型会产生少量费用，不保存会话凭证。独立复验可先运行 `npm run build:function`，再运行 `npm run verify:knowledge-map:online`。
+
+发布入口执行全量单测、全量类型检查和全库 lint（包含测试代码）。`npm run lint` 要求零错误、零警告；检查失败时停止发布，不允许跳过测试文件或降低规则来放行。
 
 不要将模型密钥放到静态应用的构建变量。请只在 `learning-api` 云函数环境变量中设置 `DOUBAO_API_KEY`、`DOUBAO_MODEL_ID`、`DOUBAO_MODEL_ID_MEDIUM`、`DOUBAO_MODEL_ID_HIGH`、`DOUBAO_BASE_URL`、可选的 `DOUBAO_IMAGE_MODEL_ID`、`DOUBAO_IMAGE_BASE_URL` 和至少 32 位的 `SESSION_STATE_SECRET`；本仓库不保存这些值。

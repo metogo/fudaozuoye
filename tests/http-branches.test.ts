@@ -118,6 +118,6 @@ describe("低频学习接口的成功、兜底与错误分支", () => {
 
   it("列出运行时可用模型配置", async () => {
     vi.mocked(listProviderAvailability).mockReturnValue([{ id: "doubao", available: true }] as never);
-    expect(await getProviders().json()).toEqual({ schemaVersion: "1.0", providers: [{ id: "doubao", available: true }] });
+    expect(await getProviders().json()).toEqual({ schemaVersion: "1.0", capabilities: { knowledgeMapStream: 1 }, providers: [{ id: "doubao", available: true }] });
   });
 });

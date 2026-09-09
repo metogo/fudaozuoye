@@ -146,7 +146,7 @@ describe("学习工作区", () => {
     const view = render(<LearningWorkspace session={session as never} {...callbacks} focusNodeId="concept"/>);
     fireEvent.scroll(window);
     fireEvent.click(screen.getByRole("button", { name: "问例子" }));
-    const dialog = await screen.findByRole("dialog");
+    await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
     expect((await screen.findByRole("alert")).textContent).toContain("网络暂时不可用");
     fireEvent.click(screen.getByRole("button", { name: "保留问题，重新发送" }));

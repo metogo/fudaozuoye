@@ -2,8 +2,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let flowProps: any;
-let flowApi: any;
+import type { Node, ReactFlowProps, ReactFlowInstance } from "@xyflow/react";
+import type { MapConcept } from "@/lib/learning/knowledge-map";
+type TestNode = Node<{ concept: MapConcept; root: boolean; expanded: boolean; childCount: number; dimmed: boolean; pending?: boolean; stopped?: boolean; toggle: (id: string) => void }, "concept">;
+type FlowProps = ReactFlowProps<TestNode>;
+function createFlowApi() { return { getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() }; }
+let flowProps: FlowProps | undefined;
+let flowApi: ReturnType<typeof createFlowApi> | undefined;
 
 vi.mock("@xyflow/react", async () => {
   const React = await import("react");
@@ -13,15 +18,17 @@ vi.mock("@xyflow/react", async () => {
     MarkerType: { ArrowClosed: "arrow" },
     Position: { Top: "top", Bottom: "bottom" },
     applyNodeChanges: (_changes: unknown, nodes: unknown) => nodes,
-    ReactFlow: ({ nodes, nodeTypes, onNodeClick, onInit, ...props }: any) => {
+    ReactFlow: ({ nodes, nodeTypes, onNodeClick, onInit, ...props }: FlowProps) => {
       flowProps = { nodes, onNodeClick, ...props };
+      const initRef = React.useRef(onInit);
       React.useEffect(() => {
-        flowApi = { getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() };
-        onInit?.(flowApi);
+        flowApi = createFlowApi();
+        // The mock implements only viewport methods consumed by this component.
+        initRef.current?.(flowApi as unknown as ReactFlowInstance<TestNode>);
       }, []);
-      return <div data-testid="flow">{nodes.map((node: any) => {
-        const Node = nodeTypes[node.type];
-        return <div key={node.id} role="button" data-id={node.id} className="react-flow__node" onClick={() => onNodeClick?.({}, node)}><Node id={node.id} data={node.data} selected={node.selected}/></div>;
+      return <div data-testid="flow" onClick={event => { if (event.target === event.currentTarget) props.onPaneClick?.(event); }}>{nodes?.map((node) => {
+        const Node = nodeTypes!.concept;
+        return <div key={node.id} role="button" data-id={node.id} className="react-flow__node" onClick={(event) => onNodeClick?.(event, node)}><Node id={node.id} data={node.data} selected={node.selected === true} type="concept" dragging={false} zIndex={0} isConnectable draggable selectable deletable positionAbsoluteX={node.position.x} positionAbsoluteY={node.position.y}/></div>;
       })}</div>;
     },
   };
@@ -134,9 +141,9 @@ describe("ProblemKnowledgeMapPage", () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
     await screen.findByText("根的判别式");
-    expect(flowProps.nodes).toHaveLength(2);
-    flowProps.onNodesChange([{ type: "position", id: "delta", position: { x: 480, y: 260 } }]);
-    flowProps.onNodeDragStop();
+    expect(flowProps!.nodes).toHaveLength(2);
+    flowProps!.onNodesChange!([{ type: "position", id: "delta", position: { x: 480, y: 260 } }]);
+    flowProps!.onNodeDragStop!({} as MouseEvent, flowProps!.nodes![0], flowProps!.nodes!);
     fireEvent(window, new Event("pagehide"));
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain("delta");
     fireEvent.click(screen.getByText("收起基础"));
@@ -145,7 +152,7 @@ describe("ProblemKnowledgeMapPage", () => {
     expect(screen.getByText("收起基础")).not.toBeNull();
     fireEvent.click(screen.getByText("根的判别式"));
     expect(await screen.findByLabelText("根的判别式的知识说明")).not.toBeNull();
-    flowProps.onPaneClick();
+    fireEvent.click(screen.getByTestId("flow"));
     await waitFor(() => expect(screen.queryByLabelText("根的判别式的知识说明")).toBeNull());
     expect(screen.getByTestId("flow")).not.toBeNull();
   });
@@ -161,16 +168,16 @@ describe("ProblemKnowledgeMapPage", () => {
     expect(root).not.toBeNull();
     fireEvent.keyDown(root!, { key: "Enter" });
     expect(await screen.findByLabelText("一元二次方程的知识说明")).not.toBeNull();
-    flowProps.onNodesChange([
+    flowProps!.onNodesChange!([
       { type: "dimensions", id: "quadratic", dimensions: { width: 220, height: 100 } },
       { type: "dimensions", id: "quadratic", dimensions: { width: -1, height: 0 } },
       { type: "select", id: "quadratic", selected: true },
     ]);
     fireEvent.click(screen.getByRole("button", { name: "放大图谱", hidden: true }));
     fireEvent.click(screen.getByRole("button", { name: "缩小图谱", hidden: true }));
-    expect(flowApi.zoomIn).toHaveBeenCalledTimes(1);
-    expect(flowApi.zoomOut).toHaveBeenCalledTimes(1);
-    flowProps.onMoveEnd({}, { x: 20, y: 30, zoom: 1.2 });
+    expect(flowApi!.zoomIn).toHaveBeenCalledTimes(1);
+    expect(flowApi!.zoomOut).toHaveBeenCalledTimes(1);
+    flowProps!.onMoveEnd!(null, { x: 20, y: 30, zoom: 1.2 });
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain('"zoom":1.2');
   });
 
@@ -179,7 +186,7 @@ describe("ProblemKnowledgeMapPage", () => {
     const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
     render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
     await screen.findByText("根的判别式");
-    flowProps.onNodeDragStop();
+    flowProps!.onNodeDragStop!({} as MouseEvent, flowProps!.nodes![0], flowProps!.nodes!);
     await waitFor(() => expect(screen.getByText("浏览器暂时无法保存布局，本次仍可自由调整。")).not.toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "整理", hidden: true }));
     expect(screen.getByTestId("flow")).not.toBeNull();
@@ -201,12 +208,12 @@ describe("ProblemKnowledgeMapPage", () => {
     expect(screen.getByText("一元二次方程")).not.toBeNull();
     expect(screen.queryByText("根的判别式")).toBeNull();
     expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuenow")).toBe("1");
-    const position = flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position;
+    const position = flowProps!.nodes!.find((n: { id: string }) => n.id === "quadratic")!.position;
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toBeNull();
     await send("error", { message: "连接中断" });
     expect(screen.getByText("一元二次方程")).not.toBeNull();
     expect(screen.getByRole("alert", { hidden: true }).textContent).toBe("连接中断");
-    expect(flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position).toEqual(position);
+    expect(flowProps!.nodes!.find((n: { id: string }) => n.id === "quadratic")!.position).toEqual(position);
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toBeNull();
     await waitFor(() => expect(cancelled).toHaveBeenCalled());
     view.unmount();
@@ -227,14 +234,14 @@ describe("ProblemKnowledgeMapPage", () => {
     fireEvent.click(screen.getByText("一元二次方程"));
     await screen.findByText("当前根节点");
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
-    const views = flowApi.setViewport.mock.calls.length;
-    const rootPosition = flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position;
+    const views = flowApi!.setViewport.mock.calls.length;
+    const rootPosition = flowProps!.nodes!.find((n: { id: string }) => n.id === "quadratic")!.position;
     await send("map.node", nodeEvent(1));
     await send("complete", { total: 2 });
     await waitFor(() => expect(screen.getByText("已全部生成")).not.toBeNull());
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(flowProps.nodes.find((n: { id: string }) => n.id === "quadratic").position).toEqual(rootPosition);
-    expect(flowApi.setViewport).toHaveBeenCalledTimes(views);
+    expect(flowProps!.nodes!.find((n: { id: string }) => n.id === "quadratic")!.position).toEqual(rootPosition);
+    expect(flowApi!.setViewport).toHaveBeenCalledTimes(views);
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toContain("delta");
   });
 
@@ -252,13 +259,13 @@ describe("ProblemKnowledgeMapPage", () => {
     await send("map.node", { type: "node", node: sibling, edges: [{ ...map.edges[0], to: sibling.id }] });
     expect(screen.getByText("方程的根")).not.toBeNull();
     expect(screen.getByRole("progressbar", { hidden: true }).getAttribute("aria-valuenow")).toBe("2");
-    const nodes = flowProps.nodes as { id: string; position: unknown; data: { pending?: boolean } }[];
+    const nodes = flowProps!.nodes as { id: string; position: unknown; data: { pending?: boolean } }[];
     expect(nodes.map(n => n.id)).toEqual([map.rootId, "sibling", "delta"]);
     expect(nodes.find(n => n.id === "delta")?.data.pending).toBe(true);
     const position = nodes.find(n => n.id === "sibling")!.position;
     await send("map.node", nodeEvent(1));
     await send("complete", { total: 3 });
-    expect(flowProps.nodes.find((n: { id: string }) => n.id === "sibling").position).toEqual(position);
+    expect(flowProps!.nodes!.find((n: { id: string }) => n.id === "sibling")!.position).toEqual(position);
     expect(screen.getByText("已全部生成")).not.toBeNull();
   });
 

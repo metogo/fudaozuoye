@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-let api: any;
-vi.mock("react-sketch-canvas", async () => { const React = await import("react"); return { ReactSketchCanvas: React.forwardRef(({ onChange }: any, ref: any) => { api = { eraseMode: vi.fn(), undo: vi.fn(), redo: vi.fn(), clearCanvas: vi.fn(), exportImage: vi.fn(async () => "data:image/png;base64,AA==") }; React.useImperativeHandle(ref, () => api); return <button onClick={() => onChange([{}])}>落笔</button>; }) }; });
-vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: any) => <>{text}</> }));
+import type { ReactSketchCanvasProps } from "react-sketch-canvas";
+function createCanvasApi() { return { eraseMode: vi.fn(), undo: vi.fn(), redo: vi.fn(), clearCanvas: vi.fn(), exportImage: vi.fn(async () => "data:image/png;base64,AA==") }; }
+let api: ReturnType<typeof createCanvasApi>;
+vi.mock("react-sketch-canvas", async () => { const React = await import("react"); return { ReactSketchCanvas: React.forwardRef<ReturnType<typeof createCanvasApi>, Pick<ReactSketchCanvasProps, "onChange">>(function MockSketchCanvas({ onChange }, ref) { api = createCanvasApi(); React.useImperativeHandle(ref, () => api); return <button onClick={() => onChange?.([{ paths: [{ x: 10, y: 10 }], strokeWidth: 3, strokeColor: "#000000", drawMode: true }])}>落笔</button>; }) }; });
+vi.mock("@/components/rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <>{text}</> }));
 import { WhiteboardInput } from "@/components/whiteboard-input";
 describe("WhiteboardInput", () => { afterEach(cleanup);
  it("支持工具切换、编辑动作和成功导出", async () => { const done = vi.fn(), cancel = vi.fn(); vi.stubGlobal("fetch", vi.fn(async () => ({ blob: async () => new Blob(["img"], { type: "image/png" }) }))); vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:preview") }); render(<WhiteboardInput title="填写" taskLabel="写判别式" submitLabel="提交" showTask onConfirm={done} onCancel={cancel}/>); fireEvent.click(screen.getByRole("button", { name: "橡皮" })); expect(screen.getByRole("button", { name: "橡皮" }).getAttribute("aria-pressed")).toBe("true"); fireEvent.click(screen.getByRole("button", { name: "撤销" })); fireEvent.click(screen.getByRole("button", { name: "重做" })); fireEvent.click(screen.getByRole("button", { name: "清空" })); fireEvent.click(screen.getByText("落笔")); fireEvent.click(screen.getByRole("button", { name: "提交" })); await waitFor(() => expect(done).toHaveBeenCalledWith(expect.any(Blob), "blob:preview")); fireEvent.click(screen.getByRole("button", { name: "取消" })); expect(cancel).toHaveBeenCalled(); vi.unstubAllGlobals(); });

@@ -1,12 +1,14 @@
 import type { LearningSession } from "../types";
 import { parseJsonObject } from "./model-support";
+import { requestMapValue } from "./knowledge-map-validation";
 type TextRequest = (system: string, prompt: string, image?: string, json?: boolean, timeout?: number, signal?: AbortSignal, tokens?: number) => Promise<string>;
 
 export async function generateKnowledgeMap(session: LearningSession, request: TextRequest) {
     const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await import("./knowledge-map");
     const { parseKnowledgeMap, mapEvidence } = await import("../knowledge-map");
-    const raw = await request(knowledgeMapSystem, knowledgeMapPrompt(session), undefined, true, 40000, undefined, 4800);
-    return parseKnowledgeMap({ ...resolveKnowledgeEvidence(parseJsonObject(raw), session), overviewOnly: true }, mapEvidence(session));
+    return requestMapValue((system, prompt, timeout) => request(system, prompt, undefined, true, timeout, undefined, 4800),
+      knowledgeMapSystem, knowledgeMapPrompt(session),
+      value => parseKnowledgeMap({ ...resolveKnowledgeEvidence(value, session), overviewOnly: true }, mapEvidence(session)), 40000);
   }
 export async function generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string, request: TextRequest) {
     const { knowledgeDetailSystem, knowledgeMapPrompt } = await import("./knowledge-map");

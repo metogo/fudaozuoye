@@ -34,8 +34,8 @@ describe("板书受限语义图解析", () => {
   it("Schema 可按场景选择是否允许图形字段", () => {
     const withVisual = boardPlanSchema();
     const withoutVisual = boardPlanSchema({ includeVisuals: false });
-    expect(((withVisual.properties as any).scenes.items.required as string[])).toContain("visual");
-    expect(((withoutVisual.properties as any).scenes.items.required as string[])).not.toContain("visual");
+    expect(withVisual).toHaveProperty("properties.scenes.items.required", expect.arrayContaining(["visual"]));
+    expect(withoutVisual).toHaveProperty("properties.scenes.items.required", expect.not.arrayContaining(["visual"]));
   });
 
   it("解析公式链，并在可见文本中保留公式和说明", () => {

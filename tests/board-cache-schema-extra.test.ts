@@ -27,7 +27,7 @@ describe("板书缓存结构", () => {
     expect(isStoredBoardCache({ version: 1, requestId: "r", lesson }, "r")).toBe(false);
     expect(isStoredBoardCache({ version: BOARD_CACHE_VERSION, requestId: "other", lesson }, "r")).toBe(false);
     expect(isStoredBoardLesson({ ...lesson, blocks: [blocks[0], { ...blocks[0] }] })).toBe(false);
-    expect(isStoredBoardLesson({ ...lesson, plan: { ...lesson.plan, scenes: lesson.plan.scenes.map(({ why, ...scene }) => scene) } })).toBe(false);
+    expect(isStoredBoardLesson({ ...lesson, plan: { ...lesson.plan, scenes: lesson.plan.scenes.map(scene => Object.fromEntries(Object.entries(scene).filter(([key]) => key !== "why"))) } })).toBe(false);
   });
 
   it("校验语义图形的节点与边必须对应本板书的有效标识", () => {

@@ -1,5 +1,5 @@
 import { listProviderAvailability } from "../providers/config";
 
 export function getProviders(): Response {
-  return Response.json({ schemaVersion: "1.0", providers: listProviderAvailability() });
+  return Response.json({ schemaVersion: "1.0", capabilities: { knowledgeMapStream: 1 }, providers: listProviderAvailability() }, { headers: { "Cache-Control": "no-store" } });
 }

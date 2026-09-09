@@ -21,19 +21,19 @@ describe("板书内容契约", () => {
   });
 
   it("原生数学板书要求五段、关系推进、复核与迁移", () => {
-    const blocks: any[] = [
-      { content: "已知 $a=1$，先建立关系。" },
-      { content: "再得到 $b=2$。" },
-      { content: "代入得 $a+b=3$。" },
-      { content: "检查结果是否符合条件。" },
-      { content: "换字母后重建同样关系。" },
+    const blocks = [
+      { id: "block", label: "步骤", tone: "plain" as const, content: "已知 $a=1$，先建立关系。" },
+      { id: "block", label: "步骤", tone: "plain" as const, content: "再得到 $b=2$。" },
+      { id: "block", label: "步骤", tone: "plain" as const, content: "代入得 $a+b=3$。" },
+      { id: "block", label: "步骤", tone: "plain" as const, content: "检查结果是否符合条件。" },
+      { id: "block", label: "步骤", tone: "plain" as const, content: "换字母后重建同样关系。" },
     ];
     expect(() => assertNativeMathBoardContent(blocks, { relationExpressions: ["a=1", "b=2"], derivationExpressions: ["a+b=3"] })).not.toThrow();
     expect(() => assertNativeMathBoardContent(blocks.slice(0, 4), { relationExpressions: [], derivationExpressions: [] })).toThrow("五个推导动作");
-    expect(() => assertNativeMathBoardContent([{ content: "重复" }, { content: "重复" }, ...blocks.slice(2)], { relationExpressions: [], derivationExpressions: [] })).toThrow("不能重复");
+    expect(() => assertNativeMathBoardContent([{ id: "block", label: "步骤", tone: "plain" as const, content: "重复" }, { id: "block", label: "步骤", tone: "plain" as const, content: "重复" }, ...blocks.slice(2)], { relationExpressions: [], derivationExpressions: [] })).toThrow("不能重复");
     expect(() => assertNativeMathBoardContent(blocks, { relationExpressions: ["c=3"], derivationExpressions: [] })).toThrow("建立题干关系");
     expect(() => assertNativeMathBoardContent(blocks, { relationExpressions: [], derivationExpressions: ["c=3"] })).toThrow("关系推进");
-    expect(() => assertNativeMathBoardContent([...blocks.slice(0, 3), { content: "观察即可" }, { content: "结束" }], { relationExpressions: [], derivationExpressions: [] })).toThrow("复核或题型迁移");
+    expect(() => assertNativeMathBoardContent([...blocks.slice(0, 3), { id: "block", label: "步骤", tone: "plain" as const, content: "观察即可" }, { id: "block", label: "步骤", tone: "plain" as const, content: "结束" }], { relationExpressions: [], derivationExpressions: [] })).toThrow("复核或题型迁移");
   });
 
   it("按时间数值或朝代排序，无法比较时保持无排序结果", () => {

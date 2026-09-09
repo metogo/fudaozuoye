@@ -1,19 +1,25 @@
 // @vitest-environment jsdom
+import type { ProblemSnapshot } from "@/lib/learning/types";
+import type { ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let latest: any;
-let latestCrop: any;
-let latestWhiteboard: any;
-let latestIllustration: any;
+import type { LearningChat } from "@/components/learning-chat";
+let latest: ComponentProps<typeof LearningChat> | undefined;
+import type { ImageCropper } from "@/components/image-cropper";
+let latestCrop: ComponentProps<typeof ImageCropper> | undefined;
+import type { WhiteboardInput } from "@/components/whiteboard-input";
+let latestWhiteboard: ComponentProps<typeof WhiteboardInput> | undefined;
+import type { LearningIllustration } from "@/components/learning-illustration";
+let latestIllustration: ComponentProps<typeof LearningIllustration> | undefined;
 vi.mock("@/components/learning-chat", () => ({
-  LearningChat: (props: any) => {
+  LearningChat: (props: ComponentProps<typeof LearningChat>) => {
     latest = props;
     return <main>
       <p data-testid="ready">{String(props.ready)}</p>
       <p data-testid="busy">{String(props.busy)}:{props.loadingLabel}</p>
       <p data-testid="notice">{props.notice}</p>
-      <p data-testid="messages">{props.messages.map((m: any) => `${m.kind}:${m.text}:${m.status}`).join("|")}</p>
+      <p data-testid="messages">{props.messages.map((m) => `${m.kind}:${m.text}:${m.status}`).join("|")}</p>
       <button onClick={() => void props.onSend("已知一元二次方程")}>发送题目</button>
       <button onClick={() => props.onReasoningLevel("high")}>高推理</button>
       <button onClick={() => props.onNewProblem()}>新题</button>
@@ -22,13 +28,13 @@ vi.mock("@/components/learning-chat", () => ({
 }));
 vi.mock("@/lib/learning/client-sse", () => ({ readSseResponse: vi.fn() }));
 vi.mock("@/components/image-cropper", () => ({
-  ImageCropper: (props: any) => { latestCrop = props; return <div data-testid="cropper"/>; },
+  ImageCropper: (props: ComponentProps<typeof ImageCropper>) => { latestCrop = props; return <div data-testid="cropper"/>; },
 }));
 vi.mock("@/components/whiteboard-input", () => ({
-  WhiteboardInput: (props: any) => { latestWhiteboard = props; return <div data-testid="whiteboard"/>; },
+  WhiteboardInput: (props: ComponentProps<typeof WhiteboardInput>) => { latestWhiteboard = props; return <div data-testid="whiteboard"/>; },
 }));
 vi.mock("@/components/learning-illustration", () => ({
-  LearningIllustration: (props: any) => { latestIllustration = props; return <div data-testid="illustration"/>; },
+  LearningIllustration: (props: ComponentProps<typeof LearningIllustration>) => { latestIllustration = props; return <div data-testid="illustration"/>; },
 }));
 
 import { EducationChatApp } from "@/components/education-chat-app";
@@ -37,9 +43,9 @@ import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint
 
 const learnedSession = {
   schemaVersion: "1.1", requestId: "request-app", reasoningLevel: "light",
-  problem: { text: "已知一元二次方程", visualContext: { summary: "", facts: [] } }, rootNodeId: "root",
+  problem: { text: "已知一元二次方程", childWork: "", subject: "math", gradeBand: "junior", confidence: 1, userRevised: false, visualContext: { related: false, affectsSolving: false, confidence: 1, summary: "", facts: [] } } satisfies ProblemSnapshot, rootNodeId: "root",
   nodes: [{ id: "root", title: "原题", kind: "problem", difficulty: 0, state: "learning", atomic: false }], edges: [],
-  flow: { activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "continue", label: "继续" }] }, suggestedQuestions: [], viewedSolution: false },
+  flow: { activeGate: { id: "gate", kind: "understanding" as const, title: "理解", prompt: "是否理解", options: [{ id: "continue" as const, emphasis: "primary" as const, label: "继续" }] }, suggestedQuestions: [], viewedSolution: false },
 };
 const restorableBoardLesson = {
   title: "条件关系", subtitle: "板书", returnLabel: "回到对话", layout: "steps", annotations: [],
@@ -76,10 +82,10 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("recognize"))
       .mockResolvedValueOnce(response("analyze"))
       .mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "recognize") { onEvent("phase", { label: "正在识别文字" }); onEvent("recognized", learnedSession.problem); }
-      if (reply.stage === "analyze") { onEvent("phase", { label: "正在安排学习" }); onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) }); }
-      if (reply.stage === "turn") {
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "recognize") { onEvent("phase", { label: "正在识别文字" }); onEvent("recognized", learnedSession.problem); }
+      if ((reply as Response & { stage: string }).stage === "analyze") { onEvent("phase", { label: "正在安排学习" }); onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) }); }
+      if ((reply as Response & { stage: string }).stage === "turn") {
         await onEvent("message.delta", { text: "先从判别式开始理解。" });
         await onEvent("message.complete", { scopeLabel: "关键线索" });
         await onEvent("flow.milestone", { label: "先抓条件" });
@@ -118,33 +124,33 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("turn"));
     let recognitions = 0;
     let analyses = 0;
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "recognize") {
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "recognize") {
         recognitions += 1;
         if (recognitions === 2) await onEvent("recognized", learnedSession.problem);
       }
-      if (reply.stage === "analyze") {
+      if ((reply as Response & { stage: string }).stage === "analyze") {
         analyses += 1;
         if (analyses === 1 || analyses === 3) await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
       }
-      if (reply.stage === "turn") {
+      if ((reply as Response & { stage: string }).stage === "turn") {
         await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
         await onEvent("flow.ready", {});
       }
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onSend("一道文字题"); });
+    await act(async () => { await latest!.onSend("一道文字题"); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有识别到完整题目"));
-    await act(async () => { await latest.onRetry(); });
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+    await act(async () => { await latest!.onRetry(); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
 
     // A recognized problem can still fail closed if analysis returns no graph; retry keeps it usable.
-    await act(async () => { await latest.onNewProblem(); });
-    await act(async () => { await latest.onConfirmProblem(learnedSession.problem); });
+    await act(async () => { await latest!.onNewProblem(); });
+    await act(async () => { await latest!.onConfirmProblem(learnedSession.problem); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有返回可用的学习路径"));
-    await act(async () => { await latest.onRetry(); });
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+    await act(async () => { await latest!.onRetry(); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
   });
 
   it("拍题会经裁剪确认后进入与文字题相同的讲解流程", async () => {
@@ -154,25 +160,25 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("recognize"))
       .mockResolvedValueOnce(response("analyze"))
       .mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "recognize") await onEvent("recognized", visualProblem);
-      if (reply.stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
-      if (reply.stage === "turn") { await onEvent("message.delta", { text: "先看图形条件。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "recognize") await onEvent("recognized", visualProblem);
+      if ((reply as Response & { stage: string }).stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      if ((reply as Response & { stage: string }).stage === "turn") { await onEvent("message.delta", { text: "先看图形条件。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { latest.onFile(new File(["image"], "q.png", { type: "image/png" })); });
+    await act(async () => { latest!.onFile(new File(["image"], "q.png", { type: "image/png" })); });
     expect(latestCrop).toBeTruthy();
-    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:question"); });
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+    await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:question"); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
     expect(screen.getByTestId("messages").textContent).toContain("先看图形条件");
   });
 
   it("一轮学习流可处理路径、答案、转写、分支提示和恢复状态", async () => {
     sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [] }));
     vi.mocked(fetch).mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } })).mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("message.delta", { text: "先写出判别式。" });
       await onEvent("flow.suggestions", { suggestions: [{ id: "s1", text: "为什么", scopeLabel: "判别式", sourceSummary: "题干" }] });
       await onEvent("flow.milestone", { label: "先找条件" });
@@ -189,7 +195,7 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onChoice(learnedSession.flow.activeGate, "continue"); });
+    await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "continue"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("回答正确"));
     expect(screen.getByTestId("messages").textContent).toContain("AI 读到的作答：Δ≥0");
     expect(screen.getByTestId("messages").textContent).toContain("原题步骤 → 判别式 → 不等式");
@@ -201,8 +207,8 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("turn"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ marks: [{ text: "核心条件", kind: "key" }] }), { status: 200 }));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("message.delta", { text: "先看条件。" });
       await onEvent("message.reset", { reason: "正在重整表述" });
       await onEvent("message.delta", { text: "这是重新整理后的核心条件，需要先判断题目给出的数量关系，再选择公式完成推导。" });
@@ -222,7 +228,7 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onQuestion("这里为什么这样做", "条件关系"); });
+    await act(async () => { await latest!.onQuestion("这里为什么这样做", "条件关系"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("重新整理后的核心条件"));
     expect(screen.getByTestId("messages").textContent).toContain("再看一步： 再核对一次");
     expect(screen.getByTestId("messages").textContent).toContain("AI 读到的作答：x=3");
@@ -235,8 +241,8 @@ describe("EducationChatApp", () => {
       flow: {
         ...learnedSession.flow,
         activeGate: {
-          id: "gate", kind: "understanding", title: "理解", prompt: "是否理解",
-          options: [{ id: "continue", label: "继续" }],
+          id: "gate", kind: "understanding" as const, title: "理解", prompt: "是否理解",
+          options: [{ id: "continue" as const, emphasis: "primary" as const, label: "继续" }],
         },
         suggestedQuestions: [{ id: "s1", text: "为什么要这样做", scopeLabel: "关键线索", sourceSummary: "题干" }],
       },
@@ -245,8 +251,8 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValue(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("message.delta", { text: "继续理解。" });
       await onEvent("message.complete", {});
       await onEvent("flow.update", { session, stateToken: "y".repeat(48) });
@@ -254,26 +260,26 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
-    await act(async () => { await latest.onQuestion("为什么", "关键线索"); });
-    await act(async () => { await latest.onSuggestion(session.flow.suggestedQuestions[0]); });
-    await act(async () => { await latest.onRetryOriginal(); });
-    await act(async () => { await latest.onRequestTransfer(); });
-    await act(async () => { await latest.onSend("懂了"); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
+    await act(async () => { await latest!.onQuestion("为什么", "关键线索"); });
+    await act(async () => { await latest!.onSuggestion(session.flow.suggestedQuestions[0]); });
+    await act(async () => { await latest!.onRetryOriginal(); });
+    await act(async () => { await latest!.onRequestTransfer(); });
+    await act(async () => { await latest!.onSend("懂了"); });
     expect(screen.getByTestId("messages").textContent).toContain("user:为什么");
     expect(screen.getByTestId("messages").textContent).toContain("user:再练一道同知识点题");
   });
 
   it("确认题目后会分析并开始讲解；手写转写能够回填结果", async () => {
-    const problem = { text: "图片中的题目", visualContext: { summary: "图形", facts: [] }, subject: "math" };
+    const problem: ProblemSnapshot = { ...learnedSession.problem, text: "图片中的题目", visualContext: { ...learnedSession.problem.visualContext, summary: "图形" } };
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("analyze"))
       .mockResolvedValueOnce(response("turn"))
       .mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
-      if (reply.stage === "turn") {
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      if ((reply as Response & { stage: string }).stage === "turn") {
         await onEvent("message.delta", { text: "开始讲解。" });
         await onEvent("message.complete", {});
         await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
@@ -282,49 +288,49 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await latest.onConfirmProblem(problem);
+    await latest!.onConfirmProblem(problem);
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("assistant:开始讲解"));
-    vi.mocked(readSseResponse).mockImplementationOnce(async (_reply: any, onEvent: any) => { await onEvent("input.transcribed", { text: "x=3", confidence: 0.95 }); });
-    await expect(latest.onTranscribeStep("gate", new Blob(["ink"]), new AbortController().signal)).resolves.toEqual({ text: "x=3", confidence: 0.95 });
+    vi.mocked(readSseResponse).mockImplementationOnce(async (_reply, onEvent) => { await onEvent("input.transcribed", { text: "x=3", confidence: 0.95 }); });
+    await expect(latest!.onTranscribeStep!("gate", new Blob(["ink"]), new AbortController().signal)).resolves.toEqual({ text: "x=3", confidence: 0.95 });
   });
 
   it("图片与白板入口会复用识别、人工确认和图片追问流程", async () => {
-    const visualProblem = { text: "看图作答", childWork: "", subject: "math", gradeBand: "junior", visualContext: { related: true, summary: "需要确认图形", facts: [{ text: "AB=3", source: "printed_label", confidence: 0.5 }], affectsSolving: true, confidence: 0.5 } };
+    const visualProblem: ProblemSnapshot = { confidence: 0.5, userRevised: false, text: "看图作答", childWork: "", subject: "math", gradeBand: "junior", visualContext: { related: true, summary: "需要确认图形", facts: [{ text: "AB=3", source: "printed_label", confidence: 0.5 }], affectsSolving: true, confidence: 0.5 } };
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("recognize"))
       .mockResolvedValueOnce(response("analyze"))
       .mockResolvedValue(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "recognize") await onEvent("recognized", visualProblem);
-      if (reply.stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
-      if (reply.stage === "turn") { await onEvent("message.delta", { text: "图形讲解。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "recognize") await onEvent("recognized", visualProblem);
+      if ((reply as Response & { stage: string }).stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      if ((reply as Response & { stage: string }).stage === "turn") { await onEvent("message.delta", { text: "图形讲解。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    latest.onFile(new File(["image"], "q.png", { type: "image/png" }));
+    latest!.onFile(new File(["image"], "q.png", { type: "image/png" }));
     await screen.findByTestId("cropper");
-    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:question"); });
-    await waitFor(() => expect(latest.reviewProblem?.text).toBe("看图作答"));
-    await act(async () => { await latest.onConfirmProblem(visualProblem); });
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
-    latest.onWhiteboard("question");
+    await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:question"); });
+    await waitFor(() => expect(latest!.reviewProblem?.text).toBe("看图作答"));
+    await act(async () => { await latest!.onConfirmProblem(visualProblem); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
+    latest!.onWhiteboard("question");
     await screen.findByTestId("whiteboard");
-    expect(latestWhiteboard.title).toBe("白板作答");
-    await act(async () => { await latestWhiteboard.onConfirm(new Blob(["ink"]), "blob:whiteboard"); });
-    latest.onResponsePhoto(new File(["image"], "answer.png", { type: "image/png" }), "answer");
+    expect(latestWhiteboard!.title).toBe("白板作答");
+    await act(async () => { await latestWhiteboard!.onConfirm(new Blob(["ink"]), "blob:whiteboard"); });
+    latest!.onResponsePhoto(new File(["image"], "answer.png", { type: "image/png" }), "answer");
     await screen.findByTestId("cropper");
-    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:answer"); });
+    await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:answer"); });
     expect(screen.getByTestId("messages").textContent).toContain("请看我拍下的这一步");
-    latest.onNewProblem();
+    latest!.onNewProblem();
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toBe(""));
-    expect(latest.session).toBeNull();
+    expect(latest!.session).toBeNull();
   });
 
   it("插画选择会显示逐帧进度，完成后把可复用课程交给独立页面", async () => {
     const session = {
       ...learnedSession,
-      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "view_illustration", label: "插画演示" }] } },
+      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding" as const, title: "理解", prompt: "是否理解", options: [{ id: "view_illustration" as const, emphasis: "primary" as const, label: "插画演示" }] } },
     };
     const frame = { id: "f1", index: 0, title: "第一步", imageUrl: "data:image/svg+xml,frame", narration: "看条件" };
     const lesson = { requestId: "request-app", title: "图示", frames: [frame], frameCount: 1, receipt: "receipt" };
@@ -332,8 +338,8 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("illustration.progress", { requestId: "request-app", label: "正在画第一步" });
       await onEvent("illustration.frame", { requestId: "request-app", frameCount: 1, frame });
       await onEvent("illustration.complete", lesson);
@@ -342,17 +348,17 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
-    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
+    await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
     expect(await screen.findByTestId("illustration")).not.toBeNull();
-    expect(latestIllustration.lesson).toEqual(lesson);
-    expect(latestIllustration.expectedCount).toBe(1);
+    expect(latestIllustration!.lesson).toEqual(lesson);
+    expect(latestIllustration!.expectedCount).toBe(1);
   });
 
   it("插画生成失败只在插画页给出可重试反馈，不会让主学习任务失效", async () => {
     const session = {
       ...learnedSession,
-      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "view_illustration", label: "插画演示" }] } },
+      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding" as const, title: "理解", prompt: "是否理解", options: [{ id: "view_illustration" as const, emphasis: "primary" as const, label: "插画演示" }] } },
     };
     sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session, stateToken: "x".repeat(48), messages: [] }));
     vi.mocked(fetch)
@@ -361,10 +367,10 @@ describe("EducationChatApp", () => {
     vi.mocked(readSseResponse).mockRejectedValue(new Error("图解服务暂不可用"));
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
-    await waitFor(() => expect(latestIllustration.error).toContain("图解服务暂不可用"));
-    expect(latest.session.flow.activeGate.id).toBe("gate");
-    expect(latest.retryLabel).toBe("");
+    await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
+    await waitFor(() => expect(latestIllustration!.error).toContain("图解服务暂不可用"));
+    expect(latest!.session!.flow.activeGate!.id).toBe("gate");
+    expect(latest!.retryLabel).toBe("");
   });
 
   it("读题中断时保留重试入口，重试不会清掉用户的原始提问", async () => {
@@ -374,10 +380,10 @@ describe("EducationChatApp", () => {
     vi.mocked(readSseResponse).mockRejectedValue(new Error("识别服务暂不可用"));
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onSend("请讲这道题"); });
-    expect(latest.retryLabel).toBe("重新识别");
+    await act(async () => { await latest!.onSend("请讲这道题"); });
+    expect(latest!.retryLabel).toBe("重新识别");
     expect(screen.getByTestId("messages").textContent).toContain("user:请讲这道题");
-    await act(async () => { await latest.onRetry(); });
+    await act(async () => { await latest!.onRetry(); });
     expect(vi.mocked(readSseResponse)).toHaveBeenCalledTimes(2);
   });
 
@@ -392,7 +398,7 @@ describe("EducationChatApp", () => {
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
-    expect(latest.session?.requestId).toBe("request-app");
+    expect(latest!.session?.requestId).toBe("request-app");
   });
 
   it("恢复已核验的本地板书缓存时会编译工作区，且不影响对话恢复", async () => {
@@ -405,7 +411,7 @@ describe("EducationChatApp", () => {
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
-    await waitFor(() => expect(latest.session?.requestId).toBe("request-app"));
+    await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
   });
 
   it("恢复页面后能用已保存的安全重试动作继续同一个学习任务", async () => {
@@ -418,19 +424,19 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("message.delta", { text: "已从原来的步骤继续。" });
       await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await waitFor(() => expect(latest.retryLabel).toBe("重试这一步"));
-    await act(async () => { await latest.onRetry(); });
+    await waitFor(() => expect(latest!.retryLabel).toBe("重试这一步"));
+    await act(async () => { await latest!.onRetry(); });
     const input = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).input;
     expect(input).toEqual({ type: "choose", gateId: "gate", choice: "continue" });
-    expect(latest.retryLabel).toBe("");
+    expect(latest!.retryLabel).toBe("");
   });
 
   it("普通任务失败会留下可重试入口，而可选同类练习不会锁住当前任务", async () => {
@@ -441,11 +447,11 @@ describe("EducationChatApp", () => {
     vi.mocked(readSseResponse).mockRejectedValue(new Error("模型暂时不可用"));
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onChoice(learnedSession.flow.activeGate, "continue"); });
-    await waitFor(() => expect(latest.retryLabel).toBe("重试这一步"));
+    await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "continue"); });
+    await waitFor(() => expect(latest!.retryLabel).toBe("重试这一步"));
     expect(screen.getByTestId("notice").textContent).toContain("模型暂时不可用");
-    await act(async () => { await latest.onRequestTransfer(); });
-    expect(latest.retryLabel).toBe("");
+    await act(async () => { await latest!.onRequestTransfer(); });
+    expect(latest!.retryLabel).toBe("");
     expect(screen.getByTestId("notice").textContent).toContain("同类练习暂时没有生成成功");
   });
 
@@ -456,8 +462,8 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("turn"))
       .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       await onEvent("message.delta", { text: "旧草稿" });
       await onEvent("message.reset", { reason: "重新组织讲解" });
       await onEvent("message.delta", { text: longText });
@@ -467,10 +473,10 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onChoice(learnedSession.flow.activeGate, "full_solution"); });
+    await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "full_solution"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain(longText));
     expect(screen.getByTestId("messages").textContent).not.toContain("旧草稿");
-    expect(latest.retryLabel).toBe("");
+    expect(latest!.retryLabel).toBe("");
   });
 
   it("没有可用推理服务时保持不可发送，并说明下一步", async () => {
@@ -478,7 +484,7 @@ describe("EducationChatApp", () => {
     render(<EducationChatApp/>);
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("AI 服务暂不可用"));
     expect(screen.getByTestId("ready").textContent).toBe("false");
-    await act(async () => { latest.onReasoningLevel("medium"); });
+    await act(async () => { latest!.onReasoningLevel("medium"); });
     expect(screen.getByTestId("notice").textContent).toContain("中推理尚未配置");
   });
 
@@ -489,10 +495,10 @@ describe("EducationChatApp", () => {
     vi.mocked(readSseResponse).mockRejectedValue(new Error("照片太模糊"));
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    latest.onFile(new File(["image"], "blur.png", { type: "image/png" }));
+    latest!.onFile(new File(["image"], "blur.png", { type: "image/png" }));
     await screen.findByTestId("cropper");
-    await act(async () => { await latestCrop.onConfirm(new Blob(["image"]), "blob:blur"); });
-    await waitFor(() => expect(latest.retryLabel).toBe("重新识别"));
+    await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:blur"); });
+    await waitFor(() => expect(latest!.retryLabel).toBe("重新识别"));
     expect(screen.getByTestId("messages").textContent).toContain("这道题我不会，想把它学懂。:error");
     expect(screen.getByTestId("notice").textContent).toContain("照片太模糊");
   });
@@ -503,15 +509,15 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValueOnce(response("recognize"))
       .mockResolvedValueOnce(response("analyze"));
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage === "recognize") await onEvent("recognized", recognized);
-      if (reply.stage === "analyze") throw new Error("请重新拍摄，关键条件仍不清楚");
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage === "recognize") await onEvent("recognized", recognized);
+      if ((reply as Response & { stage: string }).stage === "analyze") throw new Error("请重新拍摄，关键条件仍不清楚");
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onSend("这道题"); });
+    await act(async () => { await latest!.onSend("这道题"); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("用下方相机或相册换一张"));
-    expect(latest.retryLabel).toBe("");
+    expect(latest!.retryLabel).toBe("");
   });
 
   it("选中文字追问携带引用；无效的猜你想问不会抢走当前学习任务", async () => {
@@ -519,17 +525,17 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValue(response("turn"));
-    const requests: any[] = [];
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    const requests: unknown[] = [];
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       requests.push(reply);
       await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onQuestion("这句话为什么重要？", "有两个实数根"); });
-    await act(async () => { await latest.onSuggestion({ id: "forged", text: "伪造问题", scopeLabel: "无", sourceSummary: "无" }); });
+    await act(async () => { await latest!.onQuestion("这句话为什么重要？", "有两个实数根"); });
+    await act(async () => { await latest!.onSuggestion({ id: "forged", text: "伪造问题", scopeLabel: "无", sourceSummary: "无" }); });
     expect(requests).toHaveLength(1);
     const body = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
     expect(body.input).toEqual({ type: "question", text: "这句话为什么重要？", quote: "有两个实数根" });
@@ -539,11 +545,11 @@ describe("EducationChatApp", () => {
   it("插画完成后关闭会确认已看过，并在同题内复用已生成的插画", async () => {
     const session = {
       ...learnedSession,
-      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding", title: "理解", prompt: "是否理解", options: [{ id: "view_illustration", label: "插画演示" }] } },
+      flow: { ...learnedSession.flow, activeGate: { id: "gate", kind: "understanding" as const, title: "理解", prompt: "是否理解", options: [{ id: "view_illustration" as const, emphasis: "primary" as const, label: "插画演示" }] } },
     };
     const lesson = {
       requestId: session.requestId,
-      problemFingerprint: illustrationFingerprint(session as any),
+      problemFingerprint: illustrationFingerprint(session),
       receipt: "receipt-1",
       title: "看清关系",
       frameCount: 1,
@@ -553,9 +559,9 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValue(response("turn"));
-    const turnInputs: any[] = [];
-    vi.mocked(readSseResponse).mockImplementation(async (reply: any, onEvent: any) => {
-      if (reply.stage !== "turn") return;
+    const turnInputs: unknown[] = [];
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
       turnInputs.push(JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).input);
       if (turnInputs.length === 1) await onEvent("illustration.complete", lesson);
       await onEvent("flow.update", { session, stateToken: "y".repeat(48) });
@@ -563,14 +569,14 @@ describe("EducationChatApp", () => {
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
-    await waitFor(() => expect(latestIllustration.lesson).toEqual(lesson));
-    await act(async () => { await latestIllustration.onClose(); });
+    await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
+    await waitFor(() => expect(latestIllustration!.lesson).toEqual(lesson));
+    await act(async () => { await latestIllustration!.onClose(); });
     await waitFor(() => expect(turnInputs).toHaveLength(2));
     expect(turnInputs[1]).toEqual({ type: "acknowledge_illustration", gateId: "gate", receipt: "receipt-1" });
-    await act(async () => { await latest.onChoice(session.flow.activeGate, "view_illustration"); });
+    await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
     expect(turnInputs).toHaveLength(2);
-    expect(latestIllustration.lesson).toEqual(lesson);
+    expect(latestIllustration!.lesson).toEqual(lesson);
   });
 
   it("根据当前任务把文字、拍照与白板输入分别路由为作答或提问", async () => {
@@ -585,25 +591,25 @@ describe("EducationChatApp", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))
       .mockResolvedValue(response("turn"));
-    vi.mocked(readSseResponse).mockImplementation(async (_reply: any, onEvent: any) => {
+    vi.mocked(readSseResponse).mockImplementation(async (_reply, onEvent) => {
       await onEvent("flow.update", { session: answerSession, stateToken: "y".repeat(48) });
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
     await screen.findByTestId("ready");
-    await act(async () => { await latest.onSend("42"); });
+    await act(async () => { await latest!.onSend("42"); });
     const textBody = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
     expect(textBody.input).toEqual({ type: "answer", gateId: "answer-gate", answer: "42" });
 
-    latest.onResponsePhoto(new File(["photo"], "answer.png", { type: "image/png" }), "answer");
+    latest!.onResponsePhoto(new File(["photo"], "answer.png", { type: "image/png" }), "answer");
     await screen.findByTestId("cropper");
-    await act(async () => { await latestCrop.onConfirm(new Blob(["photo"], { type: "image/png" }), "blob:answer"); });
+    await act(async () => { await latestCrop!.onConfirm(new Blob(["photo"], { type: "image/png" }), "blob:answer"); });
     const imageBody = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body as FormData;
     expect(JSON.parse(String(imageBody.get("input")))).toEqual({ type: "image_answer", gateId: "answer-gate" });
 
-    latest.onWhiteboard("question");
+    latest!.onWhiteboard("question");
     await screen.findByTestId("whiteboard");
-    await act(async () => { await latestWhiteboard.onConfirm(new Blob(["ink"], { type: "image/png" }), "blob:ink"); });
+    await act(async () => { await latestWhiteboard!.onConfirm(new Blob(["ink"], { type: "image/png" }), "blob:ink"); });
     const questionBody = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body as FormData;
     expect(JSON.parse(String(questionBody.get("input")))).toEqual({ type: "image_question" });
   });
