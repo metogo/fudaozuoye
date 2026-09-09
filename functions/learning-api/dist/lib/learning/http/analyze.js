@@ -7,6 +7,7 @@ const mock_engine_1 = require("../mock-engine");
 const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
 const problem_evidence_1 = require("../problem-evidence");
+const problem_completeness_1 = require("../problem-completeness");
 const mock_adapter_1 = require("../providers/mock-adapter");
 const types_1 = require("../types");
 const sse_1 = require("./sse");
@@ -88,6 +89,7 @@ function parseProblemSnapshot(value) {
     if (!value || typeof value !== "object")
         throw new Error("题目确认信息不完整");
     const item = value;
+    (0, problem_completeness_1.assertProblemInformationComplete)(item);
     if (typeof item.text !== "string" || item.text.trim().length < 3 || item.text.length > 8_000 || typeof item.childWork !== "string" || item.childWork.length > 8_000 || !subjects.has(item.subject) || !bands.has(item.gradeBand) || !(0, curriculum_1.isSupportedSubjectBand)(item.subject, item.gradeBand))
         throw new Error("题目确认信息不合法");
     const gradeBand = item.gradeBand;

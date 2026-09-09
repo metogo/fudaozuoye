@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveProviderAdapter = exports.MockProviderAdapter = void 0;
 const knowledge_map_services_1 = require("./knowledge-map-services");
+const problem_completeness_1 = require("../problem-completeness");
 const provider_validation_1 = require("./provider-validation");
 const math_quality_1 = require("../math-quality");
 const learning_emphasis_1 = require("../learning-emphasis");
@@ -93,6 +94,7 @@ class LiveProviderAdapter {
         }), (value) => (0, provider_validation_2.parseTextProblem)(value, text));
     }
     async analyzeProblem(problem, onPhase) {
+        (0, problem_completeness_1.assertProblemInformationComplete)(problem);
         const allowed = (0, curriculum_1.listConcepts)(problem.subject, problem.gradeBand).map((item) => ({
             id: item.id,
             title: item.title,
@@ -122,11 +124,13 @@ class LiveProviderAdapter {
         return (0, provider_validation_2.buildSession)(problem, this.id, this.reasoningLevel, this.modelId, blueprints, result.originalAnswer, result.originalExplanation, result.problemGuide);
     }
     async prepareChatSession(problem, onPhase) {
+        (0, problem_completeness_1.assertProblemInformationComplete)(problem);
         onPhase?.("ready", "题目已读懂，正在准备核心思路");
         return (0, provider_validation_2.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
     async completeChatSession(session, imageDataUrl) {
         const problem = session.problem;
+        (0, problem_completeness_1.assertProblemInformationComplete)(problem);
         const { system, prompt } = (0, problem_image_analysis_1.problemSolutionRequest)(problem, Boolean(imageDataUrl));
         const audited = imageDataUrl
             ? await this.validatedJsonRequest(system, prompt, (value) => (0, problem_image_analysis_1.parseAuditedProblemSolution)(value, true, Boolean(problem.userRevised && problem.visualContext?.affectsSolving)), imageDataUrl)

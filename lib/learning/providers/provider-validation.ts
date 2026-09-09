@@ -4,6 +4,7 @@ import { createInitialFlow } from "../flow";
 import { subjectPendingGuide } from "../subject-learning-guide";
 import { subjects, type BoardSuggestion, type KnowledgeNode, type LearningSession, type ProblemGuide, type ProblemSnapshot, type ProviderId, type ReasoningLevel } from "../types";
 import { parseProblemVisualContext, visualEvidenceTexts } from "../problem-evidence";
+import { parseMissingVisualInformation } from "../problem-completeness";
 import {
   blueprintCheckSignature,
   blueprintContentSignature,
@@ -85,11 +86,12 @@ export function parseProblem(result: JsonObject): ProblemSnapshot {
   if (confidence === null) throw new Error("模型识别结果中的置信度不合法");
   if (confidence < 0.55) throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
   const gradeBand = normalizeSubjectBand(subject, recognizedBand);
+  const missingVisualInformation = parseMissingVisualInformation(result.missingVisualInformation);
   const visualContext = parseProblemVisualContext(result.visualContext);
   if (!visualContext) throw new Error("照片识别结果缺少题图相关性判断");
-  if (!visualContext.related && /(?:如图|见图|下图|图中|根据图|观察图)/.test(result.text)) throw new Error("题干明确指向配图，但题图相关性判断为不相关");
   if (visualContext.related && visualContext.affectsSolving && visualContext.confidence < 0.55) throw new NonRepairableValidationError("题图中的关键条件无法可靠识别，请重新拍摄并确保题干和配图完整清晰");
-  return { text: result.text.trim(), childWork: typeof result.childWork === "string" ? result.childWork.trim() : "", subject, gradeBand, confidence, userRevised: false, visualContext };
+  return { text: result.text.trim(), childWork: typeof result.childWork === "string" ? result.childWork.trim() : "", subject, gradeBand, confidence, userRevised: false, visualContext,
+    ...(missingVisualInformation.length ? { missingVisualInformation } : {}) };
 }
 
 export function parseTextProblem(result: JsonObject, originalText: string): ProblemSnapshot {

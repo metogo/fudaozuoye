@@ -25,6 +25,16 @@ function base(stage: string) {
 }
 
 describe("分析接口的成功 SSE", () => {
+  it("缺图题不能绕过界面直接开始分析", async () => {
+    adapter.prepareChatSession.mockClear();
+    const form = base("full");
+    form.set("problem", JSON.stringify({ text: "如图求阴影面积", childWork: "", subject: "math", gradeBand: "junior", missingVisualInformation: ["阴影区域的边界"] }));
+    const response = await postAnalyze(request(form));
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("阴影区域的边界");
+    expect(adapter.prepareChatSession).not.toHaveBeenCalled();
+  });
+
   it("文本题识别会依次返回阶段、识别结果、性能记录与完成事件", async () => {
     const form = base("recognize_text"); form.set("text", "求一元二次方程的根");
     const response = await postAnalyze(request(form));

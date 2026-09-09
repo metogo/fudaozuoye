@@ -2,6 +2,11 @@
 export type UiLocale = "zh" | "en";
 export const UI_LOCALE_KEY = "education-ui-locale";
 export const englishUiCopy: Record<string, string> = {
+  "请补充题目配图": "Add the question diagram",
+  "文字已读懂，还需要补一张图": "Text read. One more image is needed.",
+  "以下条件没有拍到，补齐后才能准确讲解。已识别的文字会保留。": "These details are missing from the photo. Add them for an accurate explanation. The recognized text is saved.",
+  "补拍或上传完整题目和配图": "Photograph or upload the full question and diagram",
+  "查看已识别文字": "View recognized text",
   "题目已经读懂，先从核心思路开始": "Question ready. Start with the main idea.", "先抓住这道题的核心": "Start with the main idea", "完整讲解已收起，现在确认一个关键步骤": "Explanation hidden. Check a key step.", "本次讲解已结束，当前记录为：基本理解，尚未验证独立掌握": "Review complete. Independent understanding is not yet verified.",
   "继续验证：遮住讲解，重做同一道原题": "Hide the explanation and try the original question again", "接下来可以独立试做原题，有疑问也可以继续提问": "Try the original question on your own, or keep asking", "现在你来独立完成原题": "Now solve the original question on your own",
   "下一步聚焦：{title}": "Next focus: {title}", "已经定位到卡点：{title}": "Where you got stuck: {title}", "继续往基础处找：{title}": "Back to the basics: {title}", "这一点已通过，继续：{title}": "Concept checked. Next: {title}",

@@ -41,6 +41,8 @@ function requiresProblemImage(problem) {
     return problem.visualContext?.related === true;
 }
 function needsVisualReview(problem) {
+    if (problem.missingVisualInformation?.length)
+        return true;
     const visual = problem.visualContext;
     return Boolean(visual?.related && visual.affectsSolving && (visual.confidence < 0.82 || visual.facts.some((fact) => fact.confidence < 0.82)));
 }

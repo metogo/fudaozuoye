@@ -75,7 +75,7 @@ describe("模型返回的题目与会话契约", () => {
     { label: "学段", fields: { gradeBand: "大学" }, error: "学段不合法" },
     { label: "置信度格式", fields: { confidence: null }, error: "置信度不合法" },
     { label: "置信度上界", fields: { confidence: 1.01 }, error: "置信度不合法" },
-    { label: "配图归属矛盾", fields: { visualContext: { related: false, affectsSolving: false, summary: "", facts: [], confidence: 1 } }, error: "题干明确指向配图" },
+    { label: "缺失图中条件格式", fields: { missingVisualInformation: "缺图" }, error: "缺失图中条件的识别结果格式不合法" },
     { label: "关键题图不清晰", fields: { visualContext: { ...visual, confidence: 0.54 } }, error: "关键条件无法可靠识别" },
   ])("省略作答不会绕过$label校验", ({ fields, error }) => {
     expect(() => parseProblem({ ...problem, recognized: true, childWork: undefined, ...fields })).toThrow(error);

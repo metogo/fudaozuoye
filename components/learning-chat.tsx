@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { UiLanguageSwitch, useUiText } from "./ui-language";
+import { MissingProblemImage } from "./missing-problem-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import dynamic from "next/dynamic";
 import { flushSync } from "react-dom";
@@ -275,7 +276,9 @@ export function LearningChat(props: LearningChatProps) {
     <div ref={scrollRef} tabIndex={-1} aria-label={t("对话内容")} onScroll={updateScrollState} className={`chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 sm:px-6 ${isHome ? "home-chat-scroll pb-5 pt-0" : "pb-7 pt-5"}`}>
       {isHome ? <EmptyConversation ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <MessageList messages={visibleChatMessages} connections={connections.entries} onRetryConnection={connections.retry} onKnowledgeMap={openKnowledgeMap} solutionDisplay={solutionDisplay} retryMessageId={props.retryLabel ? props.retryMessageId : null} busy={props.busy} onRetry={props.retryLabel ? props.onRetry : undefined}/>
-        {props.reviewProblem && <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>}
+        {props.reviewProblem && (props.reviewProblem.missingVisualInformation?.length
+          ? <MissingProblemImage problem={props.reviewProblem} onFileChange={fileChange} busy={props.busy}/>
+          : <RecognitionReview problem={props.reviewProblem} onConfirm={props.onConfirmProblem} busy={props.busy}/>)}
         <ChatThinking active={props.busy && !hasActiveChatStream && !hasAssistantOutputForCurrentTurn} label={props.loadingLabel}/>
         {isPreparingNextTurn && gate?.kind !== "step_answer" && <NextTurnPlaceholder/>}
         {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}/>}

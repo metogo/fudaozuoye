@@ -18,6 +18,27 @@ import { LearningChat } from "@/components/learning-chat";
 
 const base: ComponentProps<typeof LearningChat> = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
 const initialSession = analyzeMock(recognizeMock("math", "junior"), "doubao");
+describe("缺图补拍入口", () => {
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    HTMLElement.prototype.scrollTo = vi.fn();
+  });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  it("展示具体缺失条件、保留题干，补图复用文件校验而不是让用户确认放行", () => {
+    const onFile = vi.fn();
+    const problem = { ...initialSession.problem, text: "如图，求阴影部分面积。", missingVisualInformation: ["阴影区域的边界"] };
+    render(<LearningChat {...base} reviewProblem={problem} onFile={onFile}/>);
+    expect(screen.getByText("阴影区域的边界")).not.toBeNull();
+    expect(screen.getByText(problem.text)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "确认题目，开始讲解" })).toBeNull();
+    const input = screen.getByLabelText("补拍或上传完整题目和配图");
+    fireEvent.change(input, { target: { files: [new File(["x"], "a.txt", { type: "text/plain" })] } });
+    expect(onFile).not.toHaveBeenCalled();
+    const file = new File(["x"], "diagram.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(onFile).toHaveBeenCalledWith(file);
+  });
+});
 const session: LearningSession = { ...initialSession, requestId: "r", problem: { ...initialSession.problem, text: "题目", gradeBand: "junior" }, nodes: [], flow: { ...initialSession.flow, stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂", emphasis: "secondary" }] } } };
 describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
  it("首页校验文件、选择推理强度并发送文本题目", () => { const p = { ...base, onFile: vi.fn(), onReasoningLevel: vi.fn(), onSend: vi.fn() }; render(<LearningChat {...p}/>); fireEvent.click(screen.getByRole("button", { name: /轻度/ })); expect(p.onReasoningLevel).toHaveBeenCalledWith("light"); const file = new File(["x"], "a.txt", { type: "text/plain" }); fireEvent.change(screen.getByLabelText("从相册选择题目"), { target: { files: [file] } }); expect(screen.getAllByText("请选择图片文件")).toHaveLength(2); fireEvent.change(screen.getByLabelText("输入题目或问题"), { target: { value: "x+1=2" } }); fireEvent.submit(screen.getByLabelText("输入题目或问题").closest("form")!); expect(p.onSend).toHaveBeenCalledWith("x+1=2"); });

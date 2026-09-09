@@ -43,7 +43,10 @@ async function main() {
     },
     // Code-only update deliberately avoids cloudbaserc envVariables interpolation/config replacement.
     deployBackend: () => run("tcb", ["fn", "code", "update", "learning-api", "--dir", "functions/learning-api", ...env, "--json"]),
-    verifyBackend: async () => (await import("./verify-knowledge-map-release.mjs")).verifyKnowledgeMaps(),
+    verifyBackend: async () => {
+      await (await import("./verify-recognition-release.mjs")).verifyRecognition();
+      return (await import("./verify-knowledge-map-release.mjs")).verifyKnowledgeMaps();
+    },
     deployFrontend: () => run("tcb", ["app", "deploy", config.app.serviceName, ...env, "--framework", "next",
       "--build-command", "npm run build:cloudbase -- --webpack", "--output-dir", "out", "--deploy-path", config.app.deployPath,
       "--enable-git-ignore", "--ignore", ".env*,.git/**,.codex/**,.agents/**", "--force", "--json"]),

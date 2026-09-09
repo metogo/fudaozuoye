@@ -612,6 +612,7 @@ export function EducationChatApp() {
         setLoadingLabel("");
         return;
       }
+      setReviewProblem(null);
       await analyzeProblem(recognized, blob);
     } catch (error) {
       finishPendingImageMessage("error");

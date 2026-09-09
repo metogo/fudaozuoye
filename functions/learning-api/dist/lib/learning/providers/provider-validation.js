@@ -24,6 +24,7 @@ const flow_1 = require("../flow");
 const subject_learning_guide_1 = require("../subject-learning-guide");
 const types_1 = require("../types");
 const problem_evidence_1 = require("../problem-evidence");
+const problem_completeness_1 = require("../problem-completeness");
 const blueprint_1 = require("./blueprint");
 exports.PENDING_ORIGINAL_ANSWER = "等待后台核验";
 class NonRepairableValidationError extends Error {
@@ -98,14 +99,14 @@ function parseProblem(result) {
     if (confidence < 0.55)
         throw new NonRepairableValidationError("照片识别置信度过低，请重新拍摄并确保题干清晰、完整、无反光");
     const gradeBand = (0, curriculum_1.normalizeSubjectBand)(subject, recognizedBand);
+    const missingVisualInformation = (0, problem_completeness_1.parseMissingVisualInformation)(result.missingVisualInformation);
     const visualContext = (0, problem_evidence_1.parseProblemVisualContext)(result.visualContext);
     if (!visualContext)
         throw new Error("照片识别结果缺少题图相关性判断");
-    if (!visualContext.related && /(?:如图|见图|下图|图中|根据图|观察图)/.test(result.text))
-        throw new Error("题干明确指向配图，但题图相关性判断为不相关");
     if (visualContext.related && visualContext.affectsSolving && visualContext.confidence < 0.55)
         throw new NonRepairableValidationError("题图中的关键条件无法可靠识别，请重新拍摄并确保题干和配图完整清晰");
-    return { text: result.text.trim(), childWork: typeof result.childWork === "string" ? result.childWork.trim() : "", subject, gradeBand, confidence, userRevised: false, visualContext };
+    return { text: result.text.trim(), childWork: typeof result.childWork === "string" ? result.childWork.trim() : "", subject, gradeBand, confidence, userRevised: false, visualContext,
+        ...(missingVisualInformation.length ? { missingVisualInformation } : {}) };
 }
 function parseTextProblem(result, originalText) {
     if (result.recognized !== true) {

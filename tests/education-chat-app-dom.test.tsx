@@ -488,6 +488,43 @@ describe("EducationChatApp", () => {
     expect(screen.getByTestId("notice").textContent).toContain("中推理尚未配置");
   });
 
+  it("缺图时保留题干且不开始讲解，补齐照片后自动清除缺图状态并继续", async () => {
+    const missing = { ...learnedSession.problem, missingVisualInformation: ["阴影区域的边界"] };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }] }))
+      .mockResolvedValueOnce(response("missing"))
+      .mockResolvedValueOnce(response("recognize"))
+      .mockResolvedValueOnce(response("analyze"))
+      .mockResolvedValueOnce(response("turn"));
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      const stage = (reply as Response & { stage: string }).stage;
+      if (stage === "missing") await onEvent("recognized", missing);
+      if (stage === "recognize") await onEvent("recognized", learnedSession.problem);
+      if (stage === "analyze") await onEvent("graph", { session: learnedSession, stateToken: "x".repeat(48) });
+      if (stage === "turn") {
+        await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+        await onEvent("flow.ready", {});
+      }
+    });
+    render(<EducationChatApp/>);
+    await waitFor(() => expect(latest!.ready).toBe(true));
+    for (const complete of [false, true]) {
+      await act(async () => { latest!.onFile(new File(["image"], "question.png", { type: "image/png" })); });
+      await screen.findByTestId("cropper");
+      await act(async () => { await latestCrop!.onConfirm(new Blob(["image"], { type: "image/png" }), "blob:question"); });
+      if (!complete) {
+        expect(latest!.reviewProblem).toEqual(missing);
+        expect(latest!.session).toBeNull();
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(latest!.busy).toBe(false);
+        expect(latest!.notice).toBe("");
+      }
+    }
+    expect(latest!.reviewProblem).toBeNull();
+    expect(latest!.session?.requestId).toBe(learnedSession.requestId);
+    expect(latest!.retryLabel).toBe("");
+  });
+
   it("图片识别失败会标记原图片消息并保留重新识别操作", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } }))

@@ -4,6 +4,7 @@ import { isBuiltInMockProblem } from "../mock-engine";
 import { assertContentLength, assertImageFile, assertRateLimit, assertSameOrigin } from "../request-guards";
 import { consentRateIdentity, hasValidConsent, toClientState } from "../server-state";
 import { parseProblemVisualContext } from "../problem-evidence";
+import { assertProblemInformationComplete } from "../problem-completeness";
 import { DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE } from "../providers/mock-adapter";
 import { subjects as supportedSubjects, type GradeBand, type ProblemSnapshot, type ReasoningLevel, type Subject } from "../types";
 import { sse } from "./sse";
@@ -80,6 +81,7 @@ async function recognize(form: FormData, provider: "doubao" | "openai" | "xai", 
 function parseProblemSnapshot(value: unknown): ProblemSnapshot {
   if (!value || typeof value !== "object") throw new Error("题目确认信息不完整");
   const item = value as Partial<ProblemSnapshot>;
+  assertProblemInformationComplete(item);
   if (typeof item.text !== "string" || item.text.trim().length < 3 || item.text.length > 8_000 || typeof item.childWork !== "string" || item.childWork.length > 8_000 || !subjects.has(item.subject as Subject) || !bands.has(item.gradeBand as GradeBand) || !isSupportedSubjectBand(item.subject as Subject, item.gradeBand as GradeBand)) throw new Error("题目确认信息不合法");
   const gradeBand = item.gradeBand as GradeBand;
   return {

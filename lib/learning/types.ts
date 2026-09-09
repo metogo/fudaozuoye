@@ -468,6 +468,8 @@ export interface ChatMessage {
 }
 
 export interface ProblemSnapshot {
+  /** 可读题干仍缺少的必要图中条件；非空时不得进入解题。 */
+  missingVisualInformation?: string[];
   text: string;
   childWork: string;
   subject: Subject;

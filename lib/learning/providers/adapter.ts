@@ -1,4 +1,5 @@
 import { generateKnowledgeMap, generateKnowledgeDetail } from "./knowledge-map-services";
+import { assertProblemInformationComplete } from "../problem-completeness";
 import { repairContext } from "./provider-validation";
 import { mathOutputInstruction } from "../math-quality";
 import { parseLearningEmphasis, type LearningEmphasis } from "../learning-emphasis";
@@ -88,6 +89,7 @@ export class LiveProviderAdapter implements ProviderAdapter {
   }
 
   async analyzeProblem(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession> {
+    assertProblemInformationComplete(problem);
     const allowed = listConcepts(problem.subject, problem.gradeBand).map((item) => ({
       id: item.id,
       title: item.title,
@@ -136,12 +138,14 @@ export class LiveProviderAdapter implements ProviderAdapter {
   }
 
   async prepareChatSession(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession> {
+    assertProblemInformationComplete(problem);
     onPhase?.("ready", "题目已读懂，正在准备核心思路");
     return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
   }
 
   async completeChatSession(session: LearningSession, imageDataUrl?: string): Promise<LearningSession> {
     const problem = session.problem;
+    assertProblemInformationComplete(problem);
     const { system, prompt } = problemSolutionRequest(problem, Boolean(imageDataUrl));
     const audited = imageDataUrl
       ? await this.validatedJsonRequest(
