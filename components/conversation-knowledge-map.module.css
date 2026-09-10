@@ -1,0 +1,34 @@
+.summary { composes:summary from "./conversation-map-pending.module.css"; }
+.eyebrow { composes:eyebrow from "./conversation-map-pending.module.css"; }
+.lead { composes:lead from "./conversation-map-pending.module.css"; }
+.title,.guide { margin:0; color:#254c3c; font-size:17px; font-weight:600; line-height:1.55; overflow-wrap:anywhere; }
+.guide { border:0; padding:0; }
+.guide span { background:linear-gradient(transparent 81%,#fdc23570 81%,#fdc23570 94%,transparent 94%); box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+.coreLink { display:flex; align-items:center; gap:12px; width:100%; text-align:left; min-height:44px; }
+.coreLink span { flex-shrink:0; margin-left:auto; color:#91a797; font-size:14px; }
+.coreLink:hover { color:#075c42; }
+.related { composes:related from "./conversation-map-pending.module.css"; }
+.related ul { display:flex; flex-wrap:wrap; gap:6px; margin:0; list-style:none; padding:0; }
+.related li { max-width:100%; }
+.related button { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:6px 10px; border:1px solid #31594118; border-radius:10px; background:#ffffffb3; text-align:left; color:#516c5c; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.related button span { flex-shrink:0; color:#9bafa0; font-size:11px; }
+.related button:hover { color:#075c42; border-color:#8fb7a2; background:#fff; }
+.expand:hover { color:#075c42; text-decoration:underline; text-underline-offset:4px; }
+.summary button:focus-visible { outline:2px solid #668f76; outline-offset:4px; border-radius:3px; }
+.footer { composes:footer from "./conversation-map-pending.module.css"; }
+.expand { display:inline-flex; align-items:center; gap:7px; min-height:44px; color:#1f6c50; font-size:12px; font-weight:500; }
+.expand svg { width:14px; height:14px; }
+.status { display:inline-flex; align-items:center; gap:5px; color:#87998e; font-size:10px; }
+.status i { width:4px; height:4px; border-radius:50%; background:#8caa97; flex-shrink:0; }
+.active i { background:#fdc235; animation:breathe 1.6s ease-in-out infinite; }
+.pendingTitle { margin:0; color:#738e7c; font-size:18px; }
+.error { display:flex; align-items:center; gap:10px; color:#946e49; font-size:11px; }
+.error p { flex:1; min-width:0; overflow-wrap:anywhere; }
+.error button { min-height:44px; flex-shrink:0; padding:0 8px; text-decoration:underline; text-underline-offset:4px; }
+.notice { margin-top:8px; font-size:10px; color:#946e49; }
+.skeleton { composes:skeleton from "./conversation-map-pending.module.css"; }
+.skeletonKeywords { composes:skeletonKeywords from "./conversation-map-pending.module.css"; }
+.title,.guide,.related li { animation:reveal .28s ease-out; }
+@keyframes reveal { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@keyframes breathe { 50% { opacity:.3; } }
+@media (prefers-reduced-motion:reduce) { .active i,.title,.guide,.related li { animation:none; } }

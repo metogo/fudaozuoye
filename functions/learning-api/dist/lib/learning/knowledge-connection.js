@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectionSegments = connectionSegments;
 exports.parseKnowledgeConnection = parseKnowledgeConnection;
 exports.parseGeneratedConnection = parseGeneratedConnection;
-exports.latestConnectionMessage = latestConnectionMessage;
 const presentation_1 = require("./presentation");
 function connectionSegments(source) {
     return source.split(/\n\s*\n/).map(text => text.trim()).filter(Boolean).map((text, i) => ({ id: `p${i + 1}`, text }));
@@ -40,15 +39,6 @@ function parseGeneratedConnection(value, source, evidenceSegments) {
     if (!anchor || !evidence)
         throw new Error("知识连接引用了不存在的讲解或题目");
     return parseKnowledgeConnection({ ...raw, version: 1, anchor: anchor.text, evidence: evidence.text }, source, evidence.text);
-}
-function latestConnectionMessage(messages) {
-    for (const message of [...messages].reverse()) {
-        if (message.role === "user")
-            return undefined;
-        if (message.role !== "assistant" || message.kind !== "assistant" || message.surface === "board")
-            continue;
-        return message.status === "complete" && message.text.trim().length >= 30 && message.text.length <= 60000 ? message : undefined;
-    }
 }
 function record(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))

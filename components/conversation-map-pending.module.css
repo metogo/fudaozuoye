@@ -1,0 +1,16 @@
+.summary { flex-shrink:0; padding:16px 18px 8px; border:1px solid #31594114; border-radius:20px; background:linear-gradient(135deg,#edf5f0,#f6f9f5); }
+.eyebrow { display:flex; align-items:center; gap:7px; color:#708878; font-size:11px; letter-spacing:.06em; }
+.eyebrow svg { width:14px; height:14px; }
+.lead { display:flex; align-items:center; min-height:60px; padding:10px 0 6px; }
+.related { min-height:40px; }
+.footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:2px 12px; min-height:44px; margin-top:10px; border-top:1px solid #31594114; }
+.skeleton { display:block; height:7px; border-radius:4px; background:linear-gradient(100deg,#e8efea 20%,#f5f8f4 45%,#e8efea 70%); background-size:240% 100%; animation:ink 3.2s ease-in-out infinite; }
+.skeletonTitle { width:68%; height:15px; max-width:310px; }
+.skeletonKeywords { display:flex; align-items:center; gap:22px; min-height:40px; }
+.skeletonKeywords span { width:25%; max-width:125px; height:26px; border-radius:8px; }
+.skeletonKeywords span:last-child { width:34%; max-width:155px; }
+.skeletonFooter { width:112px; height:6px; }
+/* Reserve two title lines and the wrapped status before narrow-screen content arrives. */
+@media (max-width:360px) { .lead { min-height:70px; } .footer { min-height:62px; align-content:center; } }
+@keyframes ink { from { background-position:100% 0; } to { background-position:-100% 0; } }
+@media (prefers-reduced-motion:reduce) { .skeleton { animation:none; } }

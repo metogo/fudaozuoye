@@ -1,5 +1,4 @@
 import { assertBalancedLearningMarkup } from "./presentation";
-import type { ChatMessage } from "./types";
 
 export interface ConnectionConcept { title: string; explanation: string; example: string }
 export interface KnowledgeConnection {
@@ -41,14 +40,6 @@ export function parseGeneratedConnection(value: unknown, source: string, evidenc
   const evidence = evidenceSegments.find(p => p.id === raw.evidenceId);
   if (!anchor || !evidence) throw new Error("知识连接引用了不存在的讲解或题目");
   return parseKnowledgeConnection({ ...raw, version: 1, anchor: anchor.text, evidence: evidence.text }, source, evidence.text);
-}
-
-export function latestConnectionMessage(messages: ChatMessage[]): ChatMessage | undefined {
-  for (const message of [...messages].reverse()) {
-    if (message.role === "user") return undefined;
-    if (message.role !== "assistant" || message.kind !== "assistant" || message.surface === "board") continue;
-    return message.status === "complete" && message.text.trim().length >= 30 && message.text.length <= 60000 ? message : undefined;
-  }
 }
 
 function record(value: unknown): Record<string, unknown> {

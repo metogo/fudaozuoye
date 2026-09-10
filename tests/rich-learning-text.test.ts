@@ -172,7 +172,7 @@ describe("AI 教学内容排版", () => {
     expect(html).not.toContain("再次查看刚才的板书");
   });
 
-  it("图片消息正在识别时立即显示等待卡片，不把学生消息误判为 AI 输出", () => {
+  it("图片消息正在识别时立即显示原位等待，不把学生消息误判为 AI 输出", () => {
     const html = renderToStaticMarkup(createElement(LearningChat, {
       messages: [{
         id: "user-image",
@@ -191,7 +191,8 @@ describe("AI 教学内容排版", () => {
 
     expect(html).toContain("小逗号正在思考");
     expect(html).toContain("正在读懂这道题");
-    expect(html).toContain("chat-thinking-border");
+    expect(html).toContain("first-explanation-pending");
+    expect(html).not.toContain("chat-thinking-card");
     expect(html).not.toContain("学习寄语");
   });
 

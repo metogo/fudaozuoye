@@ -462,6 +462,8 @@ export interface ChatMessage {
   scopeLabel?: string;
   status?: "streaming" | "finishing" | "complete" | "error";
   imageUrl?: string;
+  /** Browser-local original photo key, retained when transient object URLs are omitted. */
+  imageAssetId?: string;
   surface?: "chat" | "board";
   reference?: ChatMessageReference;
   suggestions?: SuggestedQuestion[];

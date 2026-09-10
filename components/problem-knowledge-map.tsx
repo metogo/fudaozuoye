@@ -22,8 +22,12 @@ import { KnowledgeMapActivity } from "./knowledge-map-activity";
 const noDelete = null;
 const fitOptions = { padding: .2, minZoom: .7, maxZoom: 1 };
 export function ProblemKnowledgeMapPage({ session, stateToken, onClose, initialFocus }: { session: LearningSession; stateToken: string; onClose: () => void; initialFocus?: MapFocus }) {
-  const t = useUiText();
   const generation = useKnowledgeMap(session, stateToken);
+  return <KnowledgeMapDialog generation={generation} onClose={onClose} initialFocus={initialFocus}/>;
+}
+
+export function KnowledgeMapDialog({ generation, onClose, initialFocus }: { generation: ReturnType<typeof useKnowledgeMap>; onClose: () => void; initialFocus?: MapFocus }) {
+  const t = useUiText();
   const dialog = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const el = dialog.current;
@@ -50,7 +54,8 @@ const emptyMap: ProblemKnowledgeMap = { version: 1, overviewOnly: true, rootId: 
 
 function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof useKnowledgeMap>; initialFocus?: MapFocus }) {
   const t = useUiText();
-  const { saved, save, complete, plan, error, retry, storageNotice: notice, snapshot } = generation;
+  const { save, complete, plan, error, retry, storageNotice: notice, snapshot } = generation;
+  const [saved] = useState(() => generation.getSavedLayout());
   const { stateToken, key: cacheKey } = snapshot;
   const rootPreview = !generation.map && Boolean(generation.root);
   const map = useMemo(() => generation.map ?? (generation.root ? { ...emptyMap, rootId: generation.root.id, nodes: [generation.root] } : emptyMap), [generation.map, generation.root]);

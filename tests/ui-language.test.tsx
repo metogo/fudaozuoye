@@ -6,8 +6,6 @@ import { UiLanguageProvider, UiLanguageSwitch, useUiText } from "@/components/ui
 import { englishUiCopy, translateUi, UI_LOCALE_KEY } from "@/lib/ui-copy";
 import { HomeWelcomeHero } from "@/components/home-welcome-hero";
 import { KnowledgeMapProgress } from "@/components/knowledge-map-progress";
-import { KnowledgeConnection } from "@/components/knowledge-connection";
-import { connection } from "./fixtures/knowledge-connection";
 import { knowledgeMapEdges } from "@/components/knowledge-map-edges";
 import { readFileSync, readdirSync } from "node:fs";
 vi.mock("@/lib/learning/home-companion-motion", () => ({ animateHomeCompanion: vi.fn() }));
@@ -58,15 +56,11 @@ describe("UI-only language switching", () => {
   });
 
   it("localizes hero, progress and relationship labels but never rewrites generated concepts", () => {
-    render(<UiLanguageProvider><UiLanguageSwitch/><HomeWelcomeHero active={false}/><KnowledgeMapProgress count={2} total={3} complete={false} error="" latest="原题中的面积关系" retry={vi.fn()}/><KnowledgeConnection connection={connection} onOpen={vi.fn()}/></UiLanguageProvider>);
+    render(<UiLanguageProvider><UiLanguageSwitch/><HomeWelcomeHero active={false}/><KnowledgeMapProgress count={2} total={3} complete={false} error="" latest="原题中的面积关系" retry={vi.fn()}/></UiLanguageProvider>);
     fireEvent.click(screen.getByRole("button", { name: "English interface" }));
     expect(screen.getByRole("heading", { name: "Hey, solve it together with Comma." })).toBeTruthy();
     expect(screen.getByText("Ready 2 / 3 · 原题中的面积关系")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuetext")).toBe("2 / 3 concepts ready");
-    expect(screen.getByText(connection.reason)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: connection.foundation.title }));
-    expect(screen.getByText(connection.foundation.explanation)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Explore in the full map →" })).toBeTruthy();
     const edges = knowledgeMapEdges([{ from: "a", to: "b", kind: "prerequisite", reason: "题目关系原文" }], null, text => translateUi("en", text));
     expect(edges[0].label).toBe("Understand first");
     expect(edges[0].source).toBe("a");

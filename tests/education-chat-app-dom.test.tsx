@@ -5,6 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { recordQuestionEntry } = vi.hoisted(() => ({ recordQuestionEntry: vi.fn() }));
 vi.mock("@/components/use-question-entry-reporting", () => ({ useQuestionEntryReporting: () => recordQuestionEntry }));
+vi.mock("@/lib/browser/question-image-store", () => ({ saveQuestionImage: vi.fn(), loadQuestionImage: vi.fn(), removeQuestionImage: vi.fn() }));
+import { saveQuestionImage, loadQuestionImage, removeQuestionImage } from "@/lib/browser/question-image-store";
 
 import type { LearningChat } from "@/components/learning-chat";
 let latest: ComponentProps<typeof LearningChat> | undefined;
@@ -68,6 +70,9 @@ const response = (stage: string, body: unknown = {}, ok = true) => ({ stage, ok,
 describe("EducationChatApp", () => {
   beforeEach(() => {
     recordQuestionEntry.mockClear();
+    vi.mocked(saveQuestionImage).mockReset().mockResolvedValue();
+    vi.mocked(loadQuestionImage).mockReset().mockResolvedValue(null);
+    vi.mocked(removeQuestionImage).mockReset().mockResolvedValue();
     latest = undefined;
     latestCrop = undefined;
     latestWhiteboard = undefined;
@@ -178,6 +183,28 @@ describe("EducationChatApp", () => {
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
     expect(screen.getByTestId("messages").textContent).toContain("先看图形条件");
     expect(recordQuestionEntry).toHaveBeenCalledTimes(1);
+    expect(saveQuestionImage).toHaveBeenCalledWith(expect.any(String), expect.any(Blob));
+    expect(latest!.messages[0].imageAssetId).toBeTruthy();
+    fireEvent(window, new Event("pagehide"));
+    const saved = JSON.parse(sessionStorage.getItem("education-chat-session-v3")!);
+    expect(saved.messages[0].imageAssetId).toBe(latest!.messages[0].imageAssetId);
+    expect(saved.messages[0].imageUrl).toBeUndefined();
+  });
+
+  it("刷新已有照片会话会恢复原图，保持折叠入口所需的数据，开始新题清理本题照片", async () => {
+    const original = { id: "photo-one", role: "user", kind: "user", text: "这道题我不会，想把它学懂。", imageAssetId: "asset-one", createdAt: "2026-09-10", status: "complete" };
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken: "x".repeat(48), messages: [original] }));
+    vi.mocked(loadQuestionImage).mockResolvedValue(new Blob(["original"], { type: "image/png" }));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:recovered"), revokeObjectURL: vi.fn() });
+    vi.mocked(fetch).mockResolvedValue(response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }] }));
+    render(<EducationChatApp/>);
+    await waitFor(() => expect(latest!.messages[0]?.imageUrl).toBe("blob:recovered"));
+    expect(loadQuestionImage).toHaveBeenCalledWith("asset-one");
+    expect(recordQuestionEntry).not.toHaveBeenCalled();
+    expect(latest!.session!.problem.text).toBe(learnedSession.problem.text);
+    fireEvent.click(screen.getByRole("button", { name: "新题" }));
+    expect(removeQuestionImage).toHaveBeenCalledWith("asset-one");
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:recovered");
   });
 
   it("一轮学习流可处理路径、答案、转写、分支提示和恢复状态", async () => {

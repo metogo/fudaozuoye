@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Viewport } from "@xyflow/react";
 import { mapEvidence, parseKnowledgeMap, type MapConcept, type MapPoint, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
 import { applyMapEvent, finishMapDraft, readMapStream, type KnowledgeMapDraft, type KnowledgeMapEvent } from "@/lib/learning/knowledge-map-stream";
@@ -15,6 +15,7 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
   const [draft, setDraft] = useState(empty);
   const [root, setRoot] = useState<MapConcept | null>(null);
   const [saved, setSaved] = useState<SavedMap | null>(null);
+  const savedLayout = useRef<SavedMap | null>(null);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -31,7 +32,7 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
           const cached = JSON.parse(raw) as SavedMap;
           if (cached.identity === snapshot.identity) {
             const map = parseKnowledgeMap(cached.map, evidence);
-            if (active) { setSaved(cached); setDraft({ plan: null, map }); setComplete(true); }
+            if (active) { savedLayout.current = cached; setSaved(cached); setDraft({ plan: null, map }); setComplete(true); }
             return;
           }
         }
@@ -53,6 +54,9 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
           if (event === "complete") {
             const map = finishMapDraft(received, evidence);
             if ((data as { total: number }).total !== map.nodes.length) throw new Error("知识点数量与清单不一致");
+            // Auto-generation also persists when the full-screen canvas was never opened.
+            try { localStorage.setItem(snapshot.key, JSON.stringify({ identity: snapshot.identity, map })); }
+            catch { setStorageNotice("浏览器暂时无法保存布局，本次仍可自由调整。"); }
             setDraft({ ...received, map }); setComplete(true);
           } else if (event === "map.plan" || event === "map.node") {
             if (`map.${(data as KnowledgeMapEvent).type}` !== event) throw new Error("图谱消息类型不一致");
@@ -71,9 +75,11 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
   }, [snapshot, attempt]);
   const save = useCallback((data: Omit<SavedMap, "identity">) => {
     if (!complete) return; // Partial graphs must never masquerade as a complete cache.
-    try { localStorage.setItem(snapshot.key, JSON.stringify({ ...data, identity: snapshot.identity })); }
+    savedLayout.current = { ...data, identity: snapshot.identity };
+    try { localStorage.setItem(snapshot.key, JSON.stringify(savedLayout.current)); }
     catch { setStorageNotice("浏览器暂时无法保存布局，本次仍可自由调整。"); }
   }, [snapshot, complete]);
-  const retry = () => { setDraft(empty); setRoot(null); setComplete(false); setError(""); setSaved(null); setAttempt(n => n + 1); };
-  return { ...draft, root, saved, complete, error, attempt, storageNotice, snapshot, save, retry };
+  const getSavedLayout = useCallback(() => savedLayout.current, []);
+  const retry = () => { savedLayout.current = null; setDraft(empty); setRoot(null); setComplete(false); setError(""); setSaved(null); setAttempt(n => n + 1); };
+  return { ...draft, root, saved, complete, error, attempt, storageNotice, snapshot, save, getSavedLayout, retry };
 }

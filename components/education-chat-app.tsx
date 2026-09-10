@@ -50,6 +50,7 @@ import { BoardErrorBoundary } from "./board-error-boundary";
 import { LearningChat } from "./learning-chat";
 import { useQuestionEntryReporting } from "./use-question-entry-reporting";
 import { STREAMING_FINISH_MS } from "./streaming-indicator";
+import { useOriginalImagePersistence } from "./original-image-persistence";
 const ImageCropper = dynamic(() => import("./image-cropper").then((module) => module.ImageCropper), { ssr: false });
 const WhiteboardInput = dynamic(() => import("./whiteboard-input").then((module) => module.WhiteboardInput), { ssr: false });
 const LearningIllustration = dynamic(() => import("./learning-illustration").then((module) => module.LearningIllustration), { ssr: false });
@@ -147,6 +148,7 @@ export function EducationChatApp() {
   const restoredRetryRef = useRef<StoredChatRetry | null>(null);
   const emphasisRequestsRef = useRef(new Set<AbortController>());
   const previewUrlsRef = useRef<string[]>([]);
+  const { retain: retainOriginalImage, restore: restoreOriginalImage, clear: clearOriginalImage } = useOriginalImagePersistence(setMessages, setNotice, previewUrlsRef);
   const pendingImageMessageIdRef = useRef<string | null>(null);
   const messageFinishTimersRef = useRef<Map<string, number>>(new Map());
   const boardRestoreRequestIdRef = useRef("");
@@ -182,6 +184,7 @@ export function EducationChatApp() {
               })),
             );
             setCachedBoardLesson(null);
+            void restoreOriginalImage(restored.messages[0]);
             const recoveredRetry = restoreChatRetry(restored.pendingRetry, restored, restored.messages);
             if (recoveredRetry) {
               setPendingRetry(recoveredRetry);
@@ -295,7 +298,7 @@ export function EducationChatApp() {
       for (const url of previewUrlsRef.current) URL.revokeObjectURL(url);
       previewUrlsRef.current = [];
     };
-  }, []);
+  }, [restoreOriginalImage]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -522,10 +525,12 @@ export function EducationChatApp() {
     setCropFile(null);
     setPendingImage(blob);
     const pendingId = pendingImageMessageIdRef.current;
+    const imageAssetId = retainOriginalImage(blob, messages.find(message => message.id === pendingId));
     if (pendingId)
       updateMessage(pendingId, (message) => ({
         ...message,
         imageUrl: previewUrl,
+        imageAssetId,
         status: "streaming",
         text: "这道题我不会，想把它学懂。",
       }));
@@ -533,6 +538,7 @@ export function EducationChatApp() {
       const message = {
         ...userMessage("这道题我不会，想把它学懂。"),
         imageUrl: previewUrl,
+        imageAssetId,
         status: "streaming" as const,
       };
       pendingImageMessageIdRef.current = message.id;
@@ -1069,6 +1075,7 @@ export function EducationChatApp() {
 
   const reset = () => {
     setChatUiEpoch((epoch) => epoch + 1);
+    clearOriginalImage(messages[0]);
     for (const request of emphasisRequestsRef.current) request.abort();
     emphasisRequestsRef.current.clear();
     storageWriter.cancel();

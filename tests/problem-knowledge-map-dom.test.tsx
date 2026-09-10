@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 
 import type { Node, ReactFlowProps, ReactFlowInstance } from "@xyflow/react";
 import type { MapConcept } from "@/lib/learning/knowledge-map";
@@ -35,7 +36,8 @@ vi.mock("@xyflow/react", async () => {
 });
 vi.mock("@/components/lazy-rich-learning-text", () => ({ RichLearningText: ({ text }: { text: string }) => <span>{text}</span> }));
 
-import { ProblemKnowledgeMapPage } from "@/components/problem-knowledge-map";
+import { KnowledgeMapDialog, ProblemKnowledgeMapPage } from "@/components/problem-knowledge-map";
+import { useKnowledgeMap } from "@/components/use-knowledge-map";
 
 const session = {
   requestId: "request-1",
@@ -72,6 +74,25 @@ describe("ProblemKnowledgeMapPage", () => {
     Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: vi.fn(function (this: HTMLDialogElement) { this.open = false; }) });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("前置提要共用生成状态时，再次展开仍恢复已调整视图，不再请求图谱", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
+    function SharedMap() {
+      const generation = useKnowledgeMap(session as never, "token");
+      const [open, setOpen] = useState(true);
+      return <><button onClick={() => setOpen(true)}>展开提要</button>{open && <KnowledgeMapDialog generation={generation} onClose={() => setOpen(false)}/>}</>;
+    }
+    render(<SharedMap/>);
+    await screen.findByText("根的判别式");
+    const viewport = { x: 123, y: 45, zoom: 1.2 };
+    vi.spyOn(flowApi!, "getViewport").mockReturnValue(viewport);
+    act(() => flowProps!.onMoveEnd!(null, viewport));
+    fireEvent.click(screen.getByRole("button", { name: "返回对话", hidden: true }));
+    fireEvent.click(screen.getByText("展开提要"));
+    await screen.findByText("根的判别式");
+    expect(flowProps!.defaultViewport).toEqual(viewport);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 
   it("退出及卸载时先关闭仍连接的原生弹层，并恢复入口焦点", () => {
     vi.mocked(fetch).mockReturnValue(new Promise(() => {}));

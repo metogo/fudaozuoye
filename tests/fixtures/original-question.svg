@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
+  <rect width="800" height="360" fill="white"/>
+  <g fill="#163c2e" font-family="Arial, sans-serif">
+    <text x="48" y="72" font-size="28">Original photo recovery test</text>
+    <text x="48" y="126" font-size="24">A rectangle is 8 cm long and 3 cm wide.</text>
+    <text x="48" y="170" font-size="24">What is its perimeter?</text>
+    <rect x="230" y="226" width="240" height="90" fill="#dceee6" stroke="#163c2e" stroke-width="3"/>
+    <text x="321" y="216" font-size="22">8 cm</text>
+    <text x="488" y="280" font-size="22">3 cm</text>
+  </g>
+</svg>
