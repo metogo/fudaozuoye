@@ -1,0 +1,16 @@
+.continuation { position:absolute; top:100%; left:0; width:194px; pointer-events:none; }
+.trail { display:block; position:relative; height:54px; width:2px; margin:auto; background:repeating-linear-gradient(to bottom,#95baa7 0 5px,transparent 5px 10px); }
+.trail::after { content:""; position:absolute; left:-2px; top:0; width:6px; height:6px; border-radius:50%; background:#44856b; box-shadow:0 0 0 4px #44856b18; animation:mapTrail 1.8s ease-in-out infinite; }
+.waiting { display:flex; flex-direction:column; align-items:center; gap:10px; padding:20px 12px; border:1px dashed #a8c7b5; border-radius:18px; background:#eef5ed; color:#466a58; box-shadow:0 0 0 6px #dcebdc40; }
+.waiting strong { font-size:14px; font-weight:550; }
+.waiting>span:last-child { font-size:11px; color:#728b7c; }
+.dots { display:inline-flex; align-items:center; gap:5px; flex-shrink:0; height:12px; }
+.dots i { width:5px; height:5px; border-radius:50%; background:#4c8c70; animation:mapDot 1.5s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay:.18s; }.dots i:nth-child(3) { animation-delay:.36s; }
+.status { position:absolute; z-index:5; bottom:44px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:14px; width:max-content; max-width:calc(100% - 32px); padding:12px 20px; border:1px solid #d2e2d5; border-radius:18px; background:#fbfdf7f5; box-shadow:0 8px 24px #244e4010,inset 0 1px 0 white; color:#365e4b; pointer-events:none; }
+.status strong { display:block; font-size:13px; line-height:1.6; font-weight:550; }
+.count { display:block; font-size:11px; line-height:1.6; color:#7b9082; font-variant-numeric:tabular-nums; animation:mapCount .25s ease-out; }
+@keyframes mapTrail { 0% { transform:translateY(0); opacity:0; } 20% { opacity:1; } 85% { opacity:1; } 100% { transform:translateY(48px); opacity:0; } }
+@keyframes mapDot { 0%,70%,100% { opacity:.3; transform:translateY(0); } 35% { opacity:1; transform:translateY(-3px); } }
+@keyframes mapCount { from { opacity:.4; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .trail::after,.dots i,.count { animation:none; } }

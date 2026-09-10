@@ -1,8 +1,8 @@
 import { useUiText } from "./ui-language";
 import styles from "./problem-knowledge-map.module.css";
 
-export function KnowledgeMapProgress({ count, total, complete, error, latest, retry }: {
-  count: number; total: number | null; complete: boolean; error: string; latest?: string; retry: () => void;
+export function KnowledgeMapProgress({ count, total, complete, error, latest, rootPreview = false, retry }: {
+  count: number; total: number | null; complete: boolean; error: string; latest?: string; rootPreview?: boolean; retry: () => void;
 }) {
   const t = useUiText();
   const label = error ? "生成暂时中断" : complete ? "已全部生成" : total && count === total ? "正在确认知识关系" : total ? "知识正在连起来" : "正在梳理本题知识";
@@ -14,7 +14,7 @@ export function KnowledgeMapProgress({ count, total, complete, error, latest, re
       <div style={{ width: total ? `${count / total * 100}%` : "0%" }}/>
     </div>
     <div className={styles.progressCaption} role="status" aria-live="polite" aria-atomic="true">
-      {error ? <><span role="alert">{t(error)}</span><button onClick={retry}>{t("重试生成")}</button></> : <span>{complete ? t("点击知识点，看看它在本题中怎么用") : latest ? t("已生成 {count} / {total} · {latest}", { count, total: total ?? "?", latest }) : total ? t("清单已确定，正在整理根节点") : t("画布已就绪，知识点会陆续出现")}</span>}
+      {error ? <><span role="alert">{t(error)}</span><button onClick={retry}>{t("重试生成")}</button></> : <span>{complete ? t("点击知识点，看看它在本题中怎么用") : rootPreview ? t("核心知识已识别，正在梳理关联") : latest ? t("已生成 {count} / {total} · {latest}", { count, total: total ?? "?", latest }) : total ? t("清单已确定，正在整理根节点") : t("画布已就绪，知识点会陆续出现")}</span>}
     </div>
   </div>;
 }

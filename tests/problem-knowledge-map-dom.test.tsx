@@ -193,6 +193,66 @@ describe("ProblemKnowledgeMapPage", () => {
     write.mockRestore();
   });
 
+  it("整份清单前显示已校验的根，但不伪报总数、不缓存、不开放导出或详情", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toMatchObject({ earlyRoot: true, stream: true });
+    const send = async (event: string, data: unknown) => act(async () => { controller.enqueue(new TextEncoder().encode(frame(event, data))); });
+    await send("map.root", { node: map.nodes[0] });
+    expect(screen.getByText("一元二次方程")).not.toBeNull();
+    expect(document.querySelector(".knowledge-map-continuation")).not.toBeNull();
+    expect(document.querySelector(".knowledge-map-canvas-activity")?.textContent).toContain("图谱还在展开");
+    expect(flowProps!.nodes).toHaveLength(1); // The continuation is not a made-up knowledge node.
+    expect(flowProps!.edges).toHaveLength(0);
+    expect(screen.getByText("核心知识已识别，正在梳理关联")).not.toBeNull();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBeNull();
+    expect(screen.getByRole("button", { name: "导出图片" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByText("一元二次方程"));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(localStorage.length).toBe(0);
+    const position = flowProps!.nodes![0].position;
+    await send("map.plan", { type: "plan", plan });
+    expect(document.querySelector(".knowledge-map-continuation")).toBeNull();
+    await send("map.node", nodeEvent(0));
+    expect(document.querySelector(".knowledge-map-continuation")).toBeNull();
+    expect(document.querySelector('.knowledge-map-pending[data-stopped="false"]')).not.toBeNull();
+    expect(document.querySelector(".knowledge-map-canvas-activity")?.textContent).toContain("已生成 1 / 2 个知识点");
+    expect(flowProps!.edges).toEqual([expect.objectContaining({ id: "pending:quadratic:delta", animated: true, source: "quadratic", target: "delta" })]);
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
+    expect(flowProps!.nodes!.find(n => n.id === map.rootId)?.position).toEqual(position);
+    await send("map.node", nodeEvent(1));
+    expect(document.querySelector(".knowledge-map-canvas-activity")?.textContent).toContain("正在确认知识关系");
+    expect(document.querySelector(".knowledge-map-pending")).toBeNull();
+    expect(flowProps!.edges).toEqual([expect.objectContaining({ id: "quadratic:delta", animated: false })]);
+    await send("complete", { total: 2 });
+    await waitFor(() => expect(screen.getByText("已全部生成")).not.toBeNull());
+    expect(localStorage.length).toBe(1);
+    expect(document.querySelector(".knowledge-map-canvas-activity")).toBeNull();
+    expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).not.toContain("正在展开关联知识");
+  });
+
+  it("清单修正时撤回旧预览；传输失败也不留下未经完整清单确认的根", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "Content-Type": "text/event-stream" } }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const send = async (event: string, data: unknown) => act(async () => { controller.enqueue(new TextEncoder().encode(frame(event, data))); });
+    await send("map.root", { node: map.nodes[0] });
+    await send("map.root", { node: null });
+    expect(screen.queryByText("一元二次方程")).toBeNull();
+    expect(document.querySelector(".knowledge-map-continuation")).toBeNull();
+    await send("map.root", { node: map.nodes[0] });
+    await send("error", { message: "模型连接中断" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("模型连接中断"));
+    expect(screen.queryByText("一元二次方程")).toBeNull();
+    expect(document.querySelector(".knowledge-map-canvas-activity")).toBeNull();
+    expect(document.querySelector('.knowledge-map-pending[data-stopped="true"]')).not.toBeNull();
+    expect(localStorage.length).toBe(0);
+  });
+
   it("真实分块到达才增加计数，失败保留节点，不缓存半成品，关闭取消请求", async () => {
     let controller!: ReadableStreamDefaultController<Uint8Array>;
     const cancelled = vi.fn();
@@ -213,6 +273,9 @@ describe("ProblemKnowledgeMapPage", () => {
     await send("error", { message: "连接中断" });
     expect(screen.getByText("一元二次方程")).not.toBeNull();
     expect(screen.getByRole("alert", { hidden: true }).textContent).toBe("连接中断");
+    expect(document.querySelector(".knowledge-map-canvas-activity")).toBeNull();
+    expect(document.querySelector('.knowledge-map-pending[data-stopped="false"]')).toBeNull();
+    expect(flowProps!.edges?.every(edge => !edge.animated)).toBe(true);
     expect(flowProps!.nodes!.find((n: { id: string }) => n.id === "quadratic")!.position).toEqual(position);
     expect(localStorage.getItem("problem-knowledge-map-v2:request-1")).toBeNull();
     await waitFor(() => expect(cancelled).toHaveBeenCalled());

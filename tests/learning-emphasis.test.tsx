@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { emphasisRanges, parseLearningEmphasis, type LearningEmphasis } from "@/lib/learning/learning-emphasis";
 import { RichLearningText } from "@/components/rich-learning-text";
@@ -21,6 +22,13 @@ const proposed = (mark = marks[0], extras = {}) => ({ ...mark, confidence: .96, 
 afterEach(() => vi.restoreAllMocks());
 
 describe("教学重点选取与渲染", () => {
+  it("文字与公式划线统一使用小逗号黄色，保留文字本色", () => {
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    expect(css).toContain("--comma-yellow: #fdc235");
+    expect(css).toMatch(/mark\.learning-emphasis--text\s*\{[^}]*text-decoration-color: var\(--comma-yellow\)/);
+    expect(css).toMatch(/\.learning-emphasis--math \.learning-math\s*\{[^}]*box-shadow: inset 0 -2px var\(--comma-yellow\)/);
+    expect(css).toMatch(/\.rich-learning-text \.learning-emphasis\s*\{[^}]*color: inherit/);
+  });
   it("只画选中的条件和完整公式，不把所有加粗/公式变成划线", () => {
     const html = renderToStaticMarkup(<RichLearningText text={source} emphasis={marks}/>);
     expect(html).toContain('class="learning-emphasis learning-emphasis--text">有两个实数根</mark>');

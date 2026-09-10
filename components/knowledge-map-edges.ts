@@ -11,3 +11,10 @@ export function knowledgeMapEdges(relations: MapRelation[], selected: string | n
       labelStyle: { fill: active ? "#205743" : "#526a5f", fontSize: 11 }, labelBgStyle: { fill: "#f6f8f4", fillOpacity: .96 }, labelBgPadding: [7, 4], labelBgBorderRadius: 6 };
   });
 }
+
+/** Planned connections are activity guides only; never used by image export. */
+export function pendingKnowledgeMapEdges(parents: string[], target: string, stopped: boolean): Edge[] {
+  return parents.map(source => ({ id: `pending:${source}:${target}`, source, target, type: "smoothstep", className: "knowledge-map-pending-edge", animated: !stopped, focusable: false, selectable: false,
+    style: { stroke: "#86b299", strokeWidth: 1.7, strokeDasharray: "5 6", opacity: stopped ? .35 : .85 },
+  }));
+}

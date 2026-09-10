@@ -1,7 +1,18 @@
 import type { LearningSession } from "../types";
 import { parseJsonObject } from "./model-support";
 import { requestMapValue } from "./knowledge-map-validation";
+import { requestModelText, type TextRequestContext } from "./provider-text-request";
+import type { MapConcept } from "../knowledge-map";
+import type { KnowledgeMapEvent } from "../knowledge-map-stream";
 type TextRequest = (system: string, prompt: string, image?: string, json?: boolean, timeout?: number, signal?: AbortSignal, tokens?: number) => Promise<string>;
+
+export async function streamMapWithContext(context: TextRequestContext, session: LearningSession, emit: (event: KnowledgeMapEvent) => void, onRoot?: (root: MapConcept | null) => void) {
+  const { streamKnowledgeMap } = await import("./knowledge-map-stream");
+  try {
+    return await streamKnowledgeMap(session, (system, prompt, timeoutMs, onDelta) =>
+      requestModelText(context, system, prompt, undefined, true, timeoutMs, undefined, 2600, onDelta), emit, onRoot);
+  } catch (error) { context.requests.cancelAll(); throw error; }
+}
 
 export async function generateKnowledgeMap(session: LearningSession, request: TextRequest) {
     const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await import("./knowledge-map");

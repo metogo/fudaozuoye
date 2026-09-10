@@ -97,7 +97,7 @@ describe("EducationChatApp", () => {
       }
     });
     render(<EducationChatApp/>);
-    expect((await screen.findByTestId("ready")).textContent).toBe("true");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     fireEvent.click(screen.getByRole("button", { name: "高推理" }));
     expect(screen.getByTestId("notice").textContent).toContain("推理强度已切换为「高」");
     fireEvent.click(screen.getByRole("button", { name: "发送题目" }));
@@ -143,7 +143,7 @@ describe("EducationChatApp", () => {
       }
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onSend("一道文字题"); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("没有识别到完整题目"));
     await act(async () => { await latest!.onRetry(); });
@@ -171,7 +171,7 @@ describe("EducationChatApp", () => {
       if ((reply as Response & { stage: string }).stage === "turn") { await onEvent("message.delta", { text: "先看图形条件。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { latest!.onFile(new File(["image"], "q.png", { type: "image/png" })); });
     expect(latestCrop).toBeTruthy();
     await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:question"); });
@@ -200,7 +200,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "continue"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("回答正确"));
     expect(screen.getByTestId("messages").textContent).toContain("AI 读到的作答：Δ≥0");
@@ -233,7 +233,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onQuestion("这里为什么这样做", "条件关系"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("重新整理后的核心条件"));
     expect(screen.getByTestId("messages").textContent).toContain("再看一步： 再核对一次");
@@ -265,7 +265,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
     await act(async () => { await latest!.onQuestion("为什么", "关键线索"); });
     await act(async () => { await latest!.onSuggestion(session.flow.suggestedQuestions[0]); });
@@ -293,7 +293,7 @@ describe("EducationChatApp", () => {
       }
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await latest!.onConfirmProblem(problem);
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("assistant:开始讲解"));
     vi.mocked(readSseResponse).mockImplementationOnce(async (_reply, onEvent) => { await onEvent("input.transcribed", { text: "x=3", confidence: 0.95 }); });
@@ -313,7 +313,7 @@ describe("EducationChatApp", () => {
       if ((reply as Response & { stage: string }).stage === "turn") { await onEvent("message.delta", { text: "图形讲解。" }); await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) }); await onEvent("flow.ready", {}); }
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     latest!.onFile(new File(["image"], "q.png", { type: "image/png" }));
     await screen.findByTestId("cropper");
     await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:question"); });
@@ -353,7 +353,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
     await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
     expect(await screen.findByTestId("illustration")).not.toBeNull();
@@ -372,7 +372,7 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("turn"));
     vi.mocked(readSseResponse).mockRejectedValue(new Error("图解服务暂不可用"));
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
     await waitFor(() => expect(latestIllustration!.error).toContain("图解服务暂不可用"));
     expect(latest!.session!.flow.activeGate!.id).toBe("gate");
@@ -385,7 +385,7 @@ describe("EducationChatApp", () => {
       .mockResolvedValue(response("recognize"));
     vi.mocked(readSseResponse).mockRejectedValue(new Error("识别服务暂不可用"));
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onSend("请讲这道题"); });
     expect(latest!.retryLabel).toBe("重新识别");
     expect(screen.getByTestId("messages").textContent).toContain("user:请讲这道题");
@@ -406,7 +406,7 @@ describe("EducationChatApp", () => {
       return response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } });
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
     expect(latest!.session?.requestId).toBe("request-app");
   });
@@ -419,7 +419,7 @@ describe("EducationChatApp", () => {
       return response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } });
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("board-cache"))).toBe(true));
     await waitFor(() => expect(latest!.session?.requestId).toBe("request-app"));
   });
@@ -441,7 +441,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await waitFor(() => expect(latest!.retryLabel).toBe("重试这一步"));
     await act(async () => { await latest!.onRetry(); });
     const input = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).input;
@@ -456,7 +456,7 @@ describe("EducationChatApp", () => {
       .mockResolvedValue(response("turn"));
     vi.mocked(readSseResponse).mockRejectedValue(new Error("模型暂时不可用"));
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "continue"); });
     await waitFor(() => expect(latest!.retryLabel).toBe("重试这一步"));
     expect(screen.getByTestId("notice").textContent).toContain("模型暂时不可用");
@@ -482,7 +482,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onChoice(learnedSession.flow.activeGate, "full_solution"); });
     await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain(longText));
     expect(screen.getByTestId("messages").textContent).not.toContain("旧草稿");
@@ -541,7 +541,7 @@ describe("EducationChatApp", () => {
       .mockResolvedValueOnce(response("recognize"));
     vi.mocked(readSseResponse).mockRejectedValue(new Error("照片太模糊"));
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     latest!.onFile(new File(["image"], "blur.png", { type: "image/png" }));
     await screen.findByTestId("cropper");
     await act(async () => { await latestCrop!.onConfirm(new Blob(["image"]), "blob:blur"); });
@@ -561,7 +561,7 @@ describe("EducationChatApp", () => {
       if ((reply as Response & { stage: string }).stage === "analyze") throw new Error("请重新拍摄，关键条件仍不清楚");
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onSend("这道题"); });
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toContain("用下方相机或相册换一张"));
     expect(latest!.retryLabel).toBe("");
@@ -580,7 +580,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onQuestion("这句话为什么重要？", "有两个实数根"); });
     await act(async () => { await latest!.onSuggestion({ id: "forged", text: "伪造问题", scopeLabel: "无", sourceSummary: "无" }); });
     expect(requests).toHaveLength(1);
@@ -615,7 +615,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onChoice(session.flow.activeGate, "view_illustration"); });
     await waitFor(() => expect(latestIllustration!.lesson).toEqual(lesson));
     await act(async () => { await latestIllustration!.onClose(); });
@@ -643,7 +643,7 @@ describe("EducationChatApp", () => {
       await onEvent("flow.ready", {});
     });
     render(<EducationChatApp/>);
-    await screen.findByTestId("ready");
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
     await act(async () => { await latest!.onSend("42"); });
     const textBody = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
     expect(textBody.input).toEqual({ type: "answer", gateId: "answer-gate", answer: "42" });

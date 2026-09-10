@@ -29,7 +29,7 @@ async function postKnowledgeMap(request) {
         if (body.stream === true) {
             if (!adapter.streamKnowledgeMap)
                 throw new Error("当前模型暂不支持知识图谱");
-            return (0, knowledge_map_stream_1.knowledgeMapResponse)(adapter, session, signal);
+            return (0, knowledge_map_stream_1.knowledgeMapResponse)(adapter, session, signal, body.earlyRoot === true);
         }
         if (!adapter.generateKnowledgeMap)
             throw new Error("演示模式暂不生成知识图谱，请使用已配置的模型");

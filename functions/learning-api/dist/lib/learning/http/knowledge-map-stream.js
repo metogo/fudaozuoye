@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.knowledgeMapResponse = knowledgeMapResponse;
 const knowledge_map_deadline_1 = require("../knowledge-map-deadline");
 /** This stream owns cancellation so closing the canvas stops model work too. */
-function knowledgeMapResponse(adapter, session, requestSignal) {
+function knowledgeMapResponse(adapter, session, requestSignal, earlyRoot = false) {
     const deadline = (0, knowledge_map_deadline_1.createMapDeadline)();
     const signal = AbortSignal.any([requestSignal, deadline.signal]);
     const encoder = new TextEncoder();
@@ -37,7 +37,11 @@ function knowledgeMapResponse(adapter, session, requestSignal) {
                     if (event.type === "plan")
                         deadline.planned(event.plan.nodes.length);
                     send(`map.${event.type}`, event);
-                });
+                }, earlyRoot ? node => {
+                    if (closed)
+                        throw signal.reason ?? new DOMException("图谱已关闭", "AbortError");
+                    send("map.root", { node });
+                } : undefined);
                 send("complete", { total: map.nodes.length });
             }
             catch (error) {

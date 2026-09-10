@@ -4,7 +4,7 @@ import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem,
 
 export type AnalysisPhaseReporter = (key: string, label: string) => void;
 export interface ProviderAdapter {
-  streamKnowledgeMap?(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
+  streamKnowledgeMap?(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void, onRoot?: (root: import("../knowledge-map").MapConcept | null) => void): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
   generateKnowledgeMap?(session: LearningSession): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
   generateKnowledgeDetail?(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string): Promise<import("../knowledge-map").KnowledgeDetail>;
   selectEmphasis?(session: LearningSession, source: string, context: string): Promise<LearningEmphasis[]>;

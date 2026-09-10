@@ -3,7 +3,7 @@ import type { LearningSession } from "../types";
 import { createMapDeadline } from "../knowledge-map-deadline";
 
 /** This stream owns cancellation so closing the canvas stops model work too. */
-export function knowledgeMapResponse(adapter: ProviderAdapter, session: LearningSession, requestSignal: AbortSignal): Response {
+export function knowledgeMapResponse(adapter: ProviderAdapter, session: LearningSession, requestSignal: AbortSignal, earlyRoot = false): Response {
   const deadline = createMapDeadline();
   const signal = AbortSignal.any([requestSignal, deadline.signal]);
   const encoder = new TextEncoder();
@@ -27,7 +27,10 @@ export function knowledgeMapResponse(adapter: ProviderAdapter, session: Learning
           if (closed) throw signal.reason ?? new DOMException("图谱已关闭", "AbortError");
           if (event.type === "plan") deadline.planned(event.plan.nodes.length);
           send(`map.${event.type}`, event);
-        });
+        }, earlyRoot ? node => {
+          if (closed) throw signal.reason ?? new DOMException("图谱已关闭", "AbortError");
+          send("map.root", { node });
+        } : undefined);
         send("complete", { total: map.nodes.length });
       } catch (error) {
         send("error", { message: error instanceof SyntaxError ? "知识关系暂未整理完整，已显示的内容仍可查看。" : error instanceof Error ? error.message : "图谱生成中断，请重试" });

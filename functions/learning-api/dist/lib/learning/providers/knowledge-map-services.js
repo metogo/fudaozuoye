@@ -33,10 +33,22 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.streamMapWithContext = streamMapWithContext;
 exports.generateKnowledgeMap = generateKnowledgeMap;
 exports.generateKnowledgeDetail = generateKnowledgeDetail;
 const model_support_1 = require("./model-support");
 const knowledge_map_validation_1 = require("./knowledge-map-validation");
+const provider_text_request_1 = require("./provider-text-request");
+async function streamMapWithContext(context, session, emit, onRoot) {
+    const { streamKnowledgeMap } = await Promise.resolve().then(() => __importStar(require("./knowledge-map-stream")));
+    try {
+        return await streamKnowledgeMap(session, (system, prompt, timeoutMs, onDelta) => (0, provider_text_request_1.requestModelText)(context, system, prompt, undefined, true, timeoutMs, undefined, 2600, onDelta), emit, onRoot);
+    }
+    catch (error) {
+        context.requests.cancelAll();
+        throw error;
+    }
+}
 async function generateKnowledgeMap(session, request) {
     const { knowledgeMapSystem, knowledgeMapPrompt, resolveKnowledgeEvidence } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
     const { parseKnowledgeMap, mapEvidence } = await Promise.resolve().then(() => __importStar(require("../knowledge-map")));

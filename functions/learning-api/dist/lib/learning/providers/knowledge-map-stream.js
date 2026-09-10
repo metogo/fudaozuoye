@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.streamKnowledgeMap = streamKnowledgeMap;
 const knowledge_map_1 = require("../knowledge-map");
+const knowledge_map_root_1 = require("./knowledge-map-root");
 const knowledge_map_stream_1 = require("../knowledge-map-stream");
 const knowledge_map_2 = require("./knowledge-map");
 const knowledge_map_deadline_1 = require("../knowledge-map-deadline");
@@ -13,9 +14,13 @@ const relationInstruction = `你是知识关系教学设计师。只解释当前
 只输出JSON {"relations":[{"kind":"prerequisite","reason":"具体关系"}]}。relations必须与输入parents一一对应，数量和顺序完全相同。不要输出id、from、to，编号由程序处理。
 kind只能是prerequisite（需要先理解）或application（结合使用）。reason一句具体的简短说明，按学段表达，不给整题答案，不编造原题条件。不要生成其他知识点或重新规划图谱。`;
 /** Fixed plan first; bounded node work emits as soon as its validated parents are ready. */
-async function streamKnowledgeMap(session, request, emit) {
+async function streamKnowledgeMap(session, request, emit, onRoot) {
     const prompt = (0, knowledge_map_2.knowledgeMapPrompt)(session), evidence = (0, knowledge_map_1.mapEvidence)(session);
-    const { plan, concepts } = await (0, knowledge_map_validation_1.requestMapValue)(request, `${knowledge_map_2.knowledgeMapRules}\n${planInstruction}`, prompt, value => (0, knowledge_map_validation_1.validateMapPlan)(value, session), knowledge_map_deadline_1.MAP_PLAN_TIMEOUT_MS);
+    const planRequest = (system, input, timeout) => {
+        onRoot?.(null); // A repair must retract the previous attempt's preview.
+        return request(system, input, timeout, onRoot ? (0, knowledge_map_root_1.observeMapRoot)(session, onRoot) : undefined);
+    };
+    const { plan, concepts } = await (0, knowledge_map_validation_1.requestMapValue)(planRequest, `${knowledge_map_2.knowledgeMapRules}\n${planInstruction}`, prompt, value => (0, knowledge_map_validation_1.validateMapPlan)(value, session), knowledge_map_deadline_1.MAP_PLAN_TIMEOUT_MS);
     let draft = (0, knowledge_map_stream_1.applyMapEvent)({ plan: null, map: null }, { type: "plan", plan }, evidence);
     const accept = (index, edges) => {
         draft = (0, knowledge_map_stream_1.applyMapEvent)(draft, { type: "node", node: concepts[index], edges }, evidence);

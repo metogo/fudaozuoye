@@ -1,4 +1,4 @@
-import { generateKnowledgeMap, generateKnowledgeDetail } from "./knowledge-map-services";
+import { generateKnowledgeMap, generateKnowledgeDetail, streamMapWithContext } from "./knowledge-map-services";
 import { assertProblemInformationComplete } from "../problem-completeness";
 import { repairContext } from "./provider-validation";
 import { mathOutputInstruction } from "../math-quality";
@@ -526,11 +526,8 @@ export class LiveProviderAdapter implements ProviderAdapter {
     return parseLearningEmphasis(parseJsonObject(raw), source, problemEvidenceText(session.problem));
   }
   generateKnowledgeMap(session: LearningSession) { return generateKnowledgeMap(session, this.textRequest.bind(this)); }
-  async streamKnowledgeMap(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void) {
-    const { streamKnowledgeMap } = await import("./knowledge-map-stream");
-    try {
-      return await streamKnowledgeMap(session, (system, prompt, timeoutMs) => this.textRequest(system, prompt, undefined, true, timeoutMs, undefined, 2600), emit);
-    } catch (error) { this.cancelPendingRequests(); throw error; }
+  streamKnowledgeMap(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void, onRoot?: (root: import("../knowledge-map").MapConcept | null) => void) {
+    return streamMapWithContext({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, emit, onRoot);
   }
   generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string) { return generateKnowledgeDetail(session, map, nodeId, this.textRequest.bind(this)); }
   async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {

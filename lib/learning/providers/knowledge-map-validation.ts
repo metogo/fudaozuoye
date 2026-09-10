@@ -4,7 +4,7 @@ import type { LearningSession } from "../types";
 import { resolveKnowledgeEvidence } from "./knowledge-map";
 import { parseJsonObject } from "./model-support";
 
-export type MapRequest = (system: string, prompt: string, timeoutMs?: number) => Promise<string>;
+export type MapRequest = (system: string, prompt: string, timeoutMs?: number, onDelta?: (text: string) => void) => Promise<string>;
 
 /** Repair only invalid model content, once, within the original stage budget. */
 export async function requestMapValue<T>(request: MapRequest, system: string, prompt: string,

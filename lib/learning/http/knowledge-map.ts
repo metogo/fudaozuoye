@@ -24,7 +24,7 @@ export async function postKnowledgeMap(request: Request): Promise<Response> {
     }
     if (body.stream === true) {
       if (!adapter.streamKnowledgeMap) throw new Error("当前模型暂不支持知识图谱");
-      return knowledgeMapResponse(adapter, session, signal);
+      return knowledgeMapResponse(adapter, session, signal, body.earlyRoot === true);
     }
     if (!adapter.generateKnowledgeMap) throw new Error("演示模式暂不生成知识图谱，请使用已配置的模型");
     // Separate read-only request: never changes gates, answers or mastery state.

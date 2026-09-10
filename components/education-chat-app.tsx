@@ -1312,12 +1312,6 @@ export function EducationChatApp() {
     previewUrlsRef.current = [];
   };
 
-  if (!hydrated)
-    return (
-      <div className="flex h-dvh items-center justify-center bg-[#f7f6f2] text-xs text-stone-400">
-        正在准备学习空间…
-      </div>
-    );
   const initialWhiteboard = !session && whiteboardIntent === "question";
   return (
     <>
@@ -1329,8 +1323,8 @@ export function EducationChatApp() {
         reasoningLevels={reasoningLevels}
         reasoningLevel={reasoningLevel}
         illustrationAvailability={illustrationAvailability}
-        ready={ready}
-        homeMotionPaused={Boolean(cropFile || responseCrop || whiteboardIntent)}
+        ready={hydrated && ready}
+        homeMotionPaused={!hydrated || Boolean(cropFile || responseCrop || whiteboardIntent)}
         busy={busy}
         loadingLabel={loadingLabel}
         notice={notice}

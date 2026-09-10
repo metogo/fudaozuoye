@@ -17,7 +17,6 @@ import { HomeWelcomeHero } from "./home-welcome-hero";
 import { RichLearningText, preloadLearningText } from "./lazy-rich-learning-text";
 import { CopyableLearningText } from "./copyable-learning-text";
 import { StepBlank } from "./step-blank";
-import { SelectionAsk } from "./selection-ask";
 import { QuoteComposerMotion } from "./quote-composer-motion";
 import { observeChatEdgeFade } from "@/lib/learning/chat-edge-fade";
 import { MessageTime } from "./message-time";
@@ -28,6 +27,7 @@ import { useKnowledgeConnections, type ConnectionEntry } from "./use-knowledge-c
 import type { MapFocus } from "@/lib/learning/knowledge-map-preview";
 const ConversationExport = dynamic(() => import("./conversation-export").then((module) => module.ConversationExport), { ssr: false });
 const KnowledgeMapPage = dynamic(() => import("./problem-knowledge-map").then(module => module.ProblemKnowledgeMapPage), { ssr: false });
+const SelectionAsk = dynamic(() => import("./selection-ask").then(module => module.SelectionAsk), { ssr: false });
 
 interface LearningChatProps {
   stateToken?: string;
@@ -296,7 +296,7 @@ export function LearningChat(props: LearningChatProps) {
 
     {exportOpen && <ConversationExport messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
     {knowledgeMapOpen && props.session && props.stateToken && <KnowledgeMapPage session={props.session} stateToken={props.stateToken} initialFocus={knowledgeMapFocus} onClose={() => setKnowledgeMapOpen(false)}/>}
-    <SelectionAsk root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || !props.session || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
+    {props.session && <SelectionAsk root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
       if (text.length > 12000) { setFileError("选中文字过长，请将引用控制在 12000 字以内。"); return; }
       flushSync(() => {
         setSelectedQuote({ text, range, requestId: props.session!.requestId });
@@ -304,7 +304,7 @@ export function LearningChat(props: LearningChatProps) {
         setQuestionGateId(gate?.id ?? null);
       });
       textareaRef.current?.focus({ preventScroll: true });
-    }}/>
+    }}/>}
     <div ref={composerDockRef} className="chat-composer-dock shrink-0">
     <form ref={composerRef} onSubmit={submit} className={`chat-composer relative z-20 shrink-0 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 ${isHome ? "home-chat-composer" : "border-t border-stone-200/80 bg-[#f7f6f2]/95"}`}>
       {quote && <div className="mx-auto mb-2 flex max-w-2xl gap-2 rounded-xl border border-emerald-900/10 bg-emerald-50/70 px-3 py-2" aria-label={t("正在引用的文字")}><div className="min-w-0 flex-1"><p className="mb-1 text-xs font-semibold text-emerald-800">{t("针对这段文字提问")}</p><p className="max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-stone-600">{quote}</p></div><button type="button" aria-label={t("取消引用")} className="min-h-11 shrink-0 px-2 text-xs text-stone-500" onClick={cancelQuote}>{t("取消")}</button></div>}

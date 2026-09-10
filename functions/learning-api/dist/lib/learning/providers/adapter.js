@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveProviderAdapter = exports.MockProviderAdapter = void 0;
 const knowledge_map_services_1 = require("./knowledge-map-services");
@@ -427,15 +394,8 @@ class LiveProviderAdapter {
         return (0, learning_emphasis_1.parseLearningEmphasis)((0, model_support_1.parseJsonObject)(raw), source, (0, problem_evidence_1.problemEvidenceText)(session.problem));
     }
     generateKnowledgeMap(session) { return (0, knowledge_map_services_1.generateKnowledgeMap)(session, this.textRequest.bind(this)); }
-    async streamKnowledgeMap(session, emit) {
-        const { streamKnowledgeMap } = await Promise.resolve().then(() => __importStar(require("./knowledge-map-stream")));
-        try {
-            return await streamKnowledgeMap(session, (system, prompt, timeoutMs) => this.textRequest(system, prompt, undefined, true, timeoutMs, undefined, 2600), emit);
-        }
-        catch (error) {
-            this.cancelPendingRequests();
-            throw error;
-        }
+    streamKnowledgeMap(session, emit, onRoot) {
+        return (0, knowledge_map_services_1.streamMapWithContext)({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, emit, onRoot);
     }
     generateKnowledgeDetail(session, map, nodeId) { return (0, knowledge_map_services_1.generateKnowledgeDetail)(session, map, nodeId, this.textRequest.bind(this)); }
     async transcribeStudentAnswer(imageDataUrl, taskPrompt) {

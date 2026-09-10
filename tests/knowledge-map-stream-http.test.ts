@@ -4,6 +4,17 @@ import type { ProviderAdapter } from "@/lib/learning/providers/adapter";
 import type { LearningSession } from "@/lib/learning/types";
 
 describe("图谱SSE响应与取消", () => {
+  it.each([false, true])("根节点预览只发给明确支持的客户端：%s", async earlyRoot => {
+    const adapter = { streamKnowledgeMap: async (_session: unknown, _emit: unknown, root?: (value: unknown) => void) => {
+      expect(Boolean(root)).toBe(earlyRoot);
+      root?.(null); root?.({ id: "core", title: "周长" });
+      return { nodes: [{ id: "core" }, { id: "k1" }] };
+    }, cancelPendingRequests: vi.fn() };
+    const response = knowledgeMapResponse(adapter as unknown as ProviderAdapter, {} as LearningSession, new AbortController().signal, earlyRoot);
+    const text = await response.text();
+    expect(text.includes("event: map.root")).toBe(earlyRoot);
+    expect(text).toContain("event: complete");
+  });
   it("节点先于完整生成返回，错误后不发送完成事件", async () => {
     let fail!: () => void;
     const held = new Promise<void>((_resolve, reject) => { fail = () => reject(new Error("生成中断")); });

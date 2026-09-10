@@ -8,6 +8,9 @@ describe("流式与持久化调度", () => {
   it("主页不直接引入公式渲染库，长对话列表独立记忆，滚动测量按帧合并", () => {
     const chat = readFileSync("components/learning-chat.tsx", "utf8");
     expect(chat).toContain('from "./lazy-rich-learning-text"');
+    expect(chat).toContain('{props.session && <SelectionAsk');
+    expect(readFileSync("app/layout.tsx", "utf8")).not.toContain("katex/dist/katex.min.css");
+    expect(readFileSync("components/rich-learning-text.tsx", "utf8")).toContain("katex/dist/katex.min.css");
     expect(chat).not.toContain('from "./rich-learning-text"');
     expect(chat).toContain("const MessageList = memo(");
     expect(chat).toContain("if (!showSuggestions) return;");

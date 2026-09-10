@@ -15,6 +15,9 @@ describe("思考状态与小逗号形象", () => {
     expect(screen.getByText("识别题目条件，整理问题要求。")).not.toBeNull();
     expect(screen.queryByLabelText("学习寄语")).toBeNull();
     expect(document.querySelector(".chat-thinking-border")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".chat-thinking-pulse")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".chat-thinking-avatar")?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getAllByRole("status")).toHaveLength(1);
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(document.querySelector(".comma-companion")?.getAttribute("data-state")).toBe("thinking");
   });

@@ -26,7 +26,7 @@ export function HomeWelcomeHero({ active }: { active: boolean }) {
           <span aria-hidden="true" className="home-companion__quote">{t("」")}</span>
         </button>
         <button type="button" className="home-companion__actor" data-companion-replay aria-label={t("和小逗号打招呼")}>
-          <img src="/brand/comma-idle.webp" alt="" width={192} height={192} draggable={false}/>
+          <img src="/brand/comma-idle.webp" alt="" width={192} height={192} fetchPriority="high" draggable={false}/>
         </button>
       </span>
       <span className="home-welcome-subtitle">{t("陪你一起解题。")}</span>

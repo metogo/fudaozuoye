@@ -116,6 +116,8 @@ export const englishUiCopy: Record<string, string> = {
   "正在整理知识连接 · 不影响继续学习": "Connecting ideas · You can keep learning", "知识连接暂未整理成功": "Couldn’t connect the ideas yet", "重试知识连接": "Retry connections",
   "生成暂时中断": "Generation paused", "已全部生成": "All concepts ready", "正在确认知识关系": "Checking connections", "知识正在连起来": "Connecting concepts", "正在梳理本题知识": "Mapping the concepts",
   "从本题核心开始": "Starting with the main idea", "知识点生成进度": "Concept progress", "正在确定知识清单": "Planning the concepts", "重试生成": "Retry generation",
+  "正在梳理关联知识": "Connecting related concepts", "核心知识已识别，正在梳理关联": "Core concept identified. Mapping its connections.",
+  "正在展开关联知识": "Expanding related concepts", "知识点会陆续出现": "More concepts will appear as they are ready", "图谱还在展开": "Your map is still growing",
   "点击知识点，看看它在本题中怎么用": "Tap a concept to see how it applies", "清单已确定，正在整理根节点": "Plan ready, preparing the main idea", "画布已就绪，知识点会陆续出现": "The canvas is ready. Concepts will appear as they arrive.",
   " / {total} 个知识点": " / {total} concepts", "已生成 {count} / {total} 个知识点": "{count} / {total} concepts ready", "，生成中断": ", generation paused", "已生成 {count} / {total} · {latest}": "Ready {count} / {total} · {latest}",
   "正在整理本题核心": "Preparing the main idea", "正在补充知识点": "Adding a concept", "本题核心": "Main idea", "下一个知识点": "Next concept", "等待继续整理": "Waiting to resume", "正在连接知识…": "Connecting ideas…", "关联知识": "Related concept",

@@ -23,6 +23,7 @@
   --ink: #171717;
   --muted: #78716c;
   --line: #ddd9d3;
+  --comma-yellow: #fdc235;
 }
 
 * { box-sizing: border-box; }
@@ -94,12 +95,12 @@ button:disabled { cursor: not-allowed; }
 .rich-learning-text .learning-emphasis { color: inherit; font: inherit; background: transparent; }
 .rich-learning-text mark.learning-emphasis--text {
   text-decoration-line: underline;
-  text-decoration-color: #39886d;
+  text-decoration-color: var(--comma-yellow);
   text-decoration-thickness: 2px;
   text-underline-offset: .2em;
   text-decoration-skip-ink: auto;
 }
-.learning-emphasis--math .learning-math { box-shadow: inset 0 -2px #39886d; border-radius: 0; }
+.learning-emphasis--math .learning-math { box-shadow: inset 0 -2px var(--comma-yellow); border-radius: 0; }
 .rich-learning-text blockquote {
   margin: .85rem 0;
   border-left: 3px solid #d6d3d1;

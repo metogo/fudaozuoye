@@ -1,4 +1,5 @@
-import { mapEvidence, type MapRelation } from "../knowledge-map";
+import { mapEvidence, type MapConcept, type MapRelation } from "../knowledge-map";
+import { observeMapRoot } from "./knowledge-map-root";
 import { applyMapEvent, finishMapDraft, type KnowledgeMapDraft, type KnowledgeMapEvent } from "../knowledge-map-stream";
 import type { LearningSession } from "../types";
 import { knowledgeMapPrompt, knowledgeMapRules } from "./knowledge-map";
@@ -15,9 +16,13 @@ kind只能是prerequisite（需要先理解）或application（结合使用）�
 /** Fixed plan first; bounded node work emits as soon as its validated parents are ready. */
 export async function streamKnowledgeMap(session: LearningSession,
   request: MapRequest,
-  emit: (event: KnowledgeMapEvent) => void) {
+  emit: (event: KnowledgeMapEvent) => void, onRoot?: (root: MapConcept | null) => void) {
   const prompt = knowledgeMapPrompt(session), evidence = mapEvidence(session);
-  const { plan, concepts } = await requestMapValue(request, `${knowledgeMapRules}\n${planInstruction}`, prompt,
+  const planRequest: MapRequest = (system, input, timeout) => {
+    onRoot?.(null); // A repair must retract the previous attempt's preview.
+    return request(system, input, timeout, onRoot ? observeMapRoot(session, onRoot) : undefined);
+  };
+  const { plan, concepts } = await requestMapValue(planRequest, `${knowledgeMapRules}\n${planInstruction}`, prompt,
     value => validateMapPlan(value, session), MAP_PLAN_TIMEOUT_MS);
   let draft: KnowledgeMapDraft = applyMapEvent({ plan: null, map: null }, { type: "plan", plan }, evidence);
   const accept = (index: number, edges: MapRelation[]) => {
