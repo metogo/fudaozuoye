@@ -27,12 +27,17 @@ export function QuoteComposerMotion({ range, formRef, dockRef, scrollRef }: {
     }
     dock.style.height = `${dockHeight.current || dock.getBoundingClientRect().height}px`;
     form.classList.add("chat-composer--quoted");
+    const backdrop = document.createElement("div");
+    backdrop.className = "quote-focus-backdrop";
+    backdrop.setAttribute("aria-hidden", "true");
+    (dock.parentElement ?? document.body).append(backdrop);
     const overlay = document.createElement("div");
     overlay.className = "quote-selection-overlay";
     overlay.setAttribute("aria-hidden", "true");
     (dock.parentElement ?? document.body).append(overlay);
     let frame = 0;
     const update = () => {
+      overlay.replaceChildren();
       if (!range.startContainer.isConnected || !scroll.contains(range.startContainer)) return;
       const viewport = window.visualViewport;
       const vx = viewport?.offsetLeft ?? 0, vy = viewport?.offsetTop ?? 0;
@@ -42,24 +47,11 @@ export function QuoteComposerMotion({ range, formRef, dockRef, scrollRef }: {
       const anchor = rects.at(-1);
       const position = quoteComposerPosition({ viewportLeft: vx, viewportTop: vy, viewportWidth: vw, viewportHeight: vh, dockLeft: dockBox.left, dockWidth: dockBox.width, anchorBottom: anchor?.bottom ?? vy + vh, height: form.offsetHeight });
       Object.assign(form.style, { left: `${position.left}px`, top: `${position.top}px`, width: `${position.width}px`, maxHeight: `${Math.max(100, vh - 24)}px` });
-      overlay.replaceChildren();
       for (const rect of rects) {
         const top = Math.max(rect.top, area.top, vy), bottom = Math.min(rect.bottom, area.bottom, vy + vh);
         const mark = document.createElement("span");
         Object.assign(mark.style, { position: "fixed", left: `${rect.left}px`, top: `${top}px`, width: `${rect.width}px`, height: `${bottom - top}px` });
         overlay.append(mark);
-      }
-      if (anchor) {
-        const x = Math.max(position.left + 20, Math.min(position.left + position.width - 20, anchor.left + anchor.width / 2));
-        const y = Math.min(anchor.bottom + 3, vy + vh - 12);
-        const endY = position.top >= y ? position.top : position.top + form.offsetHeight;
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        line.setAttribute("width", "100%"); line.setAttribute("height", "100%");
-        line.style.cssText = "position:fixed;inset:0;overflow:visible";
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M ${anchor.left + anchor.width / 2} ${y} L ${x} ${endY}`);
-        path.setAttribute("stroke", "#39816b"); path.setAttribute("stroke-width", "2");
-        line.append(path); overlay.append(line);
       }
     };
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
@@ -87,6 +79,7 @@ export function QuoteComposerMotion({ range, formRef, dockRef, scrollRef }: {
       window.visualViewport?.removeEventListener("resize", viewportResize); window.visualViewport?.removeEventListener("scroll", schedule);
       // Teardown must be synchronous: no viewport-sized layer survives cancellation.
       overlay.remove();
+      backdrop.remove();
       form.classList.remove("chat-composer--quoted");
       for (const property of ["left", "top", "width", "max-height"]) form.style.removeProperty(property);
       dock.style.removeProperty("height");

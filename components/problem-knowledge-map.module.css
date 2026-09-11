@@ -36,7 +36,7 @@
 .tools span { font-size:10px; min-width:30px; text-align:center; color:#7b8a81; }
 .tools i { border-left:1px solid #dce5df; height:17px; margin:0 5px; }
 .hint { position:absolute; z-index:5; bottom:6px; left:50%; transform:translateX(-50%); font-size:10px; color:#85978a; background:#f6f8f4df; padding:6px 12px; border-radius:20px; white-space:nowrap; pointer-events:none; }
-.detail { flex:0 1 42%; min-height:0; display:flex; flex-direction:column; background:#fff; border:1px solid #dce6dd; border-radius:24px 24px 0 0; box-shadow:0 -8px 30px #183d2d09; z-index:8; }
+.detail { flex:0 1 56%; min-height:0; display:flex; flex-direction:column; background:#fff; border:1px solid #dce6dd; border-radius:24px 24px 0 0; box-shadow:0 -8px 30px #183d2d09; z-index:8; }
 .detail header { display:flex; align-items:center; justify-content:space-between; padding:16px 22px 10px; flex-shrink:0; }
 .detail header span { font-size:10px; color:#8c9a8f; }
 .detail h2 { font-size:19px; margin:3px 0; font-weight:650; }
@@ -44,8 +44,6 @@
 .detail header svg { width:17px; height:17px; }
 .detailBody { overflow:auto; overscroll-behavior:contain; padding:0 22px 22px; font-size:14px; line-height:1.8; color:#4b6055; }
 .detailBody h3 { font-size:11px; color:#839489; font-weight:500; margin:13px 0 4px; }
-.detailStatus { color:#7b8e81; font-size:11px; margin-top:12px; }
-.detailStatus button { text-decoration:underline; min-height:44px; padding:0 10px; }
 .detailBody blockquote { margin:14px 0; padding:10px 14px; border-left:3px solid #aacbbc; background:#f5f8f3; border-radius:0 10px 10px 0; }
 .detailBody small { font-size:10px; color:#779282; }
 .relation { border-top:1px solid #edf0ea; padding-top:12px; margin-top:14px; }

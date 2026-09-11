@@ -3,18 +3,27 @@
 /* Preserve native long-press handles instead of selecting entire message bubbles. */
 .chat-scroll { -webkit-user-select: text; user-select: text; }
 .chat-scroll button, .chat-scroll input, .chat-scroll textarea { -webkit-user-select: none; user-select: none; }
-.chat-scroll ::selection { background: #bdded2; color: #143c32; }
-.selection-ask-link { position: fixed; inset: 0; z-index: 79; pointer-events: none; overflow: visible; }
+.chat-scroll ::selection { background: #fde8a1; color: #233c31; }
+.selection-ask-trigger { position:fixed; z-index:80; transform:translateX(-50%); min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 14px; border:1px solid #e3e8e4; border-radius:12px; background:#fff; color:#305b4b; font-size:12px; font-weight:500; box-shadow:0 3px 12px #173d3012; user-select:none; touch-action:manipulation; }
+.selection-ask-trigger:focus-visible { outline:2px solid #38765c; outline-offset:3px; }
+.selection-discovery-hint { display:flex; align-items:center; gap:8px; color:#77877c; font-size:11px; line-height:1.8; margin:6px 0; }
+.selection-discovery-hint button { min-width:44px; min-height:44px; flex-shrink:0; color:#788e7c; }
 .selection-ear { position: fixed; z-index: 90; width: 44px; height: 44px; transform: translateX(-50%); padding: 0; border: 0; background: transparent; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
-.selection-ear__dot { position: absolute; left: 14px; width: 16px; height: 16px; background: #26715d; box-shadow: 0 1px 3px #0003; pointer-events: none; }
-.selection-ear__dot--start { left: 6px; top: 3px; border-radius: 50% 50% 0 50%; }
-.selection-ear__dot--end { left: 22px; bottom: 3px; border-radius: 0 50% 50% 50%; }
-.selection-ear__dot::after { content: ""; position: absolute; width: 2px; height: 9px; background: #26715d; }
-.selection-ear__dot--start::after { right: 0; top: 12px; }
-.selection-ear__dot--end::after { left: 0; bottom: 12px; }
+.selection-ear__dot { position:absolute; left:15px; width:14px; height:14px; border-radius:50%; background:#246453; box-shadow:0 0 0 2px #fff; pointer-events:none; }
+.selection-ear__dot--start { top:4px; }
+.selection-ear__dot--end { top:28px; }
+.selection-ear__dot::after { content:""; position:absolute; left:5.5px; width:3px; height:10px; border-radius:2px; background:#246453; }
+.selection-ear__dot--start::after { top:8px; }
+.selection-ear__dot--end::after { bottom:8px; }
 .lesson-chat-shell .chat-composer.chat-composer--quoted { position: fixed; z-index: 65; padding: 10px; overflow-y: auto; border: 1px solid #bad6ca; border-radius: 22px; background: #fafcf9; box-shadow: 0 12px 36px #183e3226; transform-origin: left top; }
 .quote-selection-overlay { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
-.quote-selection-overlay > span { border-radius: 3px; background: #66b69538; box-shadow: inset 0 -1px #39816b80; }
+.quote-focus-backdrop { position:fixed; inset:0; z-index:39; pointer-events:none; background:rgba(32,48,42,.16); }
+.quote-selection-overlay > span { border-radius:3px; background:#fdc23530; box-shadow:inset 0 -1px #dfb94480; }
+.chat-composer .chat-quote-preview { background:#fafaf7; border-color:transparent; border-left:2px solid #e8c76b; }
+.chat-quote-preview__body { max-height:112px; overflow:auto; scrollbar-width:thin; scrollbar-color:#ccd4ce transparent; font-size:12px; line-height:1.8; color:#58665e; overflow-wrap:anywhere; }
+.chat-quote-preview__body .rich-learning-text { font-size:inherit; line-height:inherit; }
+.chat-quote-preview__close { display:grid; place-items:center; align-self:flex-start; flex-shrink:0; width:44px; height:44px; border-radius:50%; color:#7d8981; font-size:20px; }
+.chat-quote-preview__close:hover { background:#eef2ee; }
 @import "./streaming-indicator.css";
 @import "./board-course.css";
 

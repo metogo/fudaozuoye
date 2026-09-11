@@ -4,8 +4,8 @@
 
 import { UiLanguageSwitch, useUiText } from "./ui-language";
 import { MissingProblemImage } from "./missing-problem-image";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import dynamic from "next/dynamic";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type ComponentProps } from "react";
+import { createOptionalLearningFeature } from "./optional-learning-feature";
 import { flushSync } from "react-dom";
 import { parseLearningPrompt, stripLearningChoiceLabel } from "@/lib/learning/presentation";
 import { ChatThinking } from "./chat-thinking";
@@ -18,6 +18,8 @@ import { RichLearningText, preloadLearningText } from "./lazy-rich-learning-text
 import { CopyableLearningText } from "./copyable-learning-text";
 import { StepBlank } from "./step-blank";
 import { QuoteComposerMotion } from "./quote-composer-motion";
+import { useQuoteScrollDismiss } from "./use-quote-scroll-dismiss";
+import { SelectionHint } from "./selection-hint";
 import { observeChatEdgeFade } from "@/lib/learning/chat-edge-fade";
 import { MessageTime } from "./message-time";
 import { BOARD_UI_ENABLED } from "@/lib/learning/ui-features";
@@ -26,10 +28,12 @@ import { ConversationMapPending } from "./conversation-map-pending";
 import { FirstExplanationPending, hasExplanationBody } from "./first-explanation-pending";
 import readingStyles from "./first-explanation-pending.module.css";
 import { OriginalQuestion } from "./original-question";
+import { supportsRectangleExperiment } from "@/lib/learning/rectangle-experiment";
 import type { MapFocus } from "@/lib/learning/knowledge-map-preview";
-const ConversationExport = dynamic(() => import("./conversation-export").then((module) => module.ConversationExport), { ssr: false });
-const ConversationKnowledgeMap = dynamic(() => import("./conversation-knowledge-map").then(module => module.ConversationKnowledgeMap), { ssr: false, loading: () => <ConversationMapPending/> });
-const SelectionAsk = dynamic(() => import("./selection-ask").then(module => module.SelectionAsk), { ssr: false });
+const ConversationExport = createOptionalLearningFeature<ComponentProps<typeof import("./conversation-export").ConversationExport>>(() => import("./conversation-export").then(module => ({ default: module.ConversationExport })), "对话导出");
+const ConversationKnowledgeMap = createOptionalLearningFeature<ComponentProps<typeof import("./conversation-knowledge-map").ConversationKnowledgeMap>>(() => import("./conversation-knowledge-map").then(module => ({ default: module.ConversationKnowledgeMap })), "知识图谱", <ConversationMapPending/>);
+const SelectionAsk = createOptionalLearningFeature<ComponentProps<typeof import("./selection-ask").SelectionAsk>>(() => import("./selection-ask").then(module => ({ default: module.SelectionAsk })), "划词提问", null);
+const RectangleExperiment = createOptionalLearningFeature<ComponentProps<typeof import("./rectangle-experiment").RectangleExperiment>>(() => import("./rectangle-experiment").then(module => ({ default: module.RectangleExperiment })), "小实验");
 
 interface LearningChatProps {
   stateToken?: string;
@@ -74,6 +78,7 @@ export function LearningChat(props: LearningChatProps) {
   const [fileError, setFileError] = useState("");
   const [hasNewContent, setHasNewContent] = useState(false);
   const [suggestionsBelow, setSuggestionsBelow] = useState(false);
+  const seenSuggestionGroups = useRef(new Set<string>());
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const [questionGateId, setQuestionGateId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -118,7 +123,7 @@ export function LearningChat(props: LearningChatProps) {
     return visibleChatMessages.filter((message) => message.role === "assistant").flatMap((message) =>
       message.suggestions?.filter((item) => activeIds.has(item.id)) ?? []);
   }, [visibleChatMessages, props.session?.flow.suggestedQuestions]);
-  const suggestionKey = activeSuggestions.map((item) => item.id).join(":");
+  const suggestionKey = JSON.stringify([props.session?.requestId, activeSuggestions.map((item) => [item.id, item.text])]);
   const showSuggestions = !props.busy && !hasPendingRetry && activeSuggestions.length > 0;
   const showSuggestionHint = showSuggestions && suggestionsBelow;
   const lastUserIndex = visibleChatMessages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
@@ -134,7 +139,11 @@ export function LearningChat(props: LearningChatProps) {
       if (!area || !firstQuestion) { setSuggestionsBelow(false); return; }
       const bounds = area.getBoundingClientRect();
       const question = firstQuestion.getBoundingClientRect();
-      setSuggestionsBelow(isSuggestionBelowViewport(bounds.bottom, question.top, question.height));
+      const dock = composerDockRef.current?.getBoundingClientRect();
+      const bottom = Math.min(bounds.bottom, window.innerHeight, dock && dock.height > 0 ? dock.top : bounds.bottom);
+      const visibleHeight = Math.min(bottom, question.bottom) - Math.max(bounds.top, question.top, 0);
+      if (!quote && !knowledgeMapOpen && question.height > 0 && visibleHeight >= Math.min(question.height, 60)) seenSuggestionGroups.current.add(suggestionKey);
+      setSuggestionsBelow(!seenSuggestionGroups.current.has(suggestionKey) && isSuggestionBelowViewport(bottom, question.top, question.height));
     };
     let frame: number | undefined;
     const schedule = () => {
@@ -152,7 +161,7 @@ export function LearningChat(props: LearningChatProps) {
       if (frame !== undefined) cancelAnimationFrame(frame); observer.disconnect();
       area?.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule);
     };
-  }, [suggestionKey, showSuggestions]);
+  }, [suggestionKey, showSuggestions, quote, knowledgeMapOpen]);
 
   useEffect(() => {
     const area = scrollRef.current;
@@ -196,6 +205,12 @@ export function LearningChat(props: LearningChatProps) {
     area.style.height = `${Math.min(128, Math.max(44, area.scrollHeight))}px`;
   }, [input, gate?.id, questionMode]);
 
+  const dismissQuoteOnScroll = useCallback(() => {
+    textareaRef.current?.blur();
+    window.getSelection()?.removeAllRanges();
+    setSelectedQuote(null);
+  }, []);
+  useQuoteScrollDismiss(Boolean(quote), composerRef, dismissQuoteOnScroll);
   const cancelQuote = () => {
     const area = scrollRef.current;
     const top = area?.scrollTop ?? 0;
@@ -292,18 +307,18 @@ export function LearningChat(props: LearningChatProps) {
         {(!props.busy || gate?.kind === "step_answer") && (!hasPendingRetry || gate?.kind === "step_answer") && gate && <GateCard busy={props.busy} onTranscribeStep={props.onTranscribeStep} gate={gate} answerChoices={answerChoices} choicesDerivedFromPrompt={choicesDerivedFromPrompt} allowFullSolution={!props.session?.flow.viewedSolution} illustrationAvailability={props.illustrationAvailability ?? { available: true }} onChoice={props.onChoice} onAnswer={props.onSend}
           knowledgeMapAction={!props.busy && !hasPendingRetry && !props.reviewProblem && props.session && props.stateToken ? <KnowledgeMapPreview key={props.session.requestId} session={props.session} onOpen={openKnowledgeMap}/> : null}/>}
         {!gate && !props.busy && !hasPendingRetry && !props.reviewProblem && props.session && props.stateToken && <KnowledgeMapPreview key={props.session.requestId} session={props.session} onOpen={openKnowledgeMap}/>}
+        {props.session && !props.reviewProblem && !hasPendingRetry && gate && ["understanding", "solution_review", "post_solution"].includes(gate.kind)
+          && props.session.flow.pathNodeIds.length === 0 && supportsRectangleExperiment(props.session.problem)
+          && visibleChatMessages.some(message => message.role === "assistant" && message.kind === "assistant" && message.status === "complete")
+          && <RectangleExperiment key={props.session.requestId} disabled={props.busy} onAsk={props.onQuestion}/>}
         {BOARD_UI_ENABLED && !props.busy && !hasPendingRetry && props.onReopenBoard && props.session?.flow.stage !== "complete" && <button type="button" onClick={props.onReopenBoard} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white/70 px-4 text-left text-[11px] font-semibold text-stone-600 transition hover:border-stone-400 hover:bg-white active:scale-[.99]"><span>{t("再次查看刚才的板书")}</span><span className="text-[9px] font-normal text-stone-400">{t("不改变当前任务")}</span></button>}
         {!props.busy && props.session?.flow.stage === "complete" && !gate && <CompletionActions session={props.session} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {!props.busy && props.session?.flow.stage === "reviewed_complete" && !gate && <ReviewCompletionActions onRetryOriginal={props.onRetryOriginal} onTransfer={props.onRequestTransfer} onNew={props.onNewProblem}/>}
         {/* Async suggestions must follow all task controls so arriving questions cannot push a button out from under a tap. */}
         {showSuggestions && <div ref={suggestionsRef}><SuggestedQuestionTrail suggestions={activeSuggestions} onSuggestion={props.onSuggestion}/></div>}
       </div>}
-    </div>
-
-    {props.notice && <div role="alert" className="chat-toast absolute inset-x-4 top-[68px] z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-stone-950 px-4 py-3 text-xs leading-5 text-white shadow-2xl"><p className="min-w-0 flex-1"><InfoIcon className="mr-2 inline h-4 w-4 align-[-3px]"/>{t(props.notice)}</p>{props.retryLabel && <button type="button" disabled={props.busy} onClick={props.onRetry} className="min-h-11 shrink-0 rounded-xl bg-white px-3 text-[11px] font-semibold text-stone-950 disabled:opacity-40">{t(props.retryLabel)}</button>}</div>}
-
-    {exportOpen && <ConversationExport messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
-    {props.session && <SelectionAsk root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
+    {exportOpen && <ConversationExport key={props.session?.requestId ?? "pending"} messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
+    {props.session && <SelectionAsk key={props.session.requestId} root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
       if (text.length > 12000) { setFileError("选中文字过长，请将引用控制在 12000 字以内。"); return; }
       flushSync(() => {
         setSelectedQuote({ text, range, requestId: props.session!.requestId });
@@ -312,9 +327,12 @@ export function LearningChat(props: LearningChatProps) {
       });
       textareaRef.current?.focus({ preventScroll: true });
     }}/>}
+    </div>
+
+    {props.notice && <div role="alert" className="chat-toast absolute inset-x-4 top-[68px] z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-stone-950 px-4 py-3 text-xs leading-5 text-white shadow-2xl"><p className="min-w-0 flex-1"><InfoIcon className="mr-2 inline h-4 w-4 align-[-3px]"/>{t(props.notice)}</p>{props.retryLabel && <button type="button" disabled={props.busy} onClick={props.onRetry} className="min-h-11 shrink-0 rounded-xl bg-white px-3 text-[11px] font-semibold text-stone-950 disabled:opacity-40">{t(props.retryLabel)}</button>}</div>}
     <div ref={composerDockRef} className="chat-composer-dock shrink-0">
     <form ref={composerRef} onSubmit={submit} className={`chat-composer relative z-20 shrink-0 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 ${isHome ? "home-chat-composer" : "border-t border-stone-200/80 bg-[#f7f6f2]/95"}`}>
-      {quote && <div className="mx-auto mb-2 flex max-w-2xl gap-2 rounded-xl border border-emerald-900/10 bg-emerald-50/70 px-3 py-2" aria-label={t("正在引用的文字")}><div className="min-w-0 flex-1"><p className="mb-1 text-xs font-semibold text-emerald-800">{t("针对这段文字提问")}</p><p className="max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-stone-600">{quote}</p></div><button type="button" aria-label={t("取消引用")} className="min-h-11 shrink-0 px-2 text-xs text-stone-500" onClick={cancelQuote}>{t("取消")}</button></div>}
+{quote && <div className="chat-quote-preview mx-auto mb-2 flex max-w-2xl gap-2 rounded-xl border border-emerald-900/10 bg-emerald-50/70 px-3 py-2" aria-label={t("正在引用的文字")}><div className="min-w-0 flex-1"><p className="mb-1 text-xs font-semibold text-emerald-800">{t("针对这段文字提问")}</p><div className="chat-quote-preview__body"><RichLearningText text={quote} compact/></div></div><button type="button" aria-label={t("取消引用")} className="chat-quote-preview__close" title={t("取消引用")} onClick={cancelQuote}><span aria-hidden="true">×</span></button></div>}
       {shouldShowChatJump(isHome, Boolean(quote), hasNewContent, showSuggestionHint) && <button type="button" onClick={() => {
         if (showSuggestionHint && suggestionsRef.current && scrollRef.current) {
           const area = scrollRef.current;
@@ -392,6 +410,7 @@ const MessageList = memo(function MessageList({ messages, initialReading, origin
     && message.kind === "milestone" && message.status !== "error"
     && ["题目已经读懂，先从核心思路开始", "先抓住这道题的核心"].includes(message.text))).map((message) => <div key={message.id} className={`chat-message-entry chat-message-entry--${message.role} ${message.id === messages[firstLesson]?.id ? readingStyles.arrival : ""}`}>
     <MessageBubble message={message} solutionDisplay={solutionDisplay} onRetry={message.id === retryMessageId ? onRetry : undefined} retryBusy={message.id === retryMessageId && busy}/>
+    {message.id === messages[firstLesson]?.id && message.status === "complete" && !busy && <SelectionHint/>}
     <MessageTime createdAt={message.createdAt}/>
   </div>);
 });

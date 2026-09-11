@@ -3,57 +3,56 @@
 import { useUiText } from "./ui-language";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { learningPlainText } from "@/lib/learning/copy-rich-text";
+import { selectionSnapshot } from "@/lib/learning/selection-snapshot";
+import { bindParagraphSelection } from "@/lib/learning/paragraph-selection";
 
 /** Use the browser's native selection so touch handles and keyboard selection remain available. */
 export function SelectionAsk({ root, disabled, onAsk }: {
   root: RefObject<HTMLDivElement | null>; disabled: boolean; onAsk: (text: string, range: Range) => void;
 }) {
   const t = useUiText();
-  const [selection, setSelection] = useState<{ text: string; left: number; top: number; anchorX: number; anchorY: number; start: { x: number; y: number; height: number }; end: { x: number; y: number; height: number } } | null>(null);
+  const [selection, setSelection] = useState<{ left: number; top: number | null; start: { x: number; y: number; height: number }; end: { x: number; y: number; height: number } } | null>(null);
   const rangeRef = useRef<Range | null>(null);
   const dragRef = useRef<{ edge: "start" | "end"; offsetX: number; offsetY: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
-      const selected = window.getSelection();
       const area = root.current;
-      if (disabled || !area || !selected?.rangeCount || selected.isCollapsed) { dragRef.current = null; setDragging(false); setSelection(null); return; }
-      const range = selected.getRangeAt(0);
-      const blocked = (node: Node) => (node.nodeType === 1 ? node as Element : node.parentElement)?.closest("button,input,textarea,select,[data-selection-exclude]");
-      if (!area.contains(range.startContainer) || !area.contains(range.endContainer) || blocked(range.startContainer) || blocked(range.endContainer)) { setSelection(null); return; }
-      const fragment = document.createElement("div");
-      fragment.append(range.cloneContents());
-      // A partial formula can omit its MathML tree; keep the user's exact visible fragment.
-      let text: string;
-      try { text = learningPlainText(fragment); }
-      catch {
-        fragment.querySelectorAll(".katex-mathml").forEach((element) => element.remove());
-        fragment.querySelectorAll(".katex").forEach((element) => element.classList.remove("katex"));
-        text = learningPlainText(fragment);
-      }
+      const snapshot = selectionSnapshot(area);
+      if (disabled || !area || !snapshot) { rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null); return; }
+      const { range } = snapshot;
       const bounds = area.getBoundingClientRect();
       const rects = Array.from(range.getClientRects()).filter((rect) => rect.height > 0 && rect.width > 0);
       const rect = rects.find((rect) => rect.bottom > bounds.top && rect.top < bounds.bottom);
-      if (!text || !rect) { setSelection(null); return; }
+      if (!rect) { setSelection(null); return; }
       rangeRef.current = range.cloneRange();
       const first = rects[0], last = rects[rects.length - 1];
       const viewport = window.visualViewport;
       const leftEdge = viewport?.offsetLeft ?? 0;
       const topEdge = viewport?.offsetTop ?? 0;
-      setSelection({ text, left: Math.max(leftEdge + 52, Math.min(leftEdge + (viewport?.width ?? window.innerWidth) - 52, rect.left + rect.width / 2)), top: Math.max(topEdge + 8, rect.top - 56), anchorX: rect.left + rect.width / 2, anchorY: rect.top, start: { x: first.left, y: first.top, height: first.height }, end: { x: last.right, y: last.top, height: last.height } });
+      const visibleTop = Math.max(topEdge, bounds.top), visibleBottom = Math.min(topEdge + (viewport?.height ?? window.innerHeight), bounds.bottom);
+      // Keep the action outside the selected text, even near the screen edges.
+      const top = rect.top - 52 >= visibleTop ? rect.top - 52 : last.bottom + 52 <= visibleBottom ? last.bottom + 8 : Math.max(topEdge + 8, bounds.top - 52);
+      setSelection({ left: Math.max(leftEdge + 76, Math.min(leftEdge + (viewport?.width ?? window.innerWidth) - 76, rect.left + rect.width / 2)), top, start: { x: first.left, y: first.top, height: first.height }, end: { x: last.right, y: last.top, height: last.height } });
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(update, dragRef.current ? 0 : 120); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { clearTimeout(timer); setSelection(null); } };
+    const unbindTap = !disabled && root.current ? bindParagraphSelection(root.current, update) : undefined;
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { clearTimeout(timer); window.getSelection()?.removeAllRanges(); rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null); } };
+    const dismissOnScroll = () => {
+      clearTimeout(timer);
+      // Do not erase unrelated selection, or a quote already handed to the composer.
+      if (rangeRef.current) window.getSelection()?.removeAllRanges();
+      rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null);
+    };
     document.addEventListener("selectionchange", schedule);
     document.addEventListener("keydown", escape);
-    window.addEventListener("scroll", schedule, true);
+    window.addEventListener("scroll", dismissOnScroll, true);
     window.addEventListener("resize", schedule);
     window.visualViewport?.addEventListener("resize", schedule);
-    window.visualViewport?.addEventListener("scroll", schedule);
+    window.visualViewport?.addEventListener("scroll", dismissOnScroll);
     schedule();
-    return () => { clearTimeout(timer); document.removeEventListener("selectionchange", schedule); document.removeEventListener("keydown", escape); window.removeEventListener("scroll", schedule, true); window.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("scroll", schedule); };
+    return () => { unbindTap?.(); clearTimeout(timer); document.removeEventListener("selectionchange", schedule); document.removeEventListener("keydown", escape); window.removeEventListener("scroll", dismissOnScroll, true); window.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("scroll", dismissOnScroll); };
   }, [root, disabled]);
   const moveHandle = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -73,6 +72,9 @@ export function SelectionAsk({ root, disabled, onAsk }: {
     const node = caret?.offsetNode ?? fallback?.startContainer;
     const offset = caret?.offset ?? fallback?.startOffset;
     if (!node || offset === undefined || !area.contains(node) || node.nodeType !== Node.TEXT_NODE || node.parentElement?.closest("button,input,textarea,select,.katex-mathml,[data-selection-exclude]")) return;
+    const origin = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer as Element : range.startContainer.parentElement;
+    const prose = origin?.closest(".copyable-learning-text__prose");
+    if (prose && node.parentElement?.closest(".copyable-learning-text__prose") !== prose) return;
     const next = range.cloneRange();
     if (drag.edge === "start") next.setStart(node, offset); else next.setEnd(node, offset);
     // Do not flip endpoints or lose the selection when handles cross.
@@ -84,7 +86,6 @@ export function SelectionAsk({ root, disabled, onAsk }: {
   const stopDrag = () => { dragRef.current = null; setDragging(false); };
   if (!selection || disabled) return null;
   return createPortal(<>
-    {!dragging && selection.anchorY >= selection.top + 44 && <svg aria-hidden="true" className="selection-ask-link" width="100%" height="100%"><path d={`M ${selection.left} ${selection.top + 42} L ${selection.anchorX} ${selection.anchorY - 2}`} fill="none" stroke="#26715d" strokeWidth="2"/><circle cx={selection.anchorX} cy={selection.anchorY - 2} r="3" fill="#26715d"/></svg>}
     {(["start", "end"] as const).map((edge) => {
       const point = selection[edge];
       const bounds = root.current?.getBoundingClientRect();
@@ -97,6 +98,10 @@ export function SelectionAsk({ root, disabled, onAsk }: {
         <span aria-hidden="true" className={`selection-ear__dot selection-ear__dot--${edge}`}/>
       </button>;
     })}
-    {!dragging && <button type="button" aria-label={t("针对选中文字问一问")} className="selection-ask-trigger fixed z-[80] min-h-11 -translate-x-1/2 select-none rounded-full bg-emerald-800 px-5 text-sm font-semibold text-white shadow-lg" style={{ left: selection.left, top: selection.top }} onPointerDown={(event) => event.preventDefault()} onClick={() => { if (rangeRef.current) onAsk(selection.text, rangeRef.current.cloneRange()); window.getSelection()?.removeAllRanges(); setSelection(null); }}>{t("问一问")}</button>}
+    {!dragging && selection.top !== null && <button type="button" aria-label={t("针对选中文字问一问")} className="selection-ask-trigger" style={{ left: selection.left, top: selection.top }} onPointerDown={(event) => event.preventDefault()} onClick={() => {
+      const current = selectionSnapshot(root.current);
+      if (current) { onAsk(current.text, current.range.cloneRange()); window.dispatchEvent(new Event("learning-selection-used")); }
+      window.getSelection()?.removeAllRanges(); rangeRef.current = null; setSelection(null);
+    }}><span>{t("问一问")}</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 17 17 7M7 7h10v10"/></svg></button>}
   </>, document.body);
 }

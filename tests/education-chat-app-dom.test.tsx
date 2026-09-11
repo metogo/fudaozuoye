@@ -43,6 +43,7 @@ vi.mock("@/components/learning-illustration", () => ({
 
 import { EducationChatApp } from "@/components/education-chat-app";
 import { readSseResponse } from "@/lib/learning/client-sse";
+import { experimentQuestion } from "@/lib/learning/rectangle-experiment";
 import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint";
 
 const learnedSession = {
@@ -83,6 +84,40 @@ describe("EducationChatApp", () => {
     vi.mocked(readSseResponse).mockReset();
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it.each(["network", "stream"])("实验追问 %s 中断后重试复用完整上下文，不重复用户消息或推进关卡", async failure => {
+    const stateToken = "x".repeat(48);
+    sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ session: learnedSession, stateToken, messages: [] }));
+    let attempts = 0;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      if (!String(url).includes("/learning/turn")) return response("consent", { reasoningLevels: [{ id: "light", label: "轻度", available: true }], illustration: { available: true } });
+      attempts += 1;
+      if (failure === "network" && attempts === 1) throw new TypeError("Failed to fetch");
+      return response("turn");
+    });
+    vi.mocked(readSseResponse).mockImplementation(async (reply, onEvent) => {
+      if ((reply as Response & { stage: string }).stage !== "turn") return;
+      await onEvent("message.delta", { text: "这是独立实验，不改原题条件。" });
+      if (failure === "stream" && attempts === 1) throw new Error("模拟响应流中断");
+      await onEvent("message.complete", {});
+      await onEvent("flow.update", { session: learnedSession, stateToken: "y".repeat(48) });
+      await onEvent("flow.ready", {});
+    });
+    render(<EducationChatApp/>);
+    await waitFor(() => expect(latest!.ready && latest!.session).toBeTruthy());
+    const text = experimentQuestion({ length: 4, width: 2 }, { length: 5, width: 1 }, 6, "面积为什么变化？");
+    await act(async () => { await latest!.onQuestion(text); });
+    expect(latest!.busy).toBe(false);
+    expect(latest!.retryLabel).not.toBe("");
+    expect(latest!.session!.flow.activeGate!.id).toBe("gate");
+    await act(async () => { await latest!.onRetry(); });
+    await waitFor(() => expect(latest!.retryLabel).toBe(""));
+    const turns = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/learning/turn"));
+    expect(turns).toHaveLength(2);
+    for (const [, options] of turns) expect(JSON.parse(String(options?.body)).input).toEqual({ type: "question", text });
+    expect(latest!.messages.filter(message => message.role === "user" && message.text === text)).toHaveLength(1);
+    expect(latest!.session!.flow.activeGate!.id).toBe("gate");
+  });
 
   it("从题目发送串联识别、分析和第一轮讲解，并可重置为新题", async () => {
     vi.mocked(fetch)

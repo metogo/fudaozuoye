@@ -1,7 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { createOptionalLearningFeature } from "./optional-learning-feature";
+import { useMemo, type ComponentProps } from "react";
 import type { ChatMessage, LearningSession } from "@/lib/learning/types";
 import { knowledgeGuide } from "@/lib/learning/knowledge-guide";
 import type { MapFocus } from "@/lib/learning/knowledge-map-preview";
@@ -11,7 +11,7 @@ import { ArrowIcon, BookIcon } from "./icons";
 import styles from "./conversation-knowledge-map.module.css";
 import { ConversationMapPending } from "./conversation-map-pending";
 
-const KnowledgeMapDialog = dynamic(() => import("./problem-knowledge-map").then(module => module.KnowledgeMapDialog), { ssr: false });
+const KnowledgeMapDialog = createOptionalLearningFeature<ComponentProps<typeof import("./problem-knowledge-map").KnowledgeMapDialog>>(() => import("./problem-knowledge-map").then(module => ({ default: module.KnowledgeMapDialog })), "知识图谱");
 
 export function ConversationKnowledgeMap({ session, stateToken, open, focus, onOpen, onClose, messages, hideGuide = false }: {
   session: LearningSession; stateToken: string; open: boolean; focus?: MapFocus;

@@ -165,9 +165,8 @@
   .apple-ui .chat-composer [class*="text-[10px]"] { font-size: 12px; }
   .apple-ui .chat-composer > div:not(.composer-surface) > span:first-child { background: var(--ui-accent); }
   .apple-ui .chat-new-message { background: #eef6f1; color: var(--ui-accent); border: 1px solid #d2e4da; box-shadow: var(--ui-shadow); font-size: 13px; }
-  .apple-ui .lesson-chat-shell .chat-composer.chat-composer--quoted { padding: 12px; border-radius: 26px; background: #f7fcf9; border-color: #badbcb; box-shadow: 0 12px 40px #163c2929; }
-  .apple-ui .chat-composer [aria-label="正在引用的文字"] { border: 0; border-radius: 14px; border-left: 3px solid var(--ui-accent); background: var(--ui-tint); }
-  .apple-ui .selection-ask-trigger { background: var(--ui-accent); box-shadow: inset 0 0 0 1px #ffffff40, 0 5px 16px #00483226; }
+  .apple-ui .lesson-chat-shell .chat-composer.chat-composer--quoted { padding: 12px; border-radius: 22px; background: #fff; border-color: #d3dfd7; box-shadow: 0 20px 56px #18382b30, 0 3px 12px #18382b12; }
+  .apple-ui .chat-composer .chat-quote-preview { border:0; border-left:2px solid #e8c76b; border-radius:8px; background:#fafaf7; }
   .apple-ui .selection-ear:active, .apple-ui .selection-ask-trigger:active { scale: 1; }
   .apple-ui .chat-toast { top: max(86px, calc(env(safe-area-inset-top) + 74px)); background: #edf5f0; color: #254937; border: 1px solid #cbdfd3; border-radius: 24px; box-shadow: 0 12px 40px #23453320; font-size: 14px; }
   .apple-ui .chat-toast button { border-radius: 999px; color: var(--ui-accent); background: white; font-size: 13px; }

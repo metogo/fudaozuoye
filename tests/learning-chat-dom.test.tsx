@@ -43,6 +43,26 @@ describe("缺图补拍入口", () => {
 });
 const session: LearningSession = { ...initialSession, requestId: "r", problem: { ...initialSession.problem, text: "题目", gradeBand: "junior" }, nodes: [], flow: { ...initialSession.flow, stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂", emphasis: "secondary" }] } } };
 describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
+ it("小实验在讲解完成后按需出现，观察走追问而不是提交答案", async () => {
+   const rectangular = { ...session, problem: { ...session.problem, text: "长方形长8厘米，宽3厘米，求周长和面积。", confidence: .98, missingVisualInformation: [], visualContext: undefined } };
+   const lesson: ChatMessage = { id: "rectangle", role: "assistant", kind: "assistant", text: "先区分边界和里面的小方格。", status: "streaming", createdAt: new Date().toISOString() };
+   const onQuestion = vi.fn(), onSend = vi.fn(), onChoice = vi.fn();
+   const props = { ...base, session: rectangular, messages: [lesson], onQuestion, onSend, onChoice };
+   const view = render(<LearningChat {...props} busy/>);
+   expect(screen.queryByRole("region", { name: "长方形知识小实验" })).toBeNull();
+   view.rerender(<LearningChat {...props} messages={[{ ...lesson, status: "complete" }]}/>);
+   const trigger = await screen.findByRole("button", { name: /拖一拖，看看周长和面积/ });
+   expect(screen.getByRole("region", { name: "当前学习任务" }).compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   fireEvent.click(trigger);
+   fireEvent.change(screen.getByRole("slider", { name: "实验长方形的长" }), { target: { value: "5" } });
+   fireEvent.click(screen.getByRole("button", { name: /带着观察问小逗号/ }));
+   expect(onQuestion).toHaveBeenCalledWith(expect.stringContaining("不是原题配图"));
+   expect(onSend).not.toHaveBeenCalled(); expect(onChoice).not.toHaveBeenCalled();
+   view.rerender(<LearningChat {...props} busy messages={[{ ...lesson, status: "complete" }]}/>);
+   expect((screen.getByRole("button", { name: /拖一拖，看看周长和面积/ }) as HTMLButtonElement).disabled).toBe(true);
+   view.rerender(<LearningChat {...props} session={{ ...rectangular, flow: { ...rectangular.flow, pathNodeIds: ["other-topic"] } }} messages={[{ ...lesson, status: "complete" }]}/>);
+   expect(screen.queryByRole("region", { name: "长方形知识小实验" })).toBeNull();
+ });
  it("进入对话即在消息前预留图谱，首页与缺图确认不显示", () => {
    const view = render(<LearningChat {...base}/>);
    expect(screen.queryByRole("region", { name: "本题知识脉络" })).toBeNull();
@@ -298,10 +318,10 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    fireEvent.click(screen.getByRole("button", { name: "打开白板作答" }));
    expect(onWhiteboard).toHaveBeenCalledWith("answer");
  });
- it("选中文字后将提问器绑定到引用，发送或取消都会回收为普通对话", () => {
+ it("选中文字后将提问器绑定到引用，发送或取消都会回收为普通对话", async () => {
    const onQuestion = vi.fn();
    render(<LearningChat {...base} session={session} onQuestion={onQuestion}/>);
-   fireEvent.click(screen.getByRole("button", { name: "选择文字提问" }));
+   fireEvent.click(await screen.findByRole("button", { name: "选择文字提问" }));
    expect(screen.getByLabelText("正在引用的文字").textContent).toContain("判别式大于等于零");
    const question = screen.getByLabelText("询问当前步骤");
    fireEvent.change(question, { target: { value: "为什么要满足这个条件？" } });
@@ -313,11 +333,46 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
    expect(screen.getByLabelText("输入题目或问题")).not.toBeNull();
  });
- it("拒绝过长的文字引用而不进入悬浮提问状态", () => {
+ it("正文滚动关闭引用窗口并保留草稿，引用内部滚动不关闭", async () => {
    render(<LearningChat {...base} session={session}/>);
-   fireEvent.click(screen.getByRole("button", { name: "选择超长文字" }));
+   fireEvent.click(await screen.findByRole("button", { name: "选择文字提问" }));
+   fireEvent.change(screen.getByLabelText("询问当前步骤"), { target: { value: "还没写完的问题" } });
+   fireEvent.scroll(screen.getByLabelText("正在引用的文字"));
+   expect(screen.getByLabelText("正在引用的文字")).toBeTruthy();
+   fireEvent.scroll(screen.getByLabelText("对话内容"));
+   expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
+   expect((screen.getByLabelText("输入题目或问题") as HTMLTextAreaElement).value).toBe("还没写完的问题");
+ });
+ it("拒绝过长的文字引用而不进入悬浮提问状态", async () => {
+   render(<LearningChat {...base} session={session}/>);
+   fireEvent.click(await screen.findByRole("button", { name: "选择超长文字" }));
    expect(screen.getByText("选中文字过长，请将引用控制在 12000 字以内。")).not.toBeNull();
    expect(screen.queryByLabelText("正在引用的文字")).toBeNull();
+ });
+ it("看过猜你想问后上滑不重复提醒，换题重新提示", async () => {
+   let questionTop = 140;
+   const originalRect = HTMLElement.prototype.getBoundingClientRect;
+   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+     if (this.getAttribute("aria-label") === "对话内容") return { top: 0, bottom: 100, width: 320, height: 100 } as DOMRect;
+     if (this.closest(".suggested-question-trail")) return { top: questionTop, bottom: questionTop + 40, width: 240, height: 40 } as DOMRect;
+     return originalRect.call(this);
+   });
+   const message: ChatMessage = { id: "seen-case", role: "assistant", kind: "assistant", text: "讲解", status: "complete", createdAt: new Date().toISOString(), suggestions: session.flow.suggestedQuestions };
+   const view = render(<LearningChat {...base} session={session} messages={[message]}/>);
+   await screen.findByRole("button", { name: "下面有猜你想问 ↓" });
+   questionTop = -100; fireEvent.resize(window);
+   await waitFor(() => expect(screen.queryByRole("button", { name: "下面有猜你想问 ↓" })).toBeNull());
+   questionTop = 140; fireEvent.resize(window);
+   await screen.findByRole("button", { name: "下面有猜你想问 ↓" });
+   questionTop = 30; fireEvent.resize(window);
+   await waitFor(() => expect(screen.queryByRole("button", { name: "下面有猜你想问 ↓" })).toBeNull());
+   questionTop = 140; fireEvent.resize(window);
+   await new Promise(resolve => setTimeout(resolve, 40));
+   expect(screen.queryByRole("button", { name: "下面有猜你想问 ↓" })).toBeNull();
+   view.rerender(<LearningChat {...base} session={{ ...session, requestId: "different-question" }} messages={[message]}/>);
+   await screen.findByRole("button", { name: "下面有猜你想问 ↓" });
+   view.unmount();
+   vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
  });
  it("当猜你想问或新讲解在可视区域下方时，跳转提示会精确带到对应内容", async () => {
    const scrollTo = vi.fn();

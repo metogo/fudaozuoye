@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { Background, ReactFlow, applyNodeChanges, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { arrangeConcepts, parseMapPositions, parseKnowledgeDetail, relationLabel, visibleConceptIds, type KnowledgeDetail, type MapConcept, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
+import { arrangeConcepts, parseMapPositions, relationLabel, visibleConceptIds, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
 import type { LearningSession } from "@/lib/learning/types";
 import { CloseIcon } from "./icons";
 import { RichLearningText } from "./lazy-rich-learning-text";
@@ -18,6 +18,7 @@ import { KnowledgeMapExport } from "./knowledge-map-export";
 import { findMapFocus, mapFocusAncestors, type MapFocus } from "@/lib/learning/knowledge-map-preview";
 import { knowledgeMapNodeTypes as nodeTypes, type ConceptNode } from "./knowledge-map-node";
 import { KnowledgeMapActivity } from "./knowledge-map-activity";
+import { KnowledgeExplanation } from "./knowledge-explanation";
 
 const noDelete = null;
 const fitOptions = { padding: .2, minZoom: .7, maxZoom: 1 };
@@ -162,41 +163,7 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
       <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => void flow?.zoomOut({ duration: duration() })}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => void flow?.zoomIn({ duration: duration() })}>＋</button><i/><button disabled={!map.nodes.length} onClick={recoverView}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
       <div className={styles.hint}>{t("拖节点排布 · 拖空白移动 · 双指缩放")}</div>
     </div>
-    {focus && <section className={styles.detail} aria-label={t("{title}的知识说明", { title: focus.title })}><header><div><span>{t("知识卡片")}</span><h2>{focus.title}</h2></div><button onClick={() => setSelected(null)} aria-label={t("关闭知识卡片")}><CloseIcon/></button></header><div className={styles.detailBody}><KnowledgeExplanation key={focus.id} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</div></section>}
+    {focus && <section className={styles.detail} aria-label={t("{title}的知识说明", { title: focus.title })}><header><div><span>{t("知识卡片")}</span><h2>{focus.title}</h2></div><button onClick={() => setSelected(null)} aria-label={t("关闭知识卡片")}><CloseIcon/></button></header><div className={styles.detailBody}><KnowledgeExplanation key={`${cacheKey}:${focus.id}`} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</div></section>}
     <footer className={styles.footer}>{notice ? t(notice) : t("布局保存在本机 · 浏览图谱不改变学习进度")}<span>{t("AI 整理，请结合原题理解")}</span></footer><p role="status" className={styles.sr}>{t(announcement)}</p>
   </div>;
-}
-
-function KnowledgeExplanation({ focus: initialFocus, map: initialMap, stateToken, cacheKey, partial: initialPartial }: { focus: MapConcept; map: ProblemKnowledgeMap; stateToken: string; cacheKey: string; partial: boolean }) {
-  const t = useUiText();
-  const [{ focus, map, partial }] = useState(() => ({ focus: initialFocus, map: initialMap, partial: initialPartial }));
-  const [detail, setDetail] = useState<KnowledgeDetail | null>(null);
-  const [error, setError] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    const key = `${cacheKey}:detail:${focus.id}`;
-    const identity = JSON.stringify(map);
-    const timer = setTimeout(async () => {
-      try {
-        const raw = localStorage.getItem(key);
-        if (raw && raw.length < 100000) {
-          const cached = JSON.parse(raw);
-          if (cached.identity === identity) { setDetail(parseKnowledgeDetail(cached.detail)); return; }
-        }
-      } catch { /* Ignore invalid or unavailable storage. */ }
-      try {
-        const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api";
-        const response = await fetch(`${base}/learning/knowledge-map`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stateToken, map, nodeId: focus.id, partial }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
-        const body = await response.json();
-        if (!response.ok) throw new Error("详情暂未补充");
-        const parsed = parseKnowledgeDetail(body.detail);
-        if (controller.signal.aborted) return;
-        setDetail(parsed);
-        try { localStorage.setItem(key, JSON.stringify({ identity, detail: parsed })); } catch { /* The current card remains usable. */ }
-      } catch { if (!controller.signal.aborted) setError(true); }
-    }, 0);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [focus, map, stateToken, cacheKey, attempt, partial]);
-  return <>{(detail || !map.overviewOnly) && <><h3>{t("它是什么")}</h3><RichLearningText text={detail?.summary ?? focus.summary}/><h3>{t("本题怎么用")}</h3><RichLearningText text={detail?.application ?? focus.application}/></>}{!detail && <div className={styles.detailStatus} role="status">{error ? <>{t("补充说明暂未加载，仍可浏览图谱。")}<button onClick={() => { setError(false); setAttempt(n => n + 1); }}>{t("重试说明")}</button></> : t("知识关系已就绪，正在补充说明…")}</div>}</>;
 }
