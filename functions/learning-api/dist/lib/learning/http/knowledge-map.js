@@ -7,6 +7,8 @@ const request_guards_1 = require("../request-guards");
 const server_state_1 = require("../server-state");
 const knowledge_map_1 = require("../knowledge-map");
 const knowledge_map_stream_1 = require("./knowledge-map-stream");
+const knowledge_detail_stream_1 = require("./knowledge-detail-stream");
+const formula_integrity_1 = require("../formula-integrity");
 async function postKnowledgeMap(request) {
     try {
         (0, request_guards_1.assertSameOrigin)(request);
@@ -14,6 +16,7 @@ async function postKnowledgeMap(request) {
         (0, request_guards_1.assertRateLimit)(request, 12, `knowledge-map:${(0, server_state_1.consentRateIdentity)(request) ?? request.headers.get("x-real-ip") ?? "local"}`);
         const body = await request.json();
         const session = (0, server_state_1.openSession)(body.stateToken);
+        (0, formula_integrity_1.assertFormulaIntegrity)((0, knowledge_map_1.mapEvidence)(session), formula_integrity_1.damagedProblemFormulaMessage);
         // The progressive response owns its plan-sized deadline; detail/legacy requests remain bounded separately.
         const signal = body.stream === true && body.nodeId === undefined ? request.signal : AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
         const adapter = (0, providers_1.getSessionProviderAdapter)(session, signal);
@@ -21,6 +24,11 @@ async function postKnowledgeMap(request) {
             const map = (0, knowledge_map_1.parseKnowledgeMap)(body.map, (0, knowledge_map_1.mapEvidence)(session), body.partial === true);
             if (typeof body.nodeId !== "string" || !map.nodes.some(n => n.id === body.nodeId))
                 throw new Error("知识点不存在");
+            if (body.stream === true) {
+                if (!adapter.streamKnowledgeDetail)
+                    throw new Error("当前模型暂不支持流式知识详情");
+                return (0, knowledge_detail_stream_1.knowledgeDetailResponse)(adapter, session, map, body.nodeId, signal);
+            }
             if (!adapter.generateKnowledgeDetail)
                 throw new Error("当前模型暂不支持知识详情");
             const detail = await adapter.generateKnowledgeDetail(session, map, body.nodeId);

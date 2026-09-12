@@ -59,7 +59,7 @@ const response = (body: { map?: typeof map; detail?: { summary: string; applicat
   frame("map.plan", { type: "plan", plan }) +
   map.nodes.map((_, index) => frame("map.node", nodeEvent(index))).join("") +
   frame("complete", { total: map.nodes.length }), { headers: { "Content-Type": "text/event-stream" } }
-) : new Response(JSON.stringify(body), { status: ok ? 200 : 503, headers: { "Content-Type": "application/json" } });
+) : body.detail && ok ? new Response(frame("complete", body), { headers: { "Content-Type": "text/event-stream" } }) : new Response(JSON.stringify(body), { status: ok ? 200 : 503, headers: { "Content-Type": "application/json" } });
 
 describe("ProblemKnowledgeMapPage", () => {
   const close = vi.fn();

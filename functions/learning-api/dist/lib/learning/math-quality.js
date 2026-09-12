@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.mathOutputInstruction = void 0;
 exports.prepareMathForDisplay = prepareMathForDisplay;
 const presentation_1 = require("./presentation");
+const formula_integrity_1 = require("./formula-integrity");
 exports.mathOutputInstruction = String.raw `公式排版规范：同一个变量的写法全程一致，下标必须写成 x_{1}、x_{2}，不能混写为 x1、x2；指数与下标都用花括号明确范围。一个完整表达式放在同一对公式定界符内，不在括号、分式、根号或上下标中插入中文。短公式用 $...$；超过一个等号的连续推导、较长恒等式或复杂分式另起一段用 $$...$$，多步推导可用 aligned 在等号处换行。不要为了换行改变运算顺序。公式前后的中文与标点放在定界符外。输出前检查括号配对、定界符闭合及变量一致性；不能以语法正确代替数学推理正确。`;
 /** Presentation diagnostics, never algebraic correction or evidence of truth. */
 function prepareMathForDisplay(source, streaming = false) {
@@ -46,6 +47,8 @@ function prepareMathForDisplay(source, streaming = false) {
     if (streaming)
         return { content: opened < 0 ? content : `${content.slice(0, opened)}（公式正在补全…）`, issues: [] };
     const issues = [];
+    if ((0, formula_integrity_1.hasDamagedFormula)(source))
+        issues.push("公式原文疑似损坏，不能据此计算；请核对原题并重新识别或重试生成。");
     if (opened >= 0)
         issues.push("有一条公式尚未完整闭合，当前保留原文，请核对后再使用。");
     const math = [...prose.matchAll(/\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g)].map((match) => match[1] ?? match[2]).join("\n");

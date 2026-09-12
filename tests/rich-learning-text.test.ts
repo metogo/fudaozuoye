@@ -10,6 +10,7 @@ vi.mock("@/components/lazy-rich-learning-text", async () => ({
 }));
 import { LearningChat, chatJumpLabel, isSuggestionBelowViewport } from "@/components/learning-chat";
 import { LearningBoard } from "@/components/learning-board";
+import { LearningCopyButton } from "@/components/learning-copy-button";
 import { RichLearningText } from "@/components/rich-learning-text";
 import { STREAMING_FINISH_MS, STREAMING_SILENCE_MS, StreamingIndicator } from "@/components/streaming-indicator";
 import { understandingChoiceFromText } from "@/components/education-chat-app";
@@ -64,8 +65,10 @@ describe("AI 教学内容排版", () => {
     expect(active).toContain("streaming-indicator");
     expect(complete).not.toContain("streaming-indicator");
     expect(active).not.toContain('aria-label="复制讲解"');
-    expect(complete).toContain('aria-label="复制讲解"');
-    expect(complete).toContain('title="复制文本"');
+    expect(complete).toContain('copy-button-loading');
+    const copy = renderToStaticMarkup(createElement(LearningCopyButton, { proseRef: { current: null }, text: "完整讲解" }));
+    expect(copy).toContain('aria-label="复制讲解"');
+    expect(copy).toContain('title="复制文本"');
     expect(complete).not.toContain('aria-haspopup="menu"');
     expect(complete).not.toContain("复制图片");
     expect(complete).toContain("lesson-chat-shell");

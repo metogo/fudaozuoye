@@ -18,6 +18,20 @@ export function mapFixture(): ProblemKnowledgeMap {
   ] };
 }
 describe("本题知识图谱", () => {
+  it("截图中的旧原题与缓存即使相互匹配，也不能通过公式完整性校验", () => {
+    const damaged = "已知 sin B + sin C = 2 sin A cos C，且 b = 3，ΔABC的面积为 \frac{3 \root{3}{}}{2}，则a的长为多少？A. 3 oot{3}{} B. 2 oot{3}{} C. 3 D. oot{3}{}";
+    const map = mapFixture();
+    map.nodes.forEach(node => { node.evidence = damaged; });
+    const restored = JSON.parse(JSON.stringify(map));
+    expect(() => parseKnowledgeMap(restored, damaged)).toThrow("原题保存的公式已损坏");
+  });
+  it.each(["summary", "application"])("旧详情缓存的 %s 也必须校验，而不是只验证新模型响应", field => {
+    expect(() => parseKnowledgeDetail({ summary: "正常说明", application: "正常用途", [field]: "面积 rac{3 oot{3}{}}{2}" })).toThrow("公式已损坏");
+  });
+  it("完整嵌套分式与根号保持原样", () => {
+    const summary = String.raw`面积 $\frac{3\sqrt{3}}{2}$`;
+    expect(parseKnowledgeDetail({ summary, application: "用于计算面积" }).summary).toBe(summary);
+  });
   it("模型只选编号，由程序回填原文，保留上下标及公式", () => {
     const session = { problem: { text: "x₁²+x₂²=24；有两个实数根。" }, problemGuide: { goal: "求范围", keyClue: "两个实数根", approach: "判别式" } } as LearningSession;
     const segments = knowledgeEvidenceSegments(session);

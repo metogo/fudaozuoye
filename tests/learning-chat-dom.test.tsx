@@ -63,7 +63,7 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    view.rerender(<LearningChat {...props} session={{ ...rectangular, flow: { ...rectangular.flow, pathNodeIds: ["other-topic"] } }} messages={[{ ...lesson, status: "complete" }]}/>);
    expect(screen.queryByRole("region", { name: "长方形知识小实验" })).toBeNull();
  });
- it("进入对话即在消息前预留图谱，首页与缺图确认不显示", () => {
+ it("图谱保留在消息前的原位置；首页与缺图确认不显示", () => {
    const view = render(<LearningChat {...base}/>);
    expect(screen.queryByRole("region", { name: "本题知识脉络" })).toBeNull();
    const message: ChatMessage = { id: "q", role: "user", kind: "user", text: "一道新题", status: "complete", createdAt: new Date().toISOString() };
@@ -74,10 +74,20 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    view.rerender(<LearningChat {...base} busy messages={[message]} reviewProblem={{ ...session.problem, missingVisualInformation: ["缺少长边标注"] }}/>);
    expect(screen.queryByRole("region", { name: "本题知识脉络" })).toBeNull();
  });
- it("讲解仍在输出时自动图谱已经挂载，不等待 busy 结束", async () => {
-   const view = render(<LearningChat {...base} busy session={session} stateToken="token" messages={[{ id: "a", role: "assistant", kind: "assistant", text: "讲解继续", status: "streaming", createdAt: new Date().toISOString() }]}/>);
+ it("图谱原位等待首讲完成，之后生成，后续对话不重复卸载或改变位置", async () => {
+   const lesson: ChatMessage = { id: "a", role: "assistant", kind: "assistant", text: "讲解继续", status: "streaming", createdAt: new Date().toISOString() };
+   const props = { ...base, busy: true, session, stateToken: "token", messages: [lesson] };
+   const view = render(<LearningChat {...props}/>);
+   const pending = screen.getByRole("region", { name: "本题知识脉络" });
+   expect(pending.getAttribute("aria-busy")).toBe("true");
+   expect(pending.compareDocumentPosition(screen.getByText("讲解继续")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   view.rerender(<LearningChat {...props} messages={[{ ...lesson, status: "complete" }]}/>);
    expect(await screen.findByRole("button", { name: "展开本题知识图谱" })).not.toBeNull();
-   expect(screen.getByText("讲解继续")).not.toBeNull();
+   const map = screen.getByRole("region", { name: "本题知识脉络" });
+   expect(map.compareDocumentPosition(screen.getByText("讲解继续")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   view.rerender(<LearningChat {...props} messages={[{ ...lesson, status: "complete" }, { ...lesson, id: "later", text: "下一段讲解" }]}/>);
+   expect(screen.getByRole("region", { name: "本题知识脉络" })).toBe(map);
+   expect(map.compareDocumentPosition(screen.getByText("下一段讲解")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
    view.unmount();
  });
  it("首次读题只有一处等待状态，空流与入场提示不打断原位讲解", async () => {

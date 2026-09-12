@@ -7,9 +7,15 @@ exports.mapEvidence = mapEvidence;
 exports.visibleConceptIds = visibleConceptIds;
 exports.arrangeConcepts = arrangeConcepts;
 exports.parseMapPositions = parseMapPositions;
+const evidence_segments_1 = require("./evidence-segments");
+const formula_integrity_1 = require("./formula-integrity");
+const presentation_1 = require("./presentation");
 function parseKnowledgeDetail(value) {
     const detail = record(value);
-    return { summary: clean(detail.summary, 700), application: clean(detail.application, 700) };
+    const parsed = { summary: clean(detail.summary, 700), application: clean(detail.application, 700) };
+    (0, presentation_1.assertBalancedLearningMarkup)(parsed.summary, "知识说明");
+    (0, presentation_1.assertBalancedLearningMarkup)(parsed.application, "本题怎么用");
+    return parsed;
 }
 exports.relationLabel = { prerequisite: "需要先理解", application: "结合使用" };
 const record = (v) => {
@@ -20,11 +26,13 @@ const record = (v) => {
 const clean = (v, max) => {
     if (typeof v !== "string" || !v.trim() || v.length > max)
         throw new Error("知识图谱内容不完整或过长");
+    (0, formula_integrity_1.assertFormulaIntegrity)(v);
     return v.trim();
 };
 const compact = (v) => v.replace(/\s+/g, "");
 /** Validates a rooted DAG; layout direction always follows root → dependency. */
 function parseKnowledgeMap(value, evidenceSource, partial = false) {
+    (0, formula_integrity_1.assertFormulaIntegrity)(evidenceSource, formula_integrity_1.damagedProblemFormulaMessage);
     const raw = record(value);
     if (!Array.isArray(raw.nodes) || raw.nodes.length < (partial ? 1 : 2) || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24)
         throw new Error("知识图谱规模不合法");
@@ -34,7 +42,8 @@ function parseKnowledgeMap(value, evidenceSource, partial = false) {
         if (!/^[a-zA-Z0-9_-]+$/.test(id) || ["__proto__", "constructor", "prototype"].includes(id))
             throw new Error("知识点编号不合法");
         const evidence = typeof n.evidence === "string" ? n.evidence.trim() : "";
-        if (evidence.length > 240 || (evidence && !compact(evidenceSource).includes(compact(evidence))))
+        (0, formula_integrity_1.assertFormulaIntegrity)(evidence);
+        if (evidence.length > evidence_segments_1.MAX_EVIDENCE_LENGTH || (evidence && !compact(evidenceSource).includes(compact(evidence))))
             throw new Error("知识点引用未对应本题原文");
         return { id, title: clean(n.title, 30), summary: raw.overviewOnly === true ? "" : clean(n.summary, 360), application: raw.overviewOnly === true ? "" : clean(n.application, 360), evidence };
     });

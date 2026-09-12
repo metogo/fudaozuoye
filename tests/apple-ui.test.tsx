@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
 import { LearningChat, shouldShowChatJump } from "@/components/learning-chat";
 import { RichLearningText } from "@/components/rich-learning-text";
+import { StepBlank } from "@/components/step-blank";
 import { analyzeMock, recognizeMock } from "@/lib/learning/mock-engine";
 import { understandingGate } from "@/lib/learning/flow";
 
@@ -92,7 +93,8 @@ describe("悬浮设计系统保持学习流程", () => {
   it("答案展示后仍保留继续与提示，不恢复旧检查按钮", () => {
     const props = fixture();
     props.session!.flow.activeGate = { id: "blank", kind: "step_answer", title: "只完成这一个关键空", prompt: "补全判别式条件。", stepBlank: { before: "判别式满足", after: "。", hint: "回忆实根条件" }, stepAnswer: { answer: "$\\Delta\\geq0$", explanation: "有实数根" } };
-    const html = renderToStaticMarkup(<LearningChat {...props}/>);
+    expect(renderToStaticMarkup(<LearningChat {...props}/>)).toContain("正在加载步骤练习");
+    const html = renderToStaticMarkup(<StepBlank gate={props.session!.flow.activeGate} busy={false} onHint={() => {}} onContinue={() => {}}/>);
     for (const text of ["看懂了，继续", "给我一点提示", 'data-answer-revealed="true"', 'aria-label="修改这个空的答案"']) expect(html).toContain(text);
     expect(html).not.toContain("检查这一步");
   });

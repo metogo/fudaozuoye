@@ -24,6 +24,25 @@ const base = { session, stateToken: "token", open: false, onOpen: vi.fn(), onClo
 describe("对话前置图谱", () => {
   beforeEach(() => { localStorage.clear(); vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response())); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  it("首讲优先时原位占位但不发图谱请求，放行后只生成一次", async () => {
+    const view = render(<ConversationKnowledgeMap {...base} enabled={false}/>);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("region", { name: "本题知识脉络" }).getAttribute("aria-busy")).toBe("true");
+    view.rerender(<ConversationKnowledgeMap {...base} enabled/>);
+    await screen.findByText("已全部生成");
+    view.rerender(<ConversationKnowledgeMap {...base} enabled open stateToken="updated-token"/>);
+    await screen.findByRole("dialog");
+    view.rerender(<ConversationKnowledgeMap {...base} enabled stateToken="updated-token"/>);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("首讲未完成就切换新题时不泄漏旧题延后请求", async () => {
+    const view = render(<ConversationKnowledgeMap key="old" {...base} enabled={false}/>);
+    view.rerender(<ConversationKnowledgeMap key="new" {...base} session={{ ...session, requestId: "new" }} stateToken="new-token" enabled/>);
+    await screen.findByText("已全部生成");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).stateToken).toBe("new-token");
+  });
   it("无需点击即生成，完整缓存包含节点和连线，未打开全图也保存", async () => {
     render(<ConversationKnowledgeMap {...base}/>);
     expect(screen.getByRole("region", { name: "本题知识脉络" }).getAttribute("aria-busy")).toBe("true");

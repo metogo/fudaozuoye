@@ -1,4 +1,7 @@
 import type { LearningSession } from "./types";
+import { MAX_EVIDENCE_LENGTH } from "./evidence-segments";
+import { assertFormulaIntegrity, damagedProblemFormulaMessage } from "./formula-integrity";
+import { assertBalancedLearningMarkup } from "./presentation";
 
 export interface MapConcept {
   id: string;
@@ -24,7 +27,10 @@ export type MapPoint = { x: number; y: number };
 export interface KnowledgeDetail { summary: string; application: string }
 export function parseKnowledgeDetail(value: unknown): KnowledgeDetail {
   const detail = record(value);
-  return { summary: clean(detail.summary, 700), application: clean(detail.application, 700) };
+  const parsed = { summary: clean(detail.summary, 700), application: clean(detail.application, 700) };
+  assertBalancedLearningMarkup(parsed.summary, "知识说明");
+  assertBalancedLearningMarkup(parsed.application, "本题怎么用");
+  return parsed;
 }
 export const relationLabel = { prerequisite: "需要先理解", application: "结合使用" };
 const record = (v: unknown): Record<string, unknown> => {
@@ -33,12 +39,14 @@ const record = (v: unknown): Record<string, unknown> => {
 };
 const clean = (v: unknown, max: number) => {
   if (typeof v !== "string" || !v.trim() || v.length > max) throw new Error("知识图谱内容不完整或过长");
+  assertFormulaIntegrity(v);
   return v.trim();
 };
 const compact = (v: string) => v.replace(/\s+/g, "");
 
 /** Validates a rooted DAG; layout direction always follows root → dependency. */
 export function parseKnowledgeMap(value: unknown, evidenceSource: string, partial = false): ProblemKnowledgeMap {
+  assertFormulaIntegrity(evidenceSource, damagedProblemFormulaMessage);
   const raw = record(value);
   if (!Array.isArray(raw.nodes) || raw.nodes.length < (partial ? 1 : 2) || raw.nodes.length > 16 || !Array.isArray(raw.edges) || raw.edges.length > 24) throw new Error("知识图谱规模不合法");
   const nodes = raw.nodes.map((v) => {
@@ -46,7 +54,8 @@ export function parseKnowledgeMap(value: unknown, evidenceSource: string, partia
     const id = clean(n.id, 40);
     if (!/^[a-zA-Z0-9_-]+$/.test(id) || ["__proto__", "constructor", "prototype"].includes(id)) throw new Error("知识点编号不合法");
     const evidence = typeof n.evidence === "string" ? n.evidence.trim() : "";
-    if (evidence.length > 240 || (evidence && !compact(evidenceSource).includes(compact(evidence)))) throw new Error("知识点引用未对应本题原文");
+    assertFormulaIntegrity(evidence);
+    if (evidence.length > MAX_EVIDENCE_LENGTH || (evidence && !compact(evidenceSource).includes(compact(evidence)))) throw new Error("知识点引用未对应本题原文");
     return { id, title: clean(n.title, 30), summary: raw.overviewOnly === true ? "" : clean(n.summary, 360), application: raw.overviewOnly === true ? "" : clean(n.application, 360), evidence };
   });
   const ids = new Set(nodes.map(n => n.id));

@@ -10,16 +10,17 @@ import { useUiText } from "./ui-language";
 import { ArrowIcon, BookIcon } from "./icons";
 import styles from "./conversation-knowledge-map.module.css";
 import { ConversationMapPending } from "./conversation-map-pending";
+import { damagedProblemFormulaMessage } from "@/lib/learning/formula-integrity";
 
 const KnowledgeMapDialog = createOptionalLearningFeature<ComponentProps<typeof import("./problem-knowledge-map").KnowledgeMapDialog>>(() => import("./problem-knowledge-map").then(module => ({ default: module.KnowledgeMapDialog })), "知识图谱");
 
-export function ConversationKnowledgeMap({ session, stateToken, open, focus, onOpen, onClose, messages, hideGuide = false }: {
+export function ConversationKnowledgeMap({ session, stateToken, open, focus, onOpen, onClose, messages, hideGuide = false, enabled = true }: {
   session: LearningSession; stateToken: string; open: boolean; focus?: MapFocus;
-  messages?: ChatMessage[]; hideGuide?: boolean;
+  messages?: ChatMessage[]; hideGuide?: boolean; enabled?: boolean;
   onOpen: (focus?: MapFocus) => void; onClose: () => void;
 }) {
   const t = useUiText();
-  const generation = useKnowledgeMap(session, stateToken);
+  const generation = useKnowledgeMap(session, stateToken, enabled);
   const { map, plan, root, complete, error, retry } = generation;
   const count = map?.nodes.length ?? 0;
   const total = plan?.nodes.length ?? (complete ? count : null);
@@ -41,7 +42,7 @@ export function ConversationKnowledgeMap({ session, stateToken, open, focus, onO
         {keywords.map(node => <li key={node.id}><button type="button" data-knowledge-id={node.id} aria-label={t("查看知识点：{title}", { title: node.title })} onClick={() => onOpen({ id: node.id, title: node.title })}>{node.title}<span aria-hidden="true">↗</span></button></li>)}
       </ul> : !complete && !error ? <div className={styles.skeletonKeywords} aria-hidden="true"><span className={styles.skeleton}/><span className={styles.skeleton}/></div> : null}</div>
       <footer className={styles.footer}><button type="button" onClick={() => onOpen()} aria-label={t("展开本题知识图谱")} className={styles.expand}>{t("看看它们怎样关联")}<ArrowIcon/></button><span role="status" className={`${styles.status} ${!complete && !error ? styles.active : ""}`}><i/>{status}</span></footer>
-      {error && <div className={styles.error}><p role="alert">{t(error)}</p><button type="button" onClick={retry}>{t("重试生成")}</button></div>}
+      {error && <div className={styles.error}><p role="alert">{t(error)}</p>{error !== damagedProblemFormulaMessage && <button type="button" onClick={retry}>{t("重试生成")}</button>}</div>}
       {generation.storageNotice && <p className={styles.notice}>{t(generation.storageNotice)}</p>}
     </section>}
     {open && <KnowledgeMapDialog generation={generation} initialFocus={focus} onClose={onClose}/>}

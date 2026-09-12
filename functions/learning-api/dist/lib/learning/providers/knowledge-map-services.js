@@ -39,6 +39,7 @@ exports.generateKnowledgeDetail = generateKnowledgeDetail;
 const model_support_1 = require("./model-support");
 const knowledge_map_validation_1 = require("./knowledge-map-validation");
 const provider_text_request_1 = require("./provider-text-request");
+const knowledge_detail_stream_1 = require("./knowledge-detail-stream");
 async function streamMapWithContext(context, session, emit, onRoot) {
     const { streamKnowledgeMap } = await Promise.resolve().then(() => __importStar(require("./knowledge-map-stream")));
     try {
@@ -55,12 +56,8 @@ async function generateKnowledgeMap(session, request) {
     return (0, knowledge_map_validation_1.requestMapValue)((system, prompt, timeout) => request(system, prompt, undefined, true, timeout, undefined, 4800), knowledgeMapSystem, knowledgeMapPrompt(session), value => parseKnowledgeMap({ ...resolveKnowledgeEvidence(value, session), overviewOnly: true }, mapEvidence(session)), 40000);
 }
 async function generateKnowledgeDetail(session, map, nodeId, request) {
-    const { knowledgeDetailSystem, knowledgeMapPrompt } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
+    const { knowledgeDetailSystem } = await Promise.resolve().then(() => __importStar(require("./knowledge-map")));
     const { parseKnowledgeDetail } = await Promise.resolve().then(() => __importStar(require("../knowledge-map")));
-    const node = map.nodes.find(n => n.id === nodeId);
-    if (!node)
-        throw new Error("知识点不存在");
-    const relations = map.edges.filter(e => e.from === nodeId || e.to === nodeId).map(e => ({ ...e, from: map.nodes.find(n => n.id === e.from)?.title, to: map.nodes.find(n => n.id === e.to)?.title }));
-    const raw = await request(knowledgeDetailSystem, JSON.stringify({ original: knowledgeMapPrompt(session), node, relations }), undefined, true, 25000, undefined, 1400);
+    const raw = await request(knowledgeDetailSystem, (0, knowledge_detail_stream_1.knowledgeDetailPrompt)(session, map, nodeId), undefined, true, 25000, undefined, 1400);
     return parseKnowledgeDetail((0, model_support_1.parseJsonObject)(raw));
 }

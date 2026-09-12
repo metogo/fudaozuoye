@@ -2,6 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveProviderAdapter = exports.MockProviderAdapter = void 0;
 const knowledge_map_services_1 = require("./knowledge-map-services");
+const knowledge_detail_stream_1 = require("./knowledge-detail-stream");
+const node_practice_1 = require("./node-practice");
+const chat_preparation_1 = require("./chat-preparation");
 const problem_completeness_1 = require("../problem-completeness");
 const provider_validation_1 = require("./provider-validation");
 const math_quality_1 = require("../math-quality");
@@ -95,21 +98,8 @@ class LiveProviderAdapter {
         onPhase?.("ready", "题目已读懂，正在准备核心思路");
         return (0, provider_validation_2.pendingChatSession)(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
     }
-    async completeChatSession(session, imageDataUrl) {
-        const problem = session.problem;
-        (0, problem_completeness_1.assertProblemInformationComplete)(problem);
-        const { system, prompt } = (0, problem_image_analysis_1.problemSolutionRequest)(problem, Boolean(imageDataUrl));
-        const audited = imageDataUrl
-            ? await this.validatedJsonRequest(system, prompt, (value) => (0, problem_image_analysis_1.parseAuditedProblemSolution)(value, true, Boolean(problem.userRevised && problem.visualContext?.affectsSolving)), imageDataUrl)
-            : null;
-        if (audited)
-            (0, problem_image_analysis_1.assertConfirmedVisualFactsPreserved)(problem, audited.visualContext);
-        const result = audited?.solution ?? (this.config.protocol === "chat-completions"
-            ? await this.validatedStructuredRequest(system, prompt, (0, model_support_1.problemSolutionTool)(), provider_validation_2.parseProblemSolution)
-            : await this.validatedJsonRequest(system, prompt, provider_validation_2.parseProblemSolution));
-        const completedProblem = audited?.visualContext && !problem.userRevised ? { ...problem, visualContext: audited.visualContext } : problem;
-        const completed = (0, provider_validation_2.buildSession)(completedProblem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
-        return { ...completed, requestId: session.requestId, createdAt: session.createdAt };
+    async completeChatSession(session, imageDataUrl, onVisual) {
+        return (0, chat_preparation_1.completeChatPreparation)({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, this.validatedJsonRequest.bind(this), this.validatedStructuredRequest.bind(this), imageDataUrl, onVisual);
     }
     async diagnoseProblem(session, onPhase) {
         if (session.nodes.some((node) => node.kind === "concept")) {
@@ -394,10 +384,12 @@ class LiveProviderAdapter {
         return (0, learning_emphasis_1.parseLearningEmphasis)((0, model_support_1.parseJsonObject)(raw), source, (0, problem_evidence_1.problemEvidenceText)(session.problem));
     }
     generateKnowledgeMap(session) { return (0, knowledge_map_services_1.generateKnowledgeMap)(session, this.textRequest.bind(this)); }
+    generateNodePractice(session, concept, previous) { return (0, node_practice_1.generateNodePractice)(session, concept, previous, this.textRequest.bind(this)); }
     streamKnowledgeMap(session, emit, onRoot) {
         return (0, knowledge_map_services_1.streamMapWithContext)({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, emit, onRoot);
     }
     generateKnowledgeDetail(session, map, nodeId) { return (0, knowledge_map_services_1.generateKnowledgeDetail)(session, map, nodeId, this.textRequest.bind(this)); }
+    streamKnowledgeDetail(session, map, nodeId, emit) { return (0, knowledge_detail_stream_1.streamKnowledgeDetail)({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, map, nodeId, emit); }
     async transcribeStudentAnswer(imageDataUrl, taskPrompt) {
         return (0, student_response_1.transcribeStudentResponse)(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
     }

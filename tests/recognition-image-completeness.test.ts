@@ -64,6 +64,8 @@ describe.each(["chat-completions", "responses"] as const)("%s 识别链路", pro
     expect(body).toContain("不能凭这些词假定配图存在");
     expect(body).toContain("题干文字、公式、题号、文字列表、文本框和截图边框本身都不是配图");
     expect(body).toContain("题干句子中的数字和几何关系只保留在 text");
+    expect(body).toContain("使用紧凑 JSON");
+    expect(body).toContain("不得删字段、缩写题干、省略选项或改写学生作答");
   });
 
   it("缺少必要条件时识别成功，但准备和求解均禁止调用模型", async () => {

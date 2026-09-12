@@ -1,5 +1,6 @@
 import { useUiText } from "./ui-language";
 import styles from "./problem-knowledge-map.module.css";
+import { damagedProblemFormulaMessage } from "@/lib/learning/formula-integrity";
 
 export function KnowledgeMapProgress({ count, total, complete, error, latest, rootPreview = false, retry }: {
   count: number; total: number | null; complete: boolean; error: string; latest?: string; rootPreview?: boolean; retry: () => void;
@@ -14,7 +15,7 @@ export function KnowledgeMapProgress({ count, total, complete, error, latest, ro
       <div style={{ width: total ? `${count / total * 100}%` : "0%" }}/>
     </div>
     <div className={styles.progressCaption} role="status" aria-live="polite" aria-atomic="true">
-      {error ? <><span role="alert">{t(error)}</span><button onClick={retry}>{t("重试生成")}</button></> : <span>{complete ? t("点击知识点，看看它在本题中怎么用") : rootPreview ? t("核心知识已识别，正在梳理关联") : latest ? t("已生成 {count} / {total} · {latest}", { count, total: total ?? "?", latest }) : total ? t("清单已确定，正在整理根节点") : t("画布已就绪，知识点会陆续出现")}</span>}
+      {error ? <><span role="alert">{t(error)}</span>{error !== damagedProblemFormulaMessage && <button onClick={retry}>{t("重试生成")}</button>}</> : <span>{complete ? t("点击知识点，看看它在本题中怎么用") : rootPreview ? t("核心知识已识别，正在梳理关联") : latest ? t("已生成 {count} / {total} · {latest}", { count, total: total ?? "?", latest }) : total ? t("清单已确定，正在整理根节点") : t("画布已就绪，知识点会陆续出现")}</span>}
     </div>
   </div>;
 }

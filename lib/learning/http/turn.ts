@@ -1,6 +1,8 @@
+import { canRequestTransfer, streamReply, offerSuggestions, decideBoardPresentation, requestedBoardSuggestion, emitSafeCorrection, isAbortError, awaitOptional, emitState, needsPreparedAnswer, ensurePreparedAnswer, updateFlow, touch, currentConcept, requireGate } from "./turn-effects";
 import { stepSource } from "../step-exercise";
+import { prepareFirstTurn } from "../first-turn-preparation";
 import { advanceAfterMastery, fail } from "../api";
-import { answerGate, flowScopeLabel, needsHelpGate, postSolutionGate, removeRepeatedSolutionAction, solutionReviewGate, understandingGate } from "../flow";
+import { answerGate, flowScopeLabel, needsHelpGate, postSolutionGate, solutionReviewGate, understandingGate } from "../flow";
 import { mergeDirectKnowledge, mergeExpansion, nextReadyNode } from "../graph";
 import { teachingBandOf } from "../grade-pedagogy";
 import { requiresProblemImage } from "../problem-evidence";
@@ -9,13 +11,12 @@ import { createInstantBoardLesson } from "../providers/board";
 import { getIllustrationAvailability } from "../providers/config";
 import { illustrationFingerprint } from "../providers/illustration";
 import { safeAssessmentFeedback } from "../providers/assessment";
-import { PENDING_ORIGINAL_ANSWER } from "../providers/provider-validation";
 import { assertContentLength, assertRateLimit, assertSameOrigin } from "../request-guards";
 import { mergePreparedAnswer } from "../session-preparation";
-import { consentRateIdentity, createIllustrationReceipt, hasValidIllustrationReceipt, openSession, toClientState } from "../server-state";
+import { consentRateIdentity, createIllustrationReceipt, hasValidIllustrationReceipt, openSession } from "../server-state";
 import { createGroundedRecallCheck, solutionRecallCheck } from "../solution-recall";
 import { assertDetailedSolution } from "../solution-quality";
-import type { AssessmentEvidence, BoardSuggestion, LearningChoice, LearningGateKind, LearningSession, LearningTurnInput, SuggestedQuestion, TutorScope } from "../types";
+import type { AssessmentEvidence, LearningChoice, LearningSession, LearningTurnInput } from "../types";
 import { sse } from "./sse";
 import { cleanText, parseTurnRequest } from "./turn-request";
 import { appendUnique, pathLabels, requireImage } from "./turn-support";
@@ -126,24 +127,38 @@ async function handleImageAnswer(session: LearningSession, gateId: string, image
 async function startLearning(session: LearningSession, adapter: Adapter, send: Send, signal: AbortSignal, imageDataUrl?: string) {
   if (session.flow.stage !== "intake" || session.flow.activeGate) throw new Error("本题已经开始学习");
   send("flow.milestone", { key: "problem_understood", label: "先抓住这道题的核心" });
-  let teachingSession = session;
-  const completion = imageDataUrl ? null : adapter.completeChatSession(session).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error }),
-  );
-  if (imageDataUrl) teachingSession = mergePreparedAnswer(session, await adapter.completeChatSession(session, imageDataUrl));
+  const startedAt = Date.now();
+  const preparation = prepareFirstTurn(session, adapter, imageDataUrl);
+  let teachingSession = await preparation.ready;
+  if (imageDataUrl) send("perf.phase", { key: "visual_audited", elapsedMs: Date.now() - startedAt });
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
   const teachingImage = teachingSession.problem.visualContext?.related && teachingSession.problem.visualContext.affectsSolving ? imageDataUrl : undefined;
+  let completedMessage: unknown;
+  const lessonSend: Send = (event, data) => {
+    if (imageDataUrl && event === "message.complete") completedMessage = data;
+    else send(event, data);
+  };
   const sourceText = await streamReply(
     teachingSession,
     { kind: "problem", section: "keyClue" },
     "这是本题首次讲解。请依次说明题目要解决什么、最关键的已知条件、第一突破口；不要公布最终答案，也不要完整代做。内容要有清晰层次，最后只问一个帮助学生迈出第一步的问题。",
     adapter,
-    send,
+    lessonSend,
     signal,
     teachingImage,
     "problem",
-  );
+    preparation.start,
+  ).catch(async error => {
+    if (imageDataUrl) { const result = await preparation.completion; if (!result.ok) throw result.error; }
+    throw error;
+  });
+  if (imageDataUrl) {
+    const result = await preparation.completion;
+    if (!result.ok) throw result.error;
+    teachingSession = mergePreparedAnswer(teachingSession, result.value);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (completedMessage) send("message.complete", completedMessage);
+  }
   const provisional = updateFlow({
     ...teachingSession,
     problemGuide: { ...teachingSession.problemGuide, approach: sourceText },
@@ -157,8 +172,8 @@ async function startLearning(session: LearningSession, adapter: Adapter, send: S
   send("flow.ready", { stage: provisional.flow.stage, gateId: provisional.flow.activeGate?.id });
 
   const withSuggestions = await offerSuggestions(provisional, provisional.flow.focus, sourceText, adapter, send, signal);
-  if (!completion) return;
-  const result = await completion;
+  if (imageDataUrl) return;
+  const result = await preparation.completion;
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
   if (!result.ok) {
     if (isAbortError(result.error)) throw result.error;
@@ -669,145 +684,4 @@ function offerOriginalAnswer(session: LearningSession, send: Send, label: string
     ),
     remediationCount: 0,
   }), send);
-}
-
-function canRequestTransfer(session: LearningSession) {
-  if (session.flow.stage === "complete") return session.originalPassed || session.transferPassed;
-  return session.flow.solutionRecallPassed && ["solution_recall", "reviewed_complete"].includes(session.flow.stage);
-}
-
-async function streamReply(session: LearningSession, scope: TutorScope, question: string, adapter: Adapter, send: Send, signal: AbortSignal, imageDataUrl?: string, imageRole: "problem" | "student" = "student"): Promise<string> {
-  let emitted = false;
-  const heading = `### ${flowScopeLabel(session, scope)}\n\n`;
-  let content = heading;
-  send("message.delta", { text: heading });
-  await adapter.streamTutorReply(session, scope, question, (text) => { emitted = emitted || Boolean(text); content += text; send("message.delta", { text }); }, signal, imageDataUrl, imageRole);
-  if (!emitted) throw new Error("模型没有返回有效讲解");
-  send("message.complete", { scopeLabel: flowScopeLabel(session, scope) });
-  return content;
-}
-
-async function offerSuggestions(session: LearningSession, scope: TutorScope, sourceText: string, adapter: Adapter, send: Send, signal: AbortSignal): Promise<LearningSession> {
-  let suggestions: SuggestedQuestion[] = [];
-  try {
-    suggestions = await awaitOptional(adapter.suggestQuestions(session, scope, sourceText), signal, 8_000, () => adapter.cancelPendingRequests());
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-  }
-  const next = updateFlow(session, { suggestedQuestions: suggestions });
-  if (suggestions.length) send("flow.suggestions", { suggestions });
-  emitState(next, send);
-  return next;
-}
-
-async function decideBoardPresentation(session: LearningSession, scope: TutorScope, adapter: Adapter, send: Send, signal: AbortSignal): Promise<BoardSuggestion | null> {
-  if (signal.aborted) return null;
-  try {
-    const suggestion = await awaitOptional(adapter.decideBoardPresentation(session, scope), signal, 8_000, () => adapter.cancelPendingRequests());
-    const previous = session.flow.boardSuggestion;
-    const repeatedForSameFocus = previous?.recommended === true && suggestion.recommended && sameScope(session.flow.focus, scope);
-    if (suggestion.recommended && !repeatedForSameFocus) send("presentation.suggestion", suggestion);
-    return suggestion;
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-    send("presentation.unavailable", { message: "板书呈现判断暂时不可用，不影响继续学习" });
-    return null;
-  }
-}
-
-function requestedBoardSuggestion(session: LearningSession): BoardSuggestion {
-  const current = session.flow.boardSuggestion;
-  if (current?.recommended) return current;
-  const focus = session.flow.focus;
-  const node = focus.kind === "node"
-    ? session.nodes.find((item) => item.id === focus.nodeId && item.kind === "concept")
-    : null;
-  const context = `${session.problem.text}\n${node?.title ?? ""}\n${node?.diagnosticEvidence ?? ""}`;
-  const layout: BoardSuggestion["layout"] = /比较|对比|区别|相同|不同|变化前|变化后/.test(context)
-    ? "comparison"
-    : /方程|函数|公式|化学式|反应式|=|＋|－|×|÷/.test(context)
-      ? "formula"
-      : /如图|图形|几何|三角|四边|圆|角|坐标|光路|透镜|电路|受力|杠杆/.test(context)
-        ? "relation"
-        : "steps";
-  return {
-    recommended: true,
-    reason: "按你的选择，把当前步骤的条件、关系、推理顺序和易错点整理到同一张板书中。",
-    layout,
-  };
-}
-
-function emitSafeCorrection(send: Send, text: string, scopeLabel: string) {
-  send("message.delta", { text });
-  send("message.complete", { scopeLabel });
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError"
-    || error instanceof Error && error.name === "AbortError";
-}
-
-function sameScope(first: TutorScope, second: TutorScope) {
-  if (first.kind !== second.kind) return false;
-  if (first.kind === "node" && second.kind === "node") return first.nodeId === second.nodeId;
-  return first.kind === "problem" && second.kind === "problem" && first.section === second.section;
-}
-
-async function awaitOptional<T>(operation: Promise<T>, signal: AbortSignal, timeoutMs = 60_000, cancelOperation: () => void = () => undefined): Promise<T> {
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cancelOperation();
-      finish(() => reject(new Error("可选能力响应超时")));
-    }, timeoutMs);
-    const abort = () => finish(() => reject(new DOMException("Aborted", "AbortError")));
-    const finish = (complete: () => void) => {
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", abort);
-      complete();
-    };
-    signal.addEventListener("abort", abort, { once: true });
-    operation.then((value) => finish(() => resolve(value)), (error) => finish(() => reject(error)));
-  });
-}
-
-function emitState(session: LearningSession, send: Send) {
-  if (!session.flow.activeGate && !["intake", "complete", "reviewed_complete"].includes(session.flow.stage)) {
-    throw new Error("下一步学习任务未准备完整，请重试当前操作");
-  }
-  if (session.flow.pathNodeIds.length > 0) send("path.updated", { nodeIds: session.flow.pathNodeIds, labels: pathLabels(session, session.flow.pathNodeIds) });
-  if (session.flow.activeGate) send("flow.gate", session.flow.activeGate);
-  send("flow.update", toClientState(session));
-}
-
-function needsPreparedAnswer(input: LearningTurnInput): boolean {
-  if (input.type === "answer" || input.type === "image_answer" || input.type === "retry_original") return true;
-  return input.type === "choose" && (input.choice === "retry_original" || input.choice === "view_illustration");
-}
-
-async function ensurePreparedAnswer(session: LearningSession, adapter: Adapter): Promise<LearningSession> {
-  const root = session.nodes.find((node) => node.id === session.rootNodeId);
-  if (!root) throw new Error("学习会话缺少原题节点");
-  if (root.check.answer !== PENDING_ORIGINAL_ANSWER) return session;
-  if (requiresProblemImage(session.problem)) throw new Error("原题图片尚未完成联合分析，请重新提交题目照片");
-  return mergePreparedAnswer(session, await adapter.completeChatSession(session));
-}
-
-function updateFlow(session: LearningSession, patch: Partial<LearningSession["flow"]>): LearningSession {
-  return touch({ ...session, flow: removeRepeatedSolutionAction({ ...session.flow, suggestedQuestions: [], ...patch }) });
-}
-
-function touch(session: LearningSession): LearningSession {
-  return { ...session, updatedAt: new Date().toISOString() };
-}
-
-function currentConcept(session: LearningSession) {
-  return session.nodes.find((item) => item.id === session.currentNodeId && item.kind === "concept") ?? null;
-}
-
-function requireGate(session: LearningSession, gateId: string, expected?: LearningGateKind) {
-  const gate = session.flow.activeGate;
-  if (!gate || gate.id !== gateId) throw new Error("当前学习任务已变化，请按页面最新提示继续");
-  if (expected && gate.kind !== expected) throw new Error("当前学习任务不接受这个操作");
-  return gate;
 }

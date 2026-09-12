@@ -33,7 +33,8 @@ describe("实时模型适配器请求边界", () => {
     await expect(responseAdapter["textRequest"]("system", "prompt", undefined, true)).resolves.toBe("{\"ok\":true}");
     expect(bodies[0]).toHaveProperty("messages.1.content.0", { type: "image_url", image_url: { url: "data:image/png;base64,AA==" } });
     expect(bodies[0].response_format).toEqual({ type: "json_object" });
-    expect(bodies[1]).toMatchObject({ store: false, instructions: "system" });
+    expect(bodies[1]).toMatchObject({ store: false, instructions: expect.stringContaining("system\nJSON 公式协议") });
+    expect(bodies[0]).toHaveProperty("messages.0.content", expect.stringContaining("JSON 公式协议"));
   });
 
   it("普通 JSON 校验失败时只修复一次，并允许调用方做受控恢复", async () => {

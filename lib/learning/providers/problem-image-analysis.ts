@@ -45,6 +45,7 @@ export function problemRecognitionPrompt(): [string, string] {
   instructions[0] += "\n配图专指题干正文之外独立可见的图形、图表或结构示意。题干文字、公式、题号、文字列表、文本框和截图边框本身都不是配图。必须先确认照片中真的存在这样的视觉对象，再判断它是否属于本题；不能根据文字描述在脑中构造图形后声称照片里有图。";
   instructions[0] += "\nprinted_label 只表示附着于真实图形、标注线、刻度或图表对象的标签；题干句子中的数字和几何关系只保留在 text，不得复制进 visualContext.facts。纯文字照片必须 related=false、affectsSolving=false、facts=[]，无论文字是否含‘如图’；是否缺少解题条件另由 missingVisualInformation 表达。";
   instructions[1] += completenessInstruction;
+  instructions[1] += "\n使用紧凑 JSON，省略字符串外的缩进和换行。只压缩传输格式：不得删字段、缩写题干、省略选项或改写学生作答；字符串内必要的换行与公式仍完整保留并正确转义。";
   return instructions;
 }
 
@@ -66,11 +67,15 @@ export function problemSolutionRequest(problem: ProblemSnapshot, auditImage: boo
 }
 
 export function parseAuditedProblemSolution(value: JsonObject, requireModelConfidence = true, expectedAffectsSolving = false): { solution: ReturnType<typeof parseProblemSolution>; visualContext: ProblemVisualContext } {
-  const visualContext = parseProblemVisualContext(value.visualContext);
+  return { solution: parseProblemSolution(value), visualContext: parseAuditedVisualContext(value.visualContext, requireModelConfidence, expectedAffectsSolving) };
+}
+
+export function parseAuditedVisualContext(value: unknown, requireModelConfidence = true, expectedAffectsSolving = false): ProblemVisualContext {
+  const visualContext = parseProblemVisualContext(value);
   if (!visualContext) throw new Error("多模态分析缺少题图复核结果");
   if (expectedAffectsSolving && (!visualContext.related || !visualContext.affectsSolving || visualContext.facts.length === 0)) throw new Error("多模态复核丢失了当前题目必需的题图条件");
   if (requireModelConfidence && visualContext.related && visualContext.affectsSolving && (visualContext.confidence < 0.82 || visualContext.facts.some((fact) => fact.confidence < 0.82))) throw new Error("题图中的关键条件仍不清楚，请确认图中信息或重新拍摄");
-  return { solution: parseProblemSolution(value), visualContext };
+  return visualContext;
 }
 
 export function assertConfirmedVisualFactsPreserved(problem: ProblemSnapshot, audited: ProblemVisualContext): void {

@@ -1,0 +1,16 @@
+.folds :global(.learning-pitfalls) { margin: 20px 0 8px; border-top: 1px solid #dfe8e2; }
+.folds :global(.learning-pitfalls-toggle) {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 52px; padding: 12px 2px; cursor: pointer; list-style: none;
+  font-size: 15px; font-weight: 600; color: #426b5a;
+}
+.folds :global(.learning-pitfalls-toggle)::-webkit-details-marker { display: none; }
+.folds :global(.learning-pitfalls-toggle)::after {
+  content: ""; width: 8px; height: 8px; flex-shrink: 0; margin-right: 6px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform 180ms ease;
+}
+.folds :global(.learning-pitfalls[open] > summary)::after { transform: rotate(225deg); }
+.folds :global(.learning-pitfalls-toggle):focus-visible { outline: 2px solid #429d82; outline-offset: 3px; border-radius: 6px; }
+.folds :global(.learning-pitfalls-body) { padding: 0 2px 8px; }
+@media (prefers-reduced-motion: reduce) { .folds :global(.learning-pitfalls-toggle)::after { transition: none; } }

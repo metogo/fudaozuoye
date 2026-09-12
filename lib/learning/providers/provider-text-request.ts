@@ -7,6 +7,7 @@ import { fetchWithTransientRetry } from "./transient-fetch";
 export interface TextRequestContext { config: ProviderConfig; fetcher: typeof fetch; requests: RequestControllerRegistry; signal?: AbortSignal }
 
 export async function requestModelText(context: TextRequestContext, system: string, prompt: string, imageDataUrl?: string, jsonMode = false, timeoutMs = 60_000, externalSignal?: AbortSignal, maxTokens = 3000, onDelta?: (text: string) => void): Promise<string> {
+    const instructions = jsonMode ? `${system}\n${jsonMathInstruction}` : system;
     const controller = new AbortController();
     const release = context.requests.track(controller);
     const abort = () => controller.abort();
@@ -20,8 +21,8 @@ export async function requestModelText(context: TextRequestContext, system: stri
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${context.config.apiKey}` },
         body: JSON.stringify({ ...(context.config.protocol === "responses"
-          ? responsesBody(context.config.modelId, system, prompt, imageDataUrl, maxTokens)
-          : chatBody(context.config.modelId, system, prompt, imageDataUrl, jsonMode, context.config.id === "doubao", maxTokens)), ...(onDelta ? { stream: true } : {}) }),
+          ? responsesBody(context.config.modelId, instructions, prompt, imageDataUrl, maxTokens)
+          : chatBody(context.config.modelId, instructions, prompt, imageDataUrl, jsonMode, context.config.id === "doubao", maxTokens)), ...(onDelta ? { stream: true } : {}) }),
         signal: controller.signal,
       });
       if (!response.ok) throw providerError(`模型请求失败（${response.status}）`, response.status === 429 ? 429 : 502);
@@ -33,6 +34,8 @@ export async function requestModelText(context: TextRequestContext, system: stri
       throw error;
     } finally { controller.abort(); clearTimeout(timeout); externalSignal?.removeEventListener("abort", abort); context.signal?.removeEventListener("abort", abort); release(); }
 }
+
+const jsonMathInstruction = String.raw`JSON 公式协议：所有文本字段中的完整公式使用 $...$ 或 $$...$$。严格按 JSON 转义反斜杠：公式 \frac{1}{2} 在 JSON 字符串中写成 "$\\frac{1}{2}$"；公式换行命令的两个反斜杠在 JSON 中写成四个反斜杠。不得输出控制字符代替公式命令，不得把公式拆开到不同字段。`;
 
 async function readTextStream(response: Response, protocol: ProviderConfig["protocol"], onDelta: (text: string) => void) {
   if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("模型未建立流式连接");

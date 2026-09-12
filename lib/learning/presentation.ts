@@ -41,7 +41,8 @@ export function normalizeStandardLatexDelimiters(source: string, streaming = fal
   return source.split(protectedMarkdownPattern)
     .map((part, index) => index % 2 === 1 ? part : part
       .replace(/\\\[([\s\S]*?)\\\]/g, (_, latex: string) => `\n\n$$\n${latex.trim()}\n$$\n\n`)
-      .replace(/\\\(([^\n]*?)\\\)/g, (_, latex: string) => `$${latex.trim()}$`))
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_, latex: string) => latex.includes("\n")
+        ? `\n\n$$\n${latex.trim()}\n$$\n\n` : `$${latex.trim()}$`))
     .join("");
 }
 

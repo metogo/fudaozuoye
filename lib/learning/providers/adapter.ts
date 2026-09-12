@@ -1,4 +1,7 @@
 import { generateKnowledgeMap, generateKnowledgeDetail, streamMapWithContext } from "./knowledge-map-services";
+import { streamKnowledgeDetail } from "./knowledge-detail-stream";
+import { generateNodePractice } from "./node-practice";
+import { completeChatPreparation } from "./chat-preparation";
 import { assertProblemInformationComplete } from "../problem-completeness";
 import { repairContext } from "./provider-validation";
 import { mathOutputInstruction } from "../math-quality";
@@ -33,7 +36,6 @@ import {
   extractToolArguments,
   parseJsonObject,
   parseSimilarCheck,
-  problemSolutionTool,
   responsesBody,
   selectionOutputExample,
   selectionSystemPrompt,
@@ -47,8 +49,8 @@ import { RequestControllerRegistry } from "./request-controller-registry";
 import { deterministicAnswerMatch, safeAssessmentFeedback } from "./assessment";
 import { transcribeStudentResponse } from "./student-response";
 import { fetchWithTransientRetry } from "./transient-fetch";
-import { assertBlueprintBatchUnique, buildSession, edgeReason, evidenceCandidates, expansionEvidenceSources, expansionSelectionOptions, isRecoverableReasonGroundingError, NonRepairableValidationError, normalizeBlueprintDetail, parseBoardSuggestion, parseInitialAnalysisSelection, parseProblem, parseProblemSolution, parseTextProblem, pendingChatSession, problemEvidenceSources } from "./provider-validation";
-import { assertConfirmedVisualFactsPreserved, parseAuditedProblemSolution, problemRecognitionPrompt, problemSolutionRequest, tutorImageInstruction } from "./problem-image-analysis";
+import { assertBlueprintBatchUnique, buildSession, edgeReason, evidenceCandidates, expansionEvidenceSources, expansionSelectionOptions, isRecoverableReasonGroundingError, NonRepairableValidationError, normalizeBlueprintDetail, parseBoardSuggestion, parseInitialAnalysisSelection, parseProblem, parseTextProblem, pendingChatSession, problemEvidenceSources } from "./provider-validation";
+import { problemRecognitionPrompt, tutorImageInstruction } from "./problem-image-analysis";
 import { generateValidatedSolution, streamValidatedSolution } from "./solution";
 import { generateGeneralTeaching } from "./general-teaching";
 import { generalTeachingTool } from "../teaching-program";
@@ -143,25 +145,8 @@ export class LiveProviderAdapter implements ProviderAdapter {
     return pendingChatSession(problem, this.id, this.reasoningLevel, this.modelId, this.mode);
   }
 
-  async completeChatSession(session: LearningSession, imageDataUrl?: string): Promise<LearningSession> {
-    const problem = session.problem;
-    assertProblemInformationComplete(problem);
-    const { system, prompt } = problemSolutionRequest(problem, Boolean(imageDataUrl));
-    const audited = imageDataUrl
-      ? await this.validatedJsonRequest(
-        system,
-        prompt,
-        (value) => parseAuditedProblemSolution(value, true, Boolean(problem.userRevised && problem.visualContext?.affectsSolving)),
-        imageDataUrl,
-      )
-      : null;
-    if (audited) assertConfirmedVisualFactsPreserved(problem, audited.visualContext);
-    const result = audited?.solution ?? (this.config.protocol === "chat-completions"
-      ? await this.validatedStructuredRequest(system, prompt, problemSolutionTool(), parseProblemSolution)
-      : await this.validatedJsonRequest(system, prompt, parseProblemSolution));
-    const completedProblem = audited?.visualContext && !problem.userRevised ? { ...problem, visualContext: audited.visualContext } : problem;
-    const completed = buildSession(completedProblem, this.id, this.reasoningLevel, this.modelId, [], result.originalAnswer, result.originalExplanation, session.problemGuide);
-    return { ...completed, requestId: session.requestId, createdAt: session.createdAt };
+  async completeChatSession(session: LearningSession, imageDataUrl?: string, onVisual?: (visual: import("../types").ProblemVisualContext) => void): Promise<LearningSession> {
+    return completeChatPreparation({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, this.validatedJsonRequest.bind(this), this.validatedStructuredRequest.bind(this), imageDataUrl, onVisual);
   }
 
   async diagnoseProblem(session: LearningSession, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }> {
@@ -526,14 +511,15 @@ export class LiveProviderAdapter implements ProviderAdapter {
     return parseLearningEmphasis(parseJsonObject(raw), source, problemEvidenceText(session.problem));
   }
   generateKnowledgeMap(session: LearningSession) { return generateKnowledgeMap(session, this.textRequest.bind(this)); }
+  generateNodePractice(session: LearningSession, concept: import("../knowledge-map").MapConcept, previous: string[]) { return generateNodePractice(session, concept, previous, this.textRequest.bind(this)); }
   streamKnowledgeMap(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void, onRoot?: (root: import("../knowledge-map").MapConcept | null) => void) {
     return streamMapWithContext({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, emit, onRoot);
   }
   generateKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string) { return generateKnowledgeDetail(session, map, nodeId, this.textRequest.bind(this)); }
+  streamKnowledgeDetail(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string, emit: (summary: string) => void) { return streamKnowledgeDetail({ config: this.config, fetcher: this.fetcher, requests: this.requests, signal: this.requestSignal }, session, map, nodeId, emit); }
   async transcribeStudentAnswer(imageDataUrl: string, taskPrompt: string): Promise<{ text: string; confidence: number }> {
     return transcribeStudentResponse(taskPrompt, (system, prompt) => this.textRequest(system, prompt, imageDataUrl, true));
   }
-
   async decideBoardPresentation(session: LearningSession, scope: TutorScope): Promise<BoardSuggestion> {
     const node = scope.kind === "node" ? session.nodes.find((item) => item.id === scope.nodeId && item.kind === "concept") : null;
     const system = "你是 K12 教学呈现决策器。只判断当前一步是否因为图形、空间、多个条件关系、公式推导或对比结构而需要切换为全屏结构化板书。简单的一句话解释或单步计算必须返回 recommended=false。不得求解，不得输出答案。";

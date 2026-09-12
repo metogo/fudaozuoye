@@ -4,6 +4,7 @@ exports.requestMapValue = requestMapValue;
 exports.validateMapPlan = validateMapPlan;
 exports.validateMapRelations = validateMapRelations;
 const knowledge_map_1 = require("../knowledge-map");
+const evidence_segments_1 = require("../evidence-segments");
 const knowledge_map_stream_1 = require("../knowledge-map-stream");
 const knowledge_map_2 = require("./knowledge-map");
 const model_support_1 = require("./model-support");
@@ -39,7 +40,7 @@ function validateMapPlan(value, session) {
         if (typeof node.title !== "string" || !node.title.trim() || node.title.length > 30 || titles.has(node.title.trim()))
             throw new Error("知识清单名称不完整或重复");
         titles.add(node.title.trim());
-        if (node.evidence.length > 240 || (node.evidence && !source.includes(node.evidence.replace(/\s+/g, ""))))
+        if (node.evidence.length > evidence_segments_1.MAX_EVIDENCE_LENGTH || (node.evidence && !source.includes(node.evidence.replace(/\s+/g, ""))))
             throw new Error("知识点引用未对应本题原文");
         if ((index === 0 || plan.nodes[index].parents.includes(plan.rootId)) && !node.evidence)
             throw new Error(`知识点${node.id}缺少有效evidenceId，请从原题证据清单选择，不得编造`);

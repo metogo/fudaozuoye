@@ -9,8 +9,11 @@ import { prepareMathForDisplay } from "@/lib/learning/math-quality";
 import { rehypeReadableMath } from "@/lib/learning/rehype-readable-math";
 import { remarkLearningEmphasis } from "@/lib/learning/remark-learning-emphasis";
 import type { LearningEmphasis } from "@/lib/learning/learning-emphasis";
+import { rehypePitfallSections } from "@/lib/learning/rehype-pitfall-sections";
+import pitfallStyles from "./pitfall-sections.module.css";
 
 interface RichLearningTextProps {
+  collapsePitfalls?: boolean;
   emphasis?: LearningEmphasis[];
   text: string;
   compact?: boolean;
@@ -57,7 +60,7 @@ const compactComponents: Components = {
   hr: () => null,
 };
 
-export const RichLearningText = memo(function RichLearningText({ text, compact = false, streaming = false, autoMath = true, trailing, emphasis }: RichLearningTextProps) {
+export const RichLearningText = memo(function RichLearningText({ text, compact = false, streaming = false, autoMath = true, trailing, emphasis, collapsePitfalls = false }: RichLearningTextProps) {
   const Root = compact ? "span" : "div";
   const { content, issues } = useMemo(() => autoMath ? prepareMathForDisplay(text, streaming) : { content: text, issues: [] }, [autoMath, text, streaming]);
   // A plain arithmetic display can use the interface's bold numeral face.
@@ -67,8 +70,8 @@ export const RichLearningText = memo(function RichLearningText({ text, compact =
     const arithmetic = source.replace(/\\text\{[^{}\\]{1,12}\}/g, "").replace(/\\(?:times|div|cdot)\b/g, "*");
     return /\d/.test(arithmetic) && /^[\d\s+\-−×÷*=.,():（）]+$/.test(arithmetic);
   });
-  return <Root data-arithmetic-displays={arithmeticDisplays || undefined} className={`rich-learning-text ${compact ? "rich-learning-text--compact" : ""} ${streaming ? "chat-streaming-text" : ""} ${trailing ? "rich-learning-text--with-trailing" : ""}`}>
-    <MarkdownBody content={content} compact={compact} emphasis={streaming ? undefined : emphasis}/>
+  return <Root data-arithmetic-displays={arithmeticDisplays || undefined} className={`rich-learning-text ${collapsePitfalls ? pitfallStyles.folds : ""} ${compact ? "rich-learning-text--compact" : ""} ${streaming ? "chat-streaming-text" : ""} ${trailing ? "rich-learning-text--with-trailing" : ""}`}>
+    <MarkdownBody content={content} compact={compact} emphasis={streaming ? undefined : emphasis} collapsePitfalls={collapsePitfalls}/>
     {issues.length > 0 && (compact
       ? <span className="math-format-note" title={issues.join(" ")}>（公式写法需核对）</span>
       : <details className="math-format-note"><summary>公式写法需核对</summary>{issues.map((issue) => <p key={issue}>{issue}</p>)}</details>)}
@@ -77,11 +80,11 @@ export const RichLearningText = memo(function RichLearningText({ text, compact =
 });
 
 // Indicator/clipboard state must not reparse unchanged Markdown and formulas.
-const MarkdownBody = memo(function MarkdownBody({ content, compact, emphasis }: { content: string; compact: boolean; emphasis?: LearningEmphasis[] }) {
+const MarkdownBody = memo(function MarkdownBody({ content, compact, emphasis, collapsePitfalls }: { content: string; compact: boolean; emphasis?: LearningEmphasis[]; collapsePitfalls: boolean }) {
   return <ReactMarkdown
       skipHtml
       remarkPlugins={[remarkMath, [remarkLearningEmphasis, { source: content, marks: emphasis ?? [] }]]}
-      rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, trust: false, maxExpand: 200, maxSize: 20 }], rehypeReadableMath]}
+      rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, trust: false, maxExpand: 200, maxSize: 20 }], rehypeReadableMath, [rehypePitfallSections, { enabled: collapsePitfalls && !compact }]]}
       components={compact ? compactComponents : standardComponents}
     >
       {content}

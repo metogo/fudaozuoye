@@ -1,5 +1,7 @@
 "use client";
 
+import "@/app/board-course.css";
+
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { loadingLearningQuotes } from "@/lib/learning/quotes";
 import { learningTextToPlainText } from "@/lib/learning/presentation";

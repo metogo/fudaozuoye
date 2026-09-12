@@ -102,7 +102,7 @@ export function EducationChatApp() {
   // quote selection, draft input and export dialog), not only fresh messages.
   const [chatUiEpoch, setChatUiEpoch] = useState(0);
   const recordQuestionEntry = useQuestionEntryReporting(ready, chatUiEpoch);
-  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<{ file: File; replaceProblem: boolean } | null>(null);
   const [responseCrop, setResponseCrop] = useState<{
     file: File;
     intent: "answer" | "question";
@@ -520,7 +520,8 @@ export function EducationChatApp() {
     );
   };
 
-  const receiveImage = async (blob: Blob, previewUrl: string) => {
+  const receiveImage = async (blob: Blob, previewUrl: string, replaceProblem = false) => {
+    if (replaceProblem) reset();
     previewUrlsRef.current.push(previewUrl);
     setCropFile(null);
     setPendingImage(blob);
@@ -543,7 +544,7 @@ export function EducationChatApp() {
       };
       pendingImageMessageIdRef.current = message.id;
       addMessage(message);
-      if (!session && messages.length === 0) recordQuestionEntry();
+      if (!replaceProblem && !session && messages.length === 0) recordQuestionEntry();
     }
     await recognizeImage(blob);
   };
@@ -1339,10 +1340,9 @@ export function EducationChatApp() {
         retryMessageId={retryMessageId}
         reviewProblem={reviewProblem}
         onReasoningLevel={selectReasoningLevel}
-        onFile={(file) => {
-          setNotice("");
-          clearRetry();
-          setCropFile(file);
+        onFile={(file, replaceProblem = false) => {
+          if (!replaceProblem) { setNotice(""); clearRetry(); }
+          setCropFile({ file, replaceProblem });
         }}
         onResponsePhoto={(file, intent) => {
           setNotice("");
@@ -1376,8 +1376,8 @@ export function EducationChatApp() {
       />
       {cropFile && (
         <ImageCropper
-          file={cropFile}
-          onConfirm={receiveImage}
+          file={cropFile.file}
+          onConfirm={(blob, previewUrl) => receiveImage(blob, previewUrl, cropFile.replaceProblem)}
           onCancel={() => setCropFile(null)}
         />
       )}{" "}

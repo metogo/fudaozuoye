@@ -16,9 +16,10 @@ import { CommaCompanion } from "./comma-companion";
 import { HomeWelcomeHero } from "./home-welcome-hero";
 import { RichLearningText, preloadLearningText } from "./lazy-rich-learning-text";
 import { CopyableLearningText } from "./copyable-learning-text";
-import { StepBlank } from "./step-blank";
 import { QuoteComposerMotion } from "./quote-composer-motion";
 import { useQuoteScrollDismiss } from "./use-quote-scroll-dismiss";
+import { useReadingHeader } from "./use-reading-header";
+import headerStyles from "./reading-header.module.css";
 import { SelectionHint } from "./selection-hint";
 import { observeChatEdgeFade } from "@/lib/learning/chat-edge-fade";
 import { MessageTime } from "./message-time";
@@ -28,8 +29,10 @@ import { ConversationMapPending } from "./conversation-map-pending";
 import { FirstExplanationPending, hasExplanationBody } from "./first-explanation-pending";
 import readingStyles from "./first-explanation-pending.module.css";
 import { OriginalQuestion } from "./original-question";
+import { RepairOriginalQuestion } from "./repair-original-question";
 import { supportsRectangleExperiment } from "@/lib/learning/rectangle-experiment";
 import type { MapFocus } from "@/lib/learning/knowledge-map-preview";
+const StepBlank = createOptionalLearningFeature<ComponentProps<typeof import("./step-blank").StepBlank>>(() => import("./step-blank").then(module => ({ default: module.StepBlank })), "步骤练习");
 const ConversationExport = createOptionalLearningFeature<ComponentProps<typeof import("./conversation-export").ConversationExport>>(() => import("./conversation-export").then(module => ({ default: module.ConversationExport })), "对话导出");
 const ConversationKnowledgeMap = createOptionalLearningFeature<ComponentProps<typeof import("./conversation-knowledge-map").ConversationKnowledgeMap>>(() => import("./conversation-knowledge-map").then(module => ({ default: module.ConversationKnowledgeMap })), "知识图谱", <ConversationMapPending/>);
 const SelectionAsk = createOptionalLearningFeature<ComponentProps<typeof import("./selection-ask").SelectionAsk>>(() => import("./selection-ask").then(module => ({ default: module.SelectionAsk })), "划词提问", null);
@@ -52,7 +55,7 @@ interface LearningChatProps {
   retryMessageId?: string | null;
   reviewProblem: ProblemSnapshot | null;
   onReasoningLevel: (level: ReasoningLevel) => void;
-  onFile: (file: File) => void;
+  onFile: (file: File, replaceProblem?: boolean) => void;
   onResponsePhoto: (file: File, intent: "answer" | "question") => void;
   onWhiteboard: (intent: "answer" | "question") => void;
   onSend: (text: string) => void;
@@ -82,6 +85,7 @@ export function LearningChat(props: LearningChatProps) {
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const [questionGateId, setQuestionGateId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
   const composerRef = useRef<HTMLFormElement | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -102,6 +106,7 @@ export function LearningChat(props: LearningChatProps) {
   const currentTask = gate && !hasPendingRetry ? currentTaskCopy(props.session, gate, questionMode) : null;
   const canAttach = !props.session && !props.busy && !props.reviewProblem;
   const isHome = !props.session && props.messages.length === 0 && !props.reviewProblem;
+  useReadingHeader(scrollRef, headerRef, !isHome, props.session?.requestId ?? "pending");
   const edgeFadeEnabled = !isHome && !quote;
   useEffect(() => {
     const area = scrollRef.current, dock = composerDockRef.current;
@@ -114,6 +119,7 @@ export function LearningChat(props: LearningChatProps) {
   const hasWritingChatStream = props.messages.some((message) => message.surface !== "board" && message.role === "assistant" && message.status === "streaming");
   const visibleChatMessages = useMemo(() => props.messages.filter((message) => message.surface !== "board"), [props.messages]);
   const initialReading = props.busy && !hasPendingRetry && !props.reviewProblem && !visibleChatMessages.some(message => message.role === "assistant" && message.kind === "assistant" && (hasExplanationBody(message.text) || message.status === "error"));
+  const firstLessonComplete = visibleChatMessages.some(message => message.role === "assistant" && message.kind === "assistant" && message.status === "complete" && hasExplanationBody(message.text));
   const firstMessage = visibleChatMessages[0];
   const originalQuestion = firstMessage?.role === "user" && !firstMessage.reference && firstMessage.status !== "error" && !props.reviewProblem
     && !(props.retryLabel && props.retryMessageId === firstMessage.id) ? firstMessage : null;
@@ -278,8 +284,8 @@ export function LearningChat(props: LearningChatProps) {
     area.scrollTo({ top: area.scrollHeight, behavior: "smooth" });
   };
 
-  return <main className={`learning-chat-shell mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden ${isHome ? "home-chat-shell" : "lesson-chat-shell bg-[#f7f6f2]"}`}>
-    <header className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
+  return <main className={`${headerStyles.shell} learning-chat-shell mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden ${isHome ? "home-chat-shell" : "lesson-chat-shell bg-[#f7f6f2]"}`}>
+    <header ref={headerRef} className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <CommaCompanion className="brand-mark" thinking={props.busy} canCelebrate={!props.notice && !hasPendingRetry}/>
         {isHome && <span className="home-brand text-xs font-semibold tracking-wide text-stone-600">{t("专注作业")}</span>}
@@ -295,8 +301,9 @@ export function LearningChat(props: LearningChatProps) {
     <div ref={scrollRef} tabIndex={-1} aria-label={t("对话内容")} onScroll={updateScrollState} className={`chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 sm:px-6 ${isHome ? "home-chat-scroll pb-5 pt-0" : "pb-7 pt-5"}`}>
       {isHome ? <EmptyConversation ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         {originalQuestion && <OriginalQuestion key={originalQuestion.id} message={originalQuestion} problem={props.session?.problem}/>}
+        {originalQuestion && <RepairOriginalQuestion key={`repair:${originalQuestion.id}`} message={originalQuestion} problem={props.session?.problem} busy={props.busy} onFile={props.onFile}/>}
         {!props.reviewProblem && (props.session && props.stateToken
-          ? <ConversationKnowledgeMap key={`${props.session.requestId}:${JSON.stringify(props.session.problem)}`} session={props.session} stateToken={props.stateToken} messages={visibleChatMessages} hideGuide={solutionDisplay === "locked"} open={knowledgeMapOpen} focus={knowledgeMapFocus} onOpen={openKnowledgeMap} onClose={() => setKnowledgeMapOpen(false)}/>
+          ? <ConversationKnowledgeMap key={`${props.session.requestId}:${JSON.stringify(props.session.problem)}`} session={props.session} stateToken={props.stateToken} enabled={firstLessonComplete || knowledgeMapOpen} messages={visibleChatMessages} hideGuide={solutionDisplay === "locked"} open={knowledgeMapOpen} focus={knowledgeMapFocus} onOpen={openKnowledgeMap} onClose={() => setKnowledgeMapOpen(false)}/>
           : props.busy && !props.session ? <ConversationMapPending/> : null)}
         <MessageList messages={visibleChatMessages} initialReading={Boolean(initialReading)} originalQuestionId={originalQuestion?.id} solutionDisplay={solutionDisplay} retryMessageId={props.retryLabel ? props.retryMessageId : null} busy={props.busy} onRetry={props.retryLabel ? props.onRetry : undefined}/>
         {props.reviewProblem && (props.reviewProblem.missingVisualInformation?.length

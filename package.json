@@ -20,6 +20,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:performance": "node scripts/performance-audit.mjs",
+    "test:e2e:isolated": "npm run build:function && npm run build && node scripts/product-qa.mjs && node scripts/verify-formula-browser.mjs",
+    "test:e2e:model-smoke": "node scripts/model-journey-qa.mjs",
     "test:real-model": "node scripts/real-model-regression.mjs",
     "test:e2e:real-users": "node --env-file=.env.local scripts/real-user-e2e.mjs",
     "test:e2e:board": "node --env-file=.env.local scripts/board-stage-a-e2e.mjs",

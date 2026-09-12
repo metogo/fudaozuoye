@@ -2,6 +2,22 @@
 export type UiLocale = "zh" | "en";
 export const UI_LOCALE_KEY = "education-ui-locale";
 export const englishUiCopy: Record<string, string> = {
+  "步骤练习": "Step practice",
+  "已保存的题目公式损坏，请用原图重新识别。旧讲解可能受影响，请勿据此计算。": "The saved problem contains damaged formulas. Read the original image again. The old explanation may be affected; do not calculate from it.",
+  "用原图重新识别": "Read the original image again",
+  "确认重新识别": "Confirm re-reading",
+  "重新识别将重置本题学习进度，并重新生成讲解和知识图谱。": "Re-reading resets this problem's progress and generates a new explanation and knowledge map.",
+  "正在读取原图…": "Loading the original image…",
+  "原图读取失败，请重新上传原图。": "Could not read the original image. Please upload it again.",
+  "原图不可用，请重新上传原图；当前对话未改动。": "The original image is unavailable. Please upload it again; your conversation has not changed.",
+  "原题保存的公式已损坏，请返回对话核对原图并重新识别；重试图谱无法修复原题。": "The saved problem contains damaged formulas. Return to the conversation and read the original image again; retrying the map cannot repair the source.",
+  "再看这一步": "Let's review this step",
+  "知识讲解": "Concept explanation",
+  "知识点小练习": "Concept practice", "从理解到运用": "From understanding to application", "用一道题，试试这个知识点": "Try one question on this concept", "收起练习": "Collapse practice",
+  "本题 → {concept} → 小练习": "This problem → {concept} → Practice", "继续这道练习": "Resume practice", "练一道": "Try a question", "AI 原创练习 · 非真题": "AI-generated practice · Not a past exam question",
+  "换一道练习": "Try another question", "正在换题，当前练习会保留": "Preparing another question. Your current practice is kept.", "正在出题并核对答案…": "Preparing and checking the question…",
+  "暂未获得合适的练习，不影响原题学习。": "A suitable question is unavailable. Your lesson is unaffected.", "重试练习": "Retry practice", "核对思路": "Check reasoning",
+  "这次选对了，看看依据": "Correct. Let's look at why.", "参考答案：{answer}": "Reference answer: {answer}", "带回原题": "Connect back to your problem", "只检验当前知识点，不改变原题学习进度。": "Practice this concept without changing your lesson progress.",
   "问这句": "Ask about this", "哪段没懂？轻点正文，选中后问小逗号。": "Something unclear? Tap a paragraph to select it and ask Comma.", "关闭长按提问提示": "Dismiss selection hint",
   "小实验": "Mini-experiment", "知识图谱": "Knowledge map", "对话导出": "Conversation export", "划词提问": "Selection questions",
   "{feature}暂时不可用": "{feature} is temporarily unavailable",

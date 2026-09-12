@@ -8,6 +8,13 @@ it("首次提示可关闭，重新挂载不反复出现，不提供新的选句�
   const close = await screen.findByRole("button", { name: "关闭长按提问提示" });
   expect(screen.getByText("哪段没懂？轻点正文，选中后问小逗号。")).toBeTruthy();
   expect(localStorage.getItem("learning-selection-hint-v1")).toBe("seen");
-  fireEvent.click(close); view.unmount(); render(<SelectionHint/>);
+  fireEvent(window, new Event("learning-selection-used"));
+  const hint = close.closest("aside")!;
+  expect(hint.style.visibility).toBe("hidden");
+  expect(hint.getAttribute("aria-hidden")).toBe("true");
+  expect(screen.queryByRole("button")).toBeNull();
+  fireEvent.click(close);
+  expect(view.container.querySelector("aside")).toBeNull();
+  view.unmount(); render(<SelectionHint/>);
   expect(screen.queryByRole("button")).toBeNull();
 });

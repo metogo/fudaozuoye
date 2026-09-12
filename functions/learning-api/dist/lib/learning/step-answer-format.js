@@ -8,6 +8,9 @@ function prepareStepAnswerMarkdown(source) {
     const value = source.trim();
     if (!value || /[$`]/.test(value) || /\\[()[\]]/.test(value))
         return source;
+    // Multiple-choice labels are prose, not variables in one giant expression.
+    if (/(?:^|\s)[A-H][.．、]\s/.test(value))
+        return source;
     const commands = value.match(/\\[A-Za-z]+/g);
     if (!commands?.length)
         return source;

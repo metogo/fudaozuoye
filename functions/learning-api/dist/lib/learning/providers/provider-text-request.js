@@ -5,6 +5,7 @@ const errors_1 = require("../errors");
 const model_support_1 = require("./model-support");
 const transient_fetch_1 = require("./transient-fetch");
 async function requestModelText(context, system, prompt, imageDataUrl, jsonMode = false, timeoutMs = 60_000, externalSignal, maxTokens = 3000, onDelta) {
+    const instructions = jsonMode ? `${system}\n${jsonMathInstruction}` : system;
     const controller = new AbortController();
     const release = context.requests.track(controller);
     const abort = () => controller.abort();
@@ -19,8 +20,8 @@ async function requestModelText(context, system, prompt, imageDataUrl, jsonMode 
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${context.config.apiKey}` },
             body: JSON.stringify({ ...(context.config.protocol === "responses"
-                    ? (0, model_support_1.responsesBody)(context.config.modelId, system, prompt, imageDataUrl, maxTokens)
-                    : (0, model_support_1.chatBody)(context.config.modelId, system, prompt, imageDataUrl, jsonMode, context.config.id === "doubao", maxTokens)), ...(onDelta ? { stream: true } : {}) }),
+                    ? (0, model_support_1.responsesBody)(context.config.modelId, instructions, prompt, imageDataUrl, maxTokens)
+                    : (0, model_support_1.chatBody)(context.config.modelId, instructions, prompt, imageDataUrl, jsonMode, context.config.id === "doubao", maxTokens)), ...(onDelta ? { stream: true } : {}) }),
             signal: controller.signal,
         });
         if (!response.ok)
@@ -43,6 +44,7 @@ async function requestModelText(context, system, prompt, imageDataUrl, jsonMode 
         release();
     }
 }
+const jsonMathInstruction = String.raw `JSON 公式协议：所有文本字段中的完整公式使用 $...$ 或 $$...$$。严格按 JSON 转义反斜杠：公式 \frac{1}{2} 在 JSON 字符串中写成 "$\\frac{1}{2}$"；公式换行命令的两个反斜杠在 JSON 中写成四个反斜杠。不得输出控制字符代替公式命令，不得把公式拆开到不同字段。`;
 async function readTextStream(response, protocol, onDelta) {
     if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream"))
         throw new Error("模型未建立流式连接");

@@ -4,6 +4,8 @@ import { assertContentLength, assertRateLimit, assertSameOrigin } from "../reque
 import { consentRateIdentity, openSession } from "../server-state";
 import { mapEvidence, parseKnowledgeMap } from "../knowledge-map";
 import { knowledgeMapResponse } from "./knowledge-map-stream";
+import { knowledgeDetailResponse } from "./knowledge-detail-stream";
+import { assertFormulaIntegrity, damagedProblemFormulaMessage } from "../formula-integrity";
 
 export async function postKnowledgeMap(request: Request): Promise<Response> {
   try {
@@ -12,12 +14,17 @@ export async function postKnowledgeMap(request: Request): Promise<Response> {
     assertRateLimit(request, 12, `knowledge-map:${consentRateIdentity(request) ?? request.headers.get("x-real-ip") ?? "local"}`);
     const body = await request.json() as Record<string, unknown>;
     const session = openSession(body.stateToken);
+    assertFormulaIntegrity(mapEvidence(session), damagedProblemFormulaMessage);
     // The progressive response owns its plan-sized deadline; detail/legacy requests remain bounded separately.
     const signal = body.stream === true && body.nodeId === undefined ? request.signal : AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
     const adapter = getSessionProviderAdapter(session, signal);
     if (body.nodeId !== undefined) {
       const map = parseKnowledgeMap(body.map, mapEvidence(session), body.partial === true);
       if (typeof body.nodeId !== "string" || !map.nodes.some(n => n.id === body.nodeId)) throw new Error("知识点不存在");
+      if (body.stream === true) {
+        if (!adapter.streamKnowledgeDetail) throw new Error("当前模型暂不支持流式知识详情");
+        return knowledgeDetailResponse(adapter, session, map, body.nodeId, signal);
+      }
       if (!adapter.generateKnowledgeDetail) throw new Error("当前模型暂不支持知识详情");
       const detail = await adapter.generateKnowledgeDetail(session, map, body.nodeId);
       return Response.json({ detail }, { headers: { "Cache-Control": "no-store" } });

@@ -43,7 +43,8 @@ function normalizeStandardLatexDelimiters(source, streaming = false) {
     return source.split(protectedMarkdownPattern)
         .map((part, index) => index % 2 === 1 ? part : part
         .replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `\n\n$$\n${latex.trim()}\n$$\n\n`)
-        .replace(/\\\(([^\n]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`))
+        .replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => latex.includes("\n")
+        ? `\n\n$$\n${latex.trim()}\n$$\n\n` : `$${latex.trim()}$`))
         .join("");
 }
 function hasUnclosedCodeFence(source) {

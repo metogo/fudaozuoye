@@ -4,6 +4,8 @@
 export function prepareStepAnswerMarkdown(source: string): string {
   const value = source.trim();
   if (!value || /[$`]/.test(value) || /\\[()[\]]/.test(value)) return source;
+  // Multiple-choice labels are prose, not variables in one giant expression.
+  if (/(?:^|\s)[A-H][.．、]\s/.test(value)) return source;
   const commands = value.match(/\\[A-Za-z]+/g);
   if (!commands?.length) return source;
   const known = /^(?:geq?|leq?|neq?|approx|equiv|in|notin|subset(?:eq)?|supset(?:eq)?|pm|mp|times|div|cdot|frac|dfrac|tfrac|sqrt|Delta|delta|alpha|beta|gamma|theta|pi|infty|left|right|sin|cos|tan|log|ln)$/;

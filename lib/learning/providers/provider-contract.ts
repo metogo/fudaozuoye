@@ -4,6 +4,8 @@ import type { BoardConversationMessage, BoardLesson, BoardSuggestion, CheckItem,
 
 export type AnalysisPhaseReporter = (key: string, label: string) => void;
 export interface ProviderAdapter {
+  streamKnowledgeDetail?(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string, emit: (summary: string) => void): Promise<import("../knowledge-map").KnowledgeDetail>;
+  generateNodePractice?(session: LearningSession, concept: import("../knowledge-map").MapConcept, previous: string[]): Promise<import("../node-practice").NodePractice>;
   streamKnowledgeMap?(session: LearningSession, emit: (event: import("../knowledge-map-stream").KnowledgeMapEvent) => void, onRoot?: (root: import("../knowledge-map").MapConcept | null) => void): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
   generateKnowledgeMap?(session: LearningSession): Promise<import("../knowledge-map").ProblemKnowledgeMap>;
   generateKnowledgeDetail?(session: LearningSession, map: import("../knowledge-map").ProblemKnowledgeMap, nodeId: string): Promise<import("../knowledge-map").KnowledgeDetail>;
@@ -15,7 +17,7 @@ export interface ProviderAdapter {
   recognizeProblem(imageDataUrl: string, subject?: ProblemSnapshot["subject"], gradeBand?: ProblemSnapshot["gradeBand"]): Promise<ProblemSnapshot>;
   recognizeTextProblem(text: string): Promise<ProblemSnapshot>;
   prepareChatSession(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
-  completeChatSession(session: LearningSession, imageDataUrl?: string): Promise<LearningSession>;
+  completeChatSession(session: LearningSession, imageDataUrl?: string, onVisual?: (visual: import("../types").ProblemVisualContext) => void): Promise<LearningSession>;
   diagnoseProblem(session: LearningSession, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;
   analyzeProblem(problem: ProblemSnapshot, onPhase?: AnalysisPhaseReporter): Promise<LearningSession>;
   expandNode(session: LearningSession, targetNodeId: string, onPhase?: AnalysisPhaseReporter): Promise<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }>;

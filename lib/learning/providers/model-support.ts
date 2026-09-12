@@ -1,5 +1,7 @@
 import { gradeTeachingInstruction } from "../grade-pedagogy";
 import { mathOutputInstruction } from "../math-quality";
+import { teachingAccuracyInstruction } from "./teaching-accuracy";
+import { hasDamagedFormula } from "../formula-integrity";
 import { ServiceError } from "../errors";
 import type { CheckItem, GradeBand, KnowledgeNode } from "../types";
 import type { ProviderConfig } from "./config";
@@ -209,6 +211,7 @@ export function parseJsonObject(raw: string): JsonObject {
     if (repaired === prepared) throw error;
     parsed = JSON.parse(repaired);
   }
+  assertNoDamagedFormula(parsed);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("模型没有返回 JSON 对象");
   return parsed as JsonObject;
 }
@@ -217,7 +220,7 @@ const LATEX_COMMANDS = new Set([
   "alpha", "angle", "approx", "bar", "begin", "beta", "binom", "bmod", "bottom", "boxed", "bullet", "cdot", "chi", "circ", "cos",
   "delta", "dfrac", "epsilon", "eta", "frac", "gamma", "geq", "infty", "int", "kappa", "lambda", "left", "leq", "ln", "log", "mu",
   "nabla", "neq", "nleq", "not", "notin", "nu", "omega", "operatorname", "overline", "phi", "pi", "prod", "psi", "qquad",
-  "rho", "right", "rightarrow", "sigma", "sqrt", "sum", "tan", "tau", "text", "tfrac", "theta", "therefore", "times", "top",
+  "rho", "right", "root", "rightarrow", "sigma", "sqrt", "sum", "tan", "tau", "text", "tfrac", "theta", "therefore", "times", "top",
   "triangle", "underline", "upsilon", "vec", "xi", "zeta",
 ]);
 const LATEX_FIELDS = new Set(["formula", "expression"]);
@@ -249,6 +252,9 @@ function escapeModelLatexBackslashes(value: string): string {
       continue;
     }
     const next = value[index + 1] ?? "";
+    // Standard TeX delimiters are math contexts too, not just dollar signs.
+    if (next === "(" || next === "[") inMath = true;
+    if (next === ")" || next === "]") inMath = false;
     if (next === "\\" || next === '"' || next === "/") {
       output += character + next;
       index += 1;
@@ -260,13 +266,26 @@ function escapeModelLatexBackslashes(value: string): string {
       continue;
     }
     const command = value.slice(index + 1).match(/^[A-Za-z]+/)?.[0] ?? "";
-    if (command && LATEX_COMMANDS.has(command) && (inMath || latexField)) {
+    // OCR often emits bare commands in prose. A braced argument establishes
+    // TeX syntax without reinterpreting ordinary JSON newlines/tabs or paths.
+    const bracedCommand = /^[ \t]*\{/.test(value.slice(index + 1 + command.length));
+    if (command && LATEX_COMMANDS.has(command) && (inMath || latexField || bracedCommand)) {
       output += "\\\\";
       continue;
     }
     output += character;
   }
   return output;
+}
+
+function assertNoDamagedFormula(value: unknown): void {
+  if (typeof value === "string") {
+    // Already decoded controls have lost provenance; never guess their meaning.
+    if (hasDamagedFormula(value)) {
+      throw new Error("模型公式转义损坏，请重新生成并使用正确的 JSON 反斜杠转义");
+    }
+  } else if (Array.isArray(value)) value.forEach(assertNoDamagedFormula);
+  else if (value && typeof value === "object") Object.values(value).forEach(assertNoDamagedFormula);
 }
 
 function isLatexValueField(prefix: string): boolean {
@@ -313,6 +332,7 @@ function escapeInvalidJsonStringBackslashes(value: string): string {
 export function solutionSystemPrompt(learnerBand: GradeBand = "junior"): string {
   return [
     mathOutputInstruction,
+    teachingAccuracyInstruction,
     "你是面向学生的 K12 解题老师。学生明确要求查看完整讲解，因此必须给出足够详细、可以从头跟做的完整过程，不能只给结论或压缩成几句关系式。使用中性、非羞辱性语言，不评价学生能力，也不扩展无关知识。",
     "使用清晰 Markdown 组织讲解，并严格依次使用四个三级标题：“### 解题思路”“### 分步推导”“### 结论”“### 易错提醒”。不得改名、合并或省略标题。分步推导使用有序列表完整展开每一步，并解释关键等式、定理或条件如何得到；题目有多个小问时必须逐问作答，并用“第1问”“第2问”等小标题明确分开。不使用表格、HTML 或分隔线。",
     "推导不得跳过决定答案的中间步骤。几何题交代对应关系和判定依据；物理题写公式、代入、单位和物理含义；化学题说明组成、反应或计量依据；生物题写清结构功能、实验变量或反馈过程；语文、英语、历史、地理、政治题必须逐字引用材料证据，并解释证据怎样支持结论。",

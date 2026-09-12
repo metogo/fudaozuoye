@@ -6,11 +6,12 @@ import { mapEvidence, parseKnowledgeMap, type MapConcept, type MapPoint, type Pr
 import { applyMapEvent, finishMapDraft, readMapStream, type KnowledgeMapDraft, type KnowledgeMapEvent } from "@/lib/learning/knowledge-map-stream";
 import type { LearningSession } from "@/lib/learning/types";
 import { createMapDeadline } from "@/lib/learning/knowledge-map-deadline";
+import { damagedProblemFormulaMessage, hasDamagedFormula } from "@/lib/learning/formula-integrity";
 
 export interface SavedMap { identity: string; map: ProblemKnowledgeMap; positions?: Record<string, MapPoint>; expanded?: string[]; viewport?: Viewport }
 const empty: KnowledgeMapDraft = { plan: null, map: null };
 
-export function useKnowledgeMap(session: LearningSession, stateToken: string) {
+export function useKnowledgeMap(session: LearningSession, stateToken: string, enabled = true) {
   const [snapshot] = useState(() => ({ session, stateToken, identity: JSON.stringify(session.problem), key: "problem-knowledge-map-v2:" + session.requestId }));
   const [draft, setDraft] = useState(empty);
   const [root, setRoot] = useState<MapConcept | null>(null);
@@ -21,11 +22,18 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
   const [attempt, setAttempt] = useState(0);
   const [storageNotice, setStorageNotice] = useState("");
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     let deadline: ReturnType<typeof createMapDeadline> | undefined;
     let active = true;
     const run = async () => {
       const evidence = mapEvidence(snapshot.session);
+      // A matching cache identity is not proof that the saved original is intact.
+      if (hasDamagedFormula(evidence)) {
+        setDraft(empty); setRoot(null); setSaved(null); setComplete(false);
+        setError(damagedProblemFormulaMessage);
+        return;
+      }
       try {
         const raw = localStorage.getItem(snapshot.key);
         if (raw && raw.length < 100000) {
@@ -72,7 +80,7 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string) {
     };
     const start = setTimeout(() => { void run(); }, 0);
     return () => { active = false; clearTimeout(start); deadline?.clear(); controller.abort(); };
-  }, [snapshot, attempt]);
+  }, [snapshot, attempt, enabled]);
   const save = useCallback((data: Omit<SavedMap, "identity">) => {
     if (!complete) return; // Partial graphs must never masquerade as a complete cache.
     savedLayout.current = { ...data, identity: snapshot.identity };

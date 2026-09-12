@@ -7,7 +7,29 @@ vi.mock("@/lib/learning/server-state", () => ({ openSession: vi.fn(), consentRat
 vi.mock("@/lib/learning/request-guards", () => ({ assertSameOrigin: vi.fn(), assertRateLimit: vi.fn(), assertContentLength: vi.fn() }));
 const request = () => new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed" }) });
 describe("图谱独立只读接口", () => {
+  it.each([false, true])("旧签名原题公式损坏时不调用模型（stream=%s）", async (stream) => {
+    const session = { problem: { text: "面积为 \frac{3 \root{3}{}}{2}" } };
+    vi.mocked(openSession).mockReturnValue(session as never);
+    const before = JSON.stringify(session);
+    const response = await postKnowledgeMap(new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed", stream }) }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.message).toContain("原题保存的公式已损坏");
+    expect(getSessionProviderAdapter).not.toHaveBeenCalled();
+    expect(JSON.stringify(session)).toBe(before);
+  });
   afterEach(() => vi.resetAllMocks());
+  it("详情流式请求仍先验证原题，使用同一次模型生成", async () => {
+    const session = { problem: { text: "两个实数根" } };
+    vi.mocked(openSession).mockReturnValue(session as never);
+    const streamKnowledgeDetail = vi.fn(async (_session, _map, _id, emit) => { emit("完整概述"); return { summary: "完整概述", application: "本题用途" }; });
+    vi.mocked(getSessionProviderAdapter).mockReturnValue({ streamKnowledgeDetail, cancelPendingRequests: vi.fn() } as never);
+    const map = { version: 1, overviewOnly: true, rootId: "core", nodes: [{ id: "core", title: "判别式", evidence: "两个实数根" }], edges: [] };
+    const response = await postKnowledgeMap(new Request("http://localhost/api/learning/knowledge-map", { method: "POST", body: JSON.stringify({ stateToken: "sealed", stream: true, partial: true, nodeId: "core", map }) }));
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    const text = await response.text();
+    expect(text).toContain("detail.summary"); expect(text).toContain("event: complete");
+    expect(streamKnowledgeDetail).toHaveBeenCalledOnce();
+  });
   it("使用已签名会话而非客户端伪造题目，且不回写进度", async () => {
     const session = { problem: { text: "signed original" }, flow: { activeGate: { id: "gate-1" } } };
     vi.mocked(openSession).mockReturnValue(session as never);
@@ -64,5 +86,5 @@ describe("图谱独立只读接口", () => {
     expect((await postKnowledgeMap(detailRequest("core"))).status).toBe(400);
     expect(generateKnowledgeDetail).toHaveBeenCalledTimes(1);
   });
-  it("模型失败只返回可重试错误，不生成假图谱", async () => { vi.mocked(openSession).mockReturnValue({} as never); vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeMap: vi.fn().mockRejectedValue(new Error("模型请求失败")) } as never); const body = await (await postKnowledgeMap(request())).json(); expect(body.data).toBeNull(); expect(body.error.message).toBe("模型请求失败"); });
+  it("模型失败只返回可重试错误，不生成假图谱", async () => { vi.mocked(openSession).mockReturnValue({ problem: { text: "正常原题" } } as never); vi.mocked(getSessionProviderAdapter).mockReturnValue({ generateKnowledgeMap: vi.fn().mockRejectedValue(new Error("模型请求失败")) } as never); const body = await (await postKnowledgeMap(request())).json(); expect(body.data).toBeNull(); expect(body.error.message).toBe("模型请求失败"); });
 });

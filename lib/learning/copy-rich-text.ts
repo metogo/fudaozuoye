@@ -37,7 +37,7 @@ function plainText(node: Node, protect: (text: string) => string, listDepth = 0)
     return `\n${indent}${marker} ${content.trim()}\n`;
   }
   if (isList) return `\n${content}\n`;
-  if (/^(P|H[1-6]|BLOCKQUOTE|DIV)$/.test(element.tagName)) return `\n\n${content.trim()}\n\n`;
+  if (/^(P|H[1-6]|BLOCKQUOTE|DIV|SUMMARY|DETAILS)$/.test(element.tagName)) return `\n\n${content.trim()}\n\n`;
   return content;
 }
 
@@ -86,6 +86,15 @@ export function buildLearningClipboardContent(source: HTMLElement): LearningClip
     copies[index].replaceWith(formula);
   });
 
+  // A collapsed reading affordance must never hide content in pasted documents.
+  originals.forEach((element, index) => {
+    if (!element.matches("details.learning-pitfalls")) return;
+    const block = source.ownerDocument.createElement("div");
+    block.append(...Array.from(copies[index].childNodes));
+    const summary = block.querySelector("summary");
+    if (summary) { const heading = source.ownerDocument.createElement("h3"); heading.append(...Array.from(summary.childNodes)); summary.replaceWith(heading); }
+    copies[index].replaceWith(block);
+  });
   return {
     html: clone.outerHTML,
     text: learningPlainText(source),

@@ -1,0 +1,15 @@
+.shell[data-reading-header] { position: relative; }
+.shell[data-reading-header] > :global(.chat-header) {
+  position: absolute; inset: 0 0 auto;
+  transition: transform 220ms ease, opacity 180ms ease;
+}
+.shell[data-reading-header] > :global(.chat-header[data-reading-hidden="true"]) {
+  transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 36px));
+  opacity: 0; pointer-events: none;
+}
+.shell[data-reading-header] > :global(.chat-scroll) {
+  padding-top: calc(var(--reading-header-space) + 16px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell[data-reading-header] > :global(.chat-header) { transition: none; }
+}

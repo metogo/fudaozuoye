@@ -25,7 +25,6 @@
 .chat-quote-preview__close { display:grid; place-items:center; align-self:flex-start; flex-shrink:0; width:44px; height:44px; border-radius:50%; color:#7d8981; font-size:20px; }
 .chat-quote-preview__close:hover { background:#eef2ee; }
 @import "./streaming-indicator.css";
-@import "./board-course.css";
 
 :root {
   --paper: #f4f3ef;

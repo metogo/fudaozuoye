@@ -1,4 +1,5 @@
 import { mapEvidence, type MapConcept, type MapRelation } from "../knowledge-map";
+import { MAX_EVIDENCE_LENGTH } from "../evidence-segments";
 import { parseMapPlan } from "../knowledge-map-stream";
 import type { LearningSession } from "../types";
 import { resolveKnowledgeEvidence } from "./knowledge-map";
@@ -35,7 +36,7 @@ export function validateMapPlan(value: Record<string, unknown>, session: Learnin
   concepts.forEach((node, index) => {
     if (typeof node.title !== "string" || !node.title.trim() || node.title.length > 30 || titles.has(node.title.trim())) throw new Error("知识清单名称不完整或重复");
     titles.add(node.title.trim());
-    if (node.evidence.length > 240 || (node.evidence && !source.includes(node.evidence.replace(/\s+/g, "")))) throw new Error("知识点引用未对应本题原文");
+    if (node.evidence.length > MAX_EVIDENCE_LENGTH || (node.evidence && !source.includes(node.evidence.replace(/\s+/g, "")))) throw new Error("知识点引用未对应本题原文");
     if ((index === 0 || plan.nodes[index].parents.includes(plan.rootId)) && !node.evidence) throw new Error(`知识点${node.id}缺少有效evidenceId，请从原题证据清单选择，不得编造`);
   });
   return { plan, concepts };
