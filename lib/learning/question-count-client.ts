@@ -25,6 +25,8 @@ export function createQuestionEntryReporter({ storage, send, warn }: ReporterOpt
   let active = false;
   let running = false;
   let retry = 0;
+  let nextAttempt = 0;
+  const maxFailures = 3;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const save = () => {
     try { storage().setItem(QUESTION_ENTRY_QUEUE_KEY, JSON.stringify([...pending])); }
@@ -42,7 +44,12 @@ export function createQuestionEntryReporter({ storage, send, warn }: ReporterOpt
     } catch { warn(); }
   };
   const flush = async () => {
-    if (!active || running || !pending.size) return;
+    if (!active || running || !pending.size || retry >= maxFailures) return;
+    if (Date.now() < nextAttempt) {
+      clearTimeout(timer);
+      timer = setTimeout(() => void flush(), nextAttempt - Date.now());
+      return;
+    }
     running = true;
     clearTimeout(timer);
     try {
@@ -53,18 +60,20 @@ export function createQuestionEntryReporter({ storage, send, warn }: ReporterOpt
         save();
       }
       retry = 0;
+      nextAttempt = 0;
     } catch {
-      warn();
+      if (retry === 0) warn();
       retry += 1;
+      nextAttempt = Date.now() + (retry >= maxFailures ? 60_000 : 2_000 * 2 ** retry);
     } finally {
       running = false;
-      if (active && pending.size) timer = setTimeout(() => void flush(), Math.min(60_000, 2_000 * 2 ** Math.min(retry, 5)));
+      if (active && pending.size && retry < maxFailures) timer = setTimeout(() => void flush(), Math.max(0, nextAttempt - Date.now()));
     }
   };
   return {
     start() { load(); active = true; void flush(); },
     stop() { active = false; clearTimeout(timer); },
-    resume() { retry = 0; void flush(); },
+    resume() { if (Date.now() < nextAttempt) return; retry = 0; void flush(); },
     enqueue() {
       load();
       try { pending.add(crypto.randomUUID()); save(); void flush(); }

@@ -24,11 +24,9 @@ export function useQuestionEntryReporting(ready: boolean, questionEpoch: number)
     if (!ready) return;
     reporter.start();
     window.addEventListener("online", reporter.resume);
-    window.addEventListener("focus", reporter.resume);
     return () => {
       reporter.stop();
       window.removeEventListener("online", reporter.resume);
-      window.removeEventListener("focus", reporter.resume);
     };
   }, [ready, reporter]);
   return () => {

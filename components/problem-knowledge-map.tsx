@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { Background, ReactFlow, applyNodeChanges, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { arrangeConcepts, parseMapPositions, relationLabel, visibleConceptIds, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
+import { arrangeConcepts, relationLabel, visibleConceptIds, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
 import type { LearningSession } from "@/lib/learning/types";
 import { CloseIcon } from "./icons";
 import { RichLearningText } from "./lazy-rich-learning-text";
@@ -15,13 +15,12 @@ import { KnowledgeMapProgress } from "./knowledge-map-progress";
 import { mapPlanPositions } from "@/lib/learning/knowledge-map-stream";
 import { knowledgeMapEdges, pendingKnowledgeMapEdges } from "./knowledge-map-edges";
 import { KnowledgeMapExport } from "./knowledge-map-export";
-import { findMapFocus, mapFocusAncestors, type MapFocus } from "@/lib/learning/knowledge-map-preview";
+import { findMapFocus, type MapFocus } from "@/lib/learning/knowledge-map-preview";
 import { knowledgeMapNodeTypes as nodeTypes, type ConceptNode } from "./knowledge-map-node";
 import { KnowledgeMapActivity } from "./knowledge-map-activity";
 import { KnowledgeExplanation } from "./knowledge-explanation";
 
 const noDelete = null;
-const fitOptions = { padding: .2, minZoom: .7, maxZoom: 1 };
 export function ProblemKnowledgeMapPage({ session, stateToken, onClose, initialFocus }: { session: LearningSession; stateToken: string; onClose: () => void; initialFocus?: MapFocus }) {
   const generation = useKnowledgeMap(session, stateToken);
   return <KnowledgeMapDialog generation={generation} onClose={onClose} initialFocus={initialFocus}/>;
@@ -47,7 +46,7 @@ export function KnowledgeMapDialog({ generation, onClose, initialFocus }: { gene
   };
   return createPortal(<dialog ref={dialog} className={styles.page} aria-labelledby="knowledge-map-title" onCancel={(e) => { e.preventDefault(); close(); }}>
     <header className={styles.header}><button onClick={close} aria-label={t("返回对话")} className={styles.back}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg><span>{t("返回")}</span></button><div className={styles.headerTitle}><h1 id="knowledge-map-title">{t("本题知识图谱")}</h1><p>{t("让知识连起来")}</p></div><span aria-hidden="true"/></header>
-    <MapCanvas key={`${generation.attempt}:${generation.saved ? "cached" : "live"}`} generation={generation} initialFocus={initialFocus}/>
+    <MapCanvas key={`${generation.snapshot.key}:${generation.attempt}:${generation.saved ? "cached" : "live"}`} generation={generation} initialFocus={initialFocus}/>
   </dialog>, document.body);
 }
 
@@ -56,24 +55,23 @@ const emptyMap: ProblemKnowledgeMap = { version: 1, overviewOnly: true, rootId: 
 function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof useKnowledgeMap>; initialFocus?: MapFocus }) {
   const t = useUiText();
   const { save, complete, plan, error, retry, storageNotice: notice, snapshot } = generation;
-  const [saved] = useState(() => generation.getSavedLayout());
   const { stateToken, key: cacheKey } = snapshot;
   const rootPreview = !generation.map && Boolean(generation.root);
   const map = useMemo(() => generation.map ?? (generation.root ? { ...emptyMap, rootId: generation.root.id, nodes: [generation.root] } : emptyMap), [generation.map, generation.root]);
   const slots = useMemo(() => plan ? mapPlanPositions(plan) : {}, [plan]);
-  const [positions, setPositions] = useState(() => parseMapPositions(saved?.positions, map));
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const interacted = useRef(false);
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [expansion, setExpansion] = useState<Record<string, boolean>>({});
-  const focusAncestors = useMemo(() => mapFocusAncestors(map, initialFocus), [map, initialFocus]);
-  const expanded = useMemo(() => new Set(map.nodes.filter(n => expansion[n.id] ?? (focusAncestors.has(n.id) || (Array.isArray(saved?.expanded) ? saved.expanded.includes(n.id) : plan ? true : n.id === map.rootId))).map(n => n.id)), [map, saved, plan, expansion, focusAncestors]);
+  const expanded = useMemo(() => new Set(map.nodes.filter(n => expansion[n.id] ?? true).map(n => n.id)), [map, expansion]);
   const [selection, setSelection] = useState<{ id: string | null } | null>(null);
   const selected = rootPreview ? null : selection ? selection.id : findMapFocus(map.nodes, initialFocus)?.id ?? null;
-  const setSelected = useCallback((id: string | null) => setSelection({ id }), []);
+  const setSelected = useCallback((id: string | null) => { interacted.current = true; setSelection({ id }); }, []);
   const [flow, setFlow] = useState<ReactFlowInstance<ConceptNode> | null>(null);
   const [zoom, setZoom] = useState(100);
   const [announcement, setAnnouncement] = useState("");
   const positionsRef = useRef(positions);
-  const placed = useMemo(() => ({ ...parseMapPositions(saved?.positions, map), ...slots, ...positions }), [saved, map, slots, positions]);
+  const placed = useMemo(() => ({ ...arrangeConcepts(map), ...slots, ...positions }), [map, slots, positions]);
   useEffect(() => { positionsRef.current = placed; }, [placed]);
   const canvasRef = useRef<HTMLDivElement>(null);
   const visible = useMemo(() => visibleConceptIds(map, expanded), [map, expanded]);
@@ -112,6 +110,7 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
     });
     const next = applyNodeChanges(updates, nodes);
     if (updates.some(u => u.type === "position")) {
+      interacted.current = true;
       const nextPositions = { ...placed, ...positionsRef.current };
       next.forEach(n => { nextPositions[n.id] = n.position; });
       positionsRef.current = nextPositions;
@@ -119,16 +118,26 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
     }
   }, [nodes, placed]);
   const duration = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 280;
-  const recoverView = () => {
+  const recoverView = useCallback((animate = true) => {
     const canvas = canvasRef.current;
-    if (!flow || !canvas || !map.nodes.length) return;
+    if (!flow || !canvas || !map.nodes.length || !canvas.clientWidth || !canvas.clientHeight) return;
     // Use our canonical positions, not potentially stale internal node bounds.
     const boxes = [...visible].map(id => ({ ...(positionsRef.current[id] ?? placed[id]), width: measured[id]?.width ?? 194, height: measured[id]?.height ?? 160 }));
     const left = Math.min(...boxes.map(b => b.x)), top = Math.min(...boxes.map(b => b.y));
     const right = Math.max(...boxes.map(b => b.x + b.width)), bottom = Math.max(...boxes.map(b => b.y + b.height));
     const zoom = Math.max(.25, Math.min(1, (canvas.clientWidth - 48) / (right - left), (canvas.clientHeight - 140) / (bottom - top)));
-    void flow.setViewport({ x: canvas.clientWidth / 2 - (left + right) / 2 * zoom, y: canvas.clientHeight / 2 + 12 - (top + bottom) / 2 * zoom, zoom }, { duration: duration() });
-  };
+    void flow.setViewport({ x: canvas.clientWidth / 2 - (left + right) / 2 * zoom, y: canvas.clientHeight / 2 + 12 - (top + bottom) / 2 * zoom, zoom }, { duration: animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 280 : 0 });
+  }, [flow, map.nodes.length, visible, placed, measured]);
+  useEffect(() => {
+    // Fit after the modal and nodes are measured, and as streamed nodes arrive.
+    // Once the learner moves the view, do not take control back.
+    if (selected || interacted.current) return;
+    const fit = () => { if (!interacted.current) recoverView(false); };
+    const frame = requestAnimationFrame(fit);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    if (canvasRef.current) observer?.observe(canvasRef.current);
+    return () => { cancelAnimationFrame(frame); observer?.disconnect(); };
+  }, [recoverView, selected]);
   const focus = map.nodes.find(n => n.id === selected && visible.has(n.id));
   useEffect(() => {
     if (!selected || !flow) return;
@@ -142,28 +151,24 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
     });
     return () => cancelAnimationFrame(frame);
   }, [selected, flow]);
-  const savedViewport = saved?.viewport;
-  const safeViewport = savedViewport && [savedViewport.x, savedViewport.y, savedViewport.zoom].every(Number.isFinite) && savedViewport.zoom >= .25 && savedViewport.zoom <= 1.8 && Math.abs(savedViewport.x) < 200000 && Math.abs(savedViewport.y) < 200000 ? savedViewport : undefined;
   return <div className={styles.workspace}>
     <KnowledgeMapProgress count={generation.map?.nodes.length ?? 0} total={plan?.nodes.length ?? (complete ? map.nodes.length : null)} complete={complete} error={error} latest={rootPreview ? undefined : map.nodes.at(-1)?.title} rootPreview={rootPreview} retry={retry}/>
     <div ref={canvasRef} className={styles.canvas} aria-label={t("可拖拽的知识图谱")} onKeyDown={event => { if (event.key === "Enter" && event.target instanceof HTMLElement && event.target.classList.contains("react-flow__node")) { const id = event.target.getAttribute("data-id"); if (id && map.nodes.some(n => n.id === id)) setSelected(id); } }}>
-      <ReactFlow<ConceptNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={changes} onNodeClick={(_, node) => { if (!node.data.pending && !node.data.preview) setSelected(node.id); }} onPaneClick={() => setSelected(null)} onNodeDragStop={() => { persist(); setAnnouncement("节点位置已保存"); }} onInit={instance => {
+      <ReactFlow<ConceptNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={changes} onNodeClick={(_, node) => { if (!node.data.pending && !node.data.preview) setSelected(node.id); }} onPaneClick={() => setSelected(null)} onNodeDragStop={() => { persist(); setAnnouncement("节点位置已调整"); }} onInit={instance => {
         setFlow(instance);
-        if (!saved) {
-          const width = canvasRef.current?.clientWidth ?? window.innerWidth;
-          const zoom = Math.min(1, (width - 40) / 426);
-          void instance.setViewport({ x: width / 2 - 97 * zoom, y: 90, zoom });
-          setZoom(Math.round(zoom * 100));
-        } else setZoom(Math.round(instance.getZoom() * 100));
-      }} onMoveEnd={(_, viewport) => { setZoom(Math.round(viewport.zoom * 100)); persist(viewport); }}
-        fitView={Boolean(saved && !safeViewport)} fitViewOptions={fitOptions} defaultViewport={safeViewport} minZoom={.25} maxZoom={1.8} nodeDragThreshold={8} nodeClickDistance={6} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={noDelete} zoomOnDoubleClick={false} panOnScroll zoomOnScroll={false} zoomOnPinch panOnDrag selectionOnDrag={false} autoPanOnNodeDrag preventScrolling ariaLabelConfig={{ "node.a11yDescription.default": "按回车查看知识，使用方向键移动节点，按 Escape 取消选择。" }}>
+        const width = canvasRef.current?.clientWidth || window.innerWidth;
+        const zoom = Math.min(1, (width - 40) / 426);
+        void instance.setViewport({ x: width / 2 - 97 * zoom, y: 90, zoom });
+        setZoom(Math.round(zoom * 100));
+      }} onMoveStart={event => { if (event) interacted.current = true; }} onMoveEnd={(_, viewport) => { setZoom(Math.round(viewport.zoom * 100)); persist(viewport); }}
+        minZoom={.25} maxZoom={1.8} nodeDragThreshold={8} nodeClickDistance={6} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={noDelete} zoomOnDoubleClick={false} panOnScroll zoomOnScroll={false} zoomOnPinch panOnDrag selectionOnDrag={false} autoPanOnNodeDrag preventScrolling ariaLabelConfig={{ "node.a11yDescription.default": "按回车查看知识，使用方向键移动节点，按 Escape 取消选择。" }}>
         <Background color="#bdcfc5" gap={24} size={1}/>
       </ReactFlow>
       <KnowledgeMapActivity active={!complete && !error} count={generation.map?.nodes.length ?? 0} total={plan?.nodes.length ?? null}/>
-      <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => void flow?.zoomOut({ duration: duration() })}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => void flow?.zoomIn({ duration: duration() })}>＋</button><i/><button disabled={!map.nodes.length} onClick={recoverView}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
+      <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => { interacted.current = true; void flow?.zoomOut({ duration: duration() }); }}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => { interacted.current = true; void flow?.zoomIn({ duration: duration() }); }}>＋</button><i/><button disabled={!map.nodes.length} onClick={() => recoverView()}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
       <div className={styles.hint}>{t("拖节点排布 · 拖空白移动 · 双指缩放")}</div>
     </div>
     {focus && <section className={styles.detail} aria-label={t("{title}的知识说明", { title: focus.title })}><header><div><span>{t("知识卡片")}</span><h2>{focus.title}</h2></div><button onClick={() => setSelected(null)} aria-label={t("关闭知识卡片")}><CloseIcon/></button></header><div className={styles.detailBody}><KnowledgeExplanation key={`${cacheKey}:${focus.id}`} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</div></section>}
-    <footer className={styles.footer}>{notice ? t(notice) : t("布局保存在本机 · 浏览图谱不改变学习进度")}<span>{t("AI 整理，请结合原题理解")}</span></footer><p role="status" className={styles.sr}>{t(announcement)}</p>
+    <footer className={styles.footer}>{notice ? t(notice) : t("每次进入自动整理 · 浏览图谱不改变学习进度")}<span>{t("AI 整理，请结合原题理解")}</span></footer><p role="status" className={styles.sr}>{t(announcement)}</p>
   </div>;
 }

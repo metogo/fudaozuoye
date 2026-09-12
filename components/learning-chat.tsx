@@ -47,6 +47,7 @@ interface LearningChatProps {
   reasoningLevels: ReasoningAvailability[];
   reasoningLevel: ReasoningLevel;
   illustrationAvailability?: IllustrationAvailability;
+  statisticsEnabled?: boolean;
   ready: boolean;
   busy: boolean;
   loadingLabel: string;
@@ -299,7 +300,7 @@ export function LearningChat(props: LearningChatProps) {
     </header>
 
     <div ref={scrollRef} tabIndex={-1} aria-label={t("对话内容")} onScroll={updateScrollState} className={`chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 sm:px-6 ${isHome ? "home-chat-scroll pb-5 pt-0" : "pb-7 pt-5"}`}>
-      {isHome ? <EmptyConversation ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      {isHome ? <EmptyConversation statisticsEnabled={props.statisticsEnabled} ready={props.ready} fileError={fileError} motionPaused={props.busy || props.homeMotionPaused}/> : <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         {originalQuestion && <OriginalQuestion key={originalQuestion.id} message={originalQuestion} problem={props.session?.problem}/>}
         {originalQuestion && <RepairOriginalQuestion key={`repair:${originalQuestion.id}`} message={originalQuestion} problem={props.session?.problem} busy={props.busy} onFile={props.onFile}/>}
         {!props.reviewProblem && (props.session && props.stateToken
@@ -398,10 +399,10 @@ export function chatJumpLabel(hasNewContent: boolean, hasSuggestionsBelow: boole
   return hasSuggestionsBelow ? hasNewContent ? "有新讲解 · 猜你想问 ↓" : "下面有猜你想问 ↓" : "有新讲解 ↓";
 }
 
-function EmptyConversation({ ready, fileError, motionPaused }: { ready: boolean; fileError: string; motionPaused?: boolean }) {
+function EmptyConversation({ ready, fileError, motionPaused, statisticsEnabled }: { statisticsEnabled?: boolean; ready: boolean; fileError: string; motionPaused?: boolean }) {
   const t = useUiText();
   return <section className="empty-chat home-canvas relative mx-auto w-full max-w-2xl px-3 pb-6 pt-8 sm:px-4 sm:pb-8">
-    <HomeWelcomeHero active={!motionPaused}/>
+    <HomeWelcomeHero active={!motionPaused} statisticsEnabled={statisticsEnabled}/>
     {(fileError || !ready) && <p className="relative z-10 mt-3 flex items-center gap-2 text-[9px] leading-5 text-red-700"><InfoIcon className="h-3.5 w-3.5 shrink-0"/>{fileError ? t(fileError) : t("AI 服务正在准备")}</p>}
   </section>;
 }

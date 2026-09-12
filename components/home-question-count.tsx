@@ -12,6 +12,7 @@ export function HomeQuestionCount({ active }: { active: boolean }) {
     if (!active) return;
     let disposed = false;
     let request: AbortController | undefined;
+    let lastFocusRefresh = 0;
     const refresh = () => {
       request?.abort();
       const controller = new AbortController();
@@ -21,12 +22,18 @@ export function HomeQuestionCount({ active }: { active: boolean }) {
         .catch(() => { if (!disposed && !controller.signal.aborted) { setTotal(null); setUnavailable(true); } });
     };
     refresh();
-    window.addEventListener("focus", refresh);
+    const refreshOnFocus = () => {
+      if (Date.now() - lastFocusRefresh < 60_000) return;
+      lastFocusRefresh = Date.now();
+      refresh();
+    };
+    lastFocusRefresh = Date.now();
+    window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("online", refresh);
     window.addEventListener(QUESTION_STATISTICS_CHANGED, refresh);
     return () => {
       disposed = true; request?.abort();
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("online", refresh);
       window.removeEventListener(QUESTION_STATISTICS_CHANGED, refresh);
     };

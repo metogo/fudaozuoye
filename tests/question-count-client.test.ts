@@ -32,6 +32,31 @@ describe("不阻塞解题的统计上报", () => {
     await vi.advanceTimersByTimeAsync(4000); expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[0][0]).toBe(send.mock.calls[1][0]); reporter.stop();
   });
+  it("连续失败最多尝试三次，新题和重复启动不能绕过退避；恢复网络后沿用原 ID", async () => {
+    const send = vi.fn(async (id: string): Promise<void> => { expect(id).toHaveLength(36); throw new Error("503"); });
+    const { reporter, warn } = setup(send);
+    reporter.start(); reporter.enqueue(); await vi.advanceTimersByTimeAsync(0);
+    reporter.enqueue(); reporter.resume(); reporter.start(); await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(send).toHaveBeenCalledTimes(3); expect(warn).toHaveBeenCalledTimes(1);
+    reporter.enqueue(); reporter.start(); reporter.resume();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(send).toHaveBeenCalledTimes(3);
+    const pending = JSON.parse(sessionStorage.getItem(QUESTION_ENTRY_QUEUE_KEY)!);
+    expect(pending).toHaveLength(3);
+    send.mockResolvedValue(undefined);
+    reporter.resume(); await vi.advanceTimersByTimeAsync(0);
+    expect(send.mock.calls.slice(3).map(call => call[0])).toEqual(pending);
+    expect(sessionStorage.getItem(QUESTION_ENTRY_QUEUE_KEY)).toBe("[]"); reporter.stop();
+  });
+  it("暂停再启动仍遵守剩余退避时间且不会遗失重试", async () => {
+    const send = vi.fn(async (id: string) => { expect(id).toHaveLength(36); }).mockRejectedValueOnce(new Error("503"));
+    const { reporter } = setup(send); reporter.start(); reporter.enqueue();
+    await vi.advanceTimersByTimeAsync(1000); reporter.stop(); reporter.start();
+    await vi.advanceTimersByTimeAsync(2999); expect(send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1); expect(send).toHaveBeenCalledTimes(2); reporter.stop();
+  });
   it("浏览器禁止存储时仍可正常解题并上报，明确记录持久化失败", async () => {
     const send = vi.fn(async () => {}); const warn = vi.fn();
     const reporter = createQuestionEntryReporter({ storage: () => { throw new Error("blocked"); }, send, warn });

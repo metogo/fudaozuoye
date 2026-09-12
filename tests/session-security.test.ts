@@ -30,6 +30,20 @@ describe("无状态学习会话边界", () => {
     ]);
   });
 
+  it("统计配置缺失时关闭可选统计，只返回能力标志而不暴露凭据", async () => {
+    vi.stubEnv("AI_MOCK_MODE", "true");
+    vi.stubEnv("CLOUDBASE_ENV_ID", "test-environment");
+    vi.stubEnv("CLOUDBASE_APIKEY", "");
+    const request = () => new Request("http://localhost/api/consent", { method: "POST" });
+    const disabled = await (await postConsent(request())).json();
+    expect(disabled.statisticsEnabled).toBe(false); expect(disabled.accepted).toBe(true);
+    vi.stubEnv("CLOUDBASE_APIKEY", "test-private-key");
+    const enabled = await (await postConsent(request())).json();
+    expect(enabled.statisticsEnabled).toBe(true);
+    expect(JSON.stringify(enabled)).not.toContain("test-private-key");
+    expect(JSON.stringify(enabled)).not.toContain("test-environment");
+  });
+
   it("不向浏览器下发标准答案，且令牌被修改后无法使用", () => {
     const session = analyzeMock(recognizeMock("math", "primary"), "doubao");
     const state = toClientState(session);

@@ -8,6 +8,7 @@ import remarkMath from "remark-math";
 import { prepareMathForDisplay } from "@/lib/learning/math-quality";
 import { rehypeReadableMath } from "@/lib/learning/rehype-readable-math";
 import { remarkLearningEmphasis } from "@/lib/learning/remark-learning-emphasis";
+import { remarkConclusionLayout } from "@/lib/learning/remark-conclusion-layout";
 import type { LearningEmphasis } from "@/lib/learning/learning-emphasis";
 import { rehypePitfallSections } from "@/lib/learning/rehype-pitfall-sections";
 import pitfallStyles from "./pitfall-sections.module.css";
@@ -83,7 +84,7 @@ export const RichLearningText = memo(function RichLearningText({ text, compact =
 const MarkdownBody = memo(function MarkdownBody({ content, compact, emphasis, collapsePitfalls }: { content: string; compact: boolean; emphasis?: LearningEmphasis[]; collapsePitfalls: boolean }) {
   return <ReactMarkdown
       skipHtml
-      remarkPlugins={[remarkMath, [remarkLearningEmphasis, { source: content, marks: emphasis ?? [] }]]}
+      remarkPlugins={[remarkMath, [remarkLearningEmphasis, { source: content, marks: emphasis ?? [] }], [remarkConclusionLayout, { source: content }]]}
       rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, trust: false, maxExpand: 200, maxSize: 20 }], rehypeReadableMath, [rehypePitfallSections, { enabled: collapsePitfalls && !compact }]]}
       components={compact ? compactComponents : standardComponents}
     >

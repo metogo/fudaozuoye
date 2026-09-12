@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { animateHomeCompanion } from "@/lib/learning/home-companion-motion";
 import { HomeQuestionCount } from "./home-question-count";
 
-export function HomeWelcomeHero({ active }: { active: boolean }) {
+export function HomeWelcomeHero({ active, statisticsEnabled = true }: { active: boolean; statisticsEnabled?: boolean }) {
   const t = useUiText();
   const name = t("小逗号");
   const root = useRef<HTMLDivElement>(null);
@@ -31,6 +31,6 @@ export function HomeWelcomeHero({ active }: { active: boolean }) {
       </span>
       <span className="home-welcome-subtitle">{t("陪你一起解题。")}</span>
     </h1>
-    <HomeQuestionCount active={active}/>
+    {statisticsEnabled && <HomeQuestionCount active={active}/>}
   </div>;
 }

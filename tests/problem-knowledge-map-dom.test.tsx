@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 
 import type { Node, ReactFlowProps, ReactFlowInstance } from "@xyflow/react";
-import type { MapConcept } from "@/lib/learning/knowledge-map";
+import { arrangeConcepts, type ProblemKnowledgeMap, type MapConcept } from "@/lib/learning/knowledge-map";
 type TestNode = Node<{ concept: MapConcept; root: boolean; expanded: boolean; childCount: number; dimmed: boolean; pending?: boolean; stopped?: boolean; toggle: (id: string) => void }, "concept">;
 type FlowProps = ReactFlowProps<TestNode>;
 function createFlowApi() { return { getZoom: () => 1, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), zoomIn: vi.fn(), zoomOut: vi.fn(), setViewport: vi.fn() }; }
@@ -75,7 +75,7 @@ describe("ProblemKnowledgeMapPage", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("前置提要共用生成状态时，再次展开仍恢复已调整视图，不再请求图谱", async () => {
+  it("再次进入自动整理并展开图谱，不恢复旧视图也不重新请求", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ map }));
     function SharedMap() {
       const generation = useKnowledgeMap(session as never, "token");
@@ -87,11 +87,41 @@ describe("ProblemKnowledgeMapPage", () => {
     const viewport = { x: 123, y: 45, zoom: 1.2 };
     vi.spyOn(flowApi!, "getViewport").mockReturnValue(viewport);
     act(() => flowProps!.onMoveEnd!(null, viewport));
+    fireEvent.click(screen.getByText("收起基础"));
     fireEvent.click(screen.getByRole("button", { name: "返回对话", hidden: true }));
     fireEvent.click(screen.getByText("展开提要"));
     await screen.findByText("根的判别式");
-    expect(flowProps!.defaultViewport).toEqual(viewport);
+    expect(flowProps!.defaultViewport).toBeUndefined();
+    expect(flowProps!.nodes!.map(node => node.position)).toEqual(map.nodes.map(node => arrangeConcepts(map as ProblemKnowledgeMap)[node.id]));
+    expect(flowApi!.setViewport).not.toHaveBeenCalledWith(viewport);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+
+  it("缓存中的散乱位置和折叠状态不影响默认整理，测量后自动查看全图", async () => {
+    localStorage.setItem("problem-knowledge-map-v2:request-1", JSON.stringify({
+      identity: JSON.stringify(session.problem), map, expanded: [],
+      positions: { quadratic: { x: 9000, y: -5000 }, delta: { x: -9000, y: 7000 } },
+      viewport: { x: 10000, y: -10000, zoom: 1.8 },
+    }));
+    render(<ProblemKnowledgeMapPage session={session as never} stateToken="token" onClose={close}/>);
+    await screen.findByText("根的判别式");
+    const arranged = arrangeConcepts(map as ProblemKnowledgeMap);
+    expect(flowProps!.nodes!.map(n => n.position)).toEqual(map.nodes.map(n => arranged[n.id]));
+    const canvas = screen.getByLabelText("可拖拽的知识图谱");
+    Object.defineProperties(canvas, { clientWidth: { value: 390 }, clientHeight: { value: 600 } });
+    act(() => flowProps!.onNodesChange!(map.nodes.map(node => ({ type: "dimensions", id: node.id, dimensions: { width: 194, height: 160 } }))));
+    await waitFor(() => expect(flowApi!.setViewport).toHaveBeenCalledWith({ x: 98, y: 128, zoom: 1 }, { duration: 0 }));
+    flowApi!.setViewport.mockClear();
+    fireEvent.click(screen.getByText("整理"));
+    expect(flowApi!.setViewport).toHaveBeenCalledWith({ x: 98, y: 128, zoom: 1 }, { duration: 0 });
+    // Subsequent measurements must not steal a manually panned viewport.
+    act(() => flowProps!.onMoveStart!({} as MouseEvent, { x: 100, y: 50, zoom: 1 }));
+    flowApi!.setViewport.mockClear();
+    act(() => flowProps!.onNodesChange!([{ type: "dimensions", id: "delta", dimensions: { width: 194, height: 180 } }]));
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+    expect(flowApi!.setViewport).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("退出及卸载时先关闭仍连接的原生弹层，并恢复入口焦点", () => {

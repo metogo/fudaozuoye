@@ -95,13 +95,14 @@ export function EducationChatApp() {
   const [illustrationAvailability, setIllustrationAvailability] =
     useState<IllustrationAvailability>(fallbackIllustration);
   const [ready, setReady] = useState(false);
+  const [statisticsEnabled, setStatisticsEnabled] = useState(false);
   const [session, setSession] = useState<LearningSession | null>(null);
   const [stateToken, setStateToken] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // A new problem owns a fresh set of transient chat UI state (scroll hints,
   // quote selection, draft input and export dialog), not only fresh messages.
   const [chatUiEpoch, setChatUiEpoch] = useState(0);
-  const recordQuestionEntry = useQuestionEntryReporting(ready, chatUiEpoch);
+  const recordQuestionEntry = useQuestionEntryReporting(ready && statisticsEnabled, chatUiEpoch);
   const [cropFile, setCropFile] = useState<{ file: File; replaceProblem: boolean } | null>(null);
   const [responseCrop, setResponseCrop] = useState<{
     file: File;
@@ -265,12 +266,14 @@ export function EducationChatApp() {
       .then(async (response) => {
         if (!response.ok) throw new Error("服务暂时无法准备");
         const data = (await response.json()) as {
+          statisticsEnabled?: boolean;
           reasoningLevels?: ReasoningAvailability[];
           illustration?: IllustrationAvailability;
         };
         if (!data.reasoningLevels?.length)
           throw new Error("推理强度状态暂时无法读取");
         if (!active) return;
+        setStatisticsEnabled(data.statisticsEnabled !== false);
         setReasoningLevels(data.reasoningLevels);
         setIllustrationAvailability(data.illustration ?? fallbackIllustration);
         const available = data.reasoningLevels.filter((item) => item.available);
@@ -1331,6 +1334,7 @@ export function EducationChatApp() {
         reasoningLevels={reasoningLevels}
         reasoningLevel={reasoningLevel}
         illustrationAvailability={illustrationAvailability}
+        statisticsEnabled={statisticsEnabled}
         ready={hydrated && ready}
         homeMotionPaused={!hydrated || Boolean(cropFile || responseCrop || whiteboardIntent)}
         busy={busy}
