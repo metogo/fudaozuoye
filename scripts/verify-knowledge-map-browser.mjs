@@ -28,8 +28,9 @@ export async function verifyKnowledgeMapBrowser({ state, cookie }) {
     const graphResponse = await response;
     assert.ok(graphResponse.ok());
     assert.match(graphResponse.headers()["content-type"], /text\/event-stream/);
-    await expect(page.getByText("已全部生成", { exact: true })).toBeVisible({ timeout: 175000 });
-    const progress = page.getByRole("progressbar"), total = Number(await progress.getAttribute("aria-valuemax"));
+    const graph = page.getByRole("dialog");
+    await expect(graph.getByText("已全部生成", { exact: true })).toBeVisible({ timeout: 175000 });
+    const progress = graph.getByRole("progressbar"), total = Number(await progress.getAttribute("aria-valuemax"));
     assert.ok(total >= 2);
     assert.equal(Number(await progress.getAttribute("aria-valuenow")), total);
     await page.getByRole("button", { name: "查看全图", exact: true }).click();
