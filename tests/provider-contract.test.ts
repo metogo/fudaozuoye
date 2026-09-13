@@ -206,6 +206,29 @@ describe("真实供应商协议契约", () => {
     expect(reply).toBe("先看题干里的已知条件。");
   });
 
+  it.each(["chat-completions", "responses"] as const)("%s 正文收到结束事件立即完成，不等待上游关闭连接", async protocol => {
+    const cancel = vi.fn();
+    const text = "先看题干里的已知条件。";
+    const payload = protocol === "responses"
+      ? [{ type: "response.output_text.delta", delta: text }, { type: "response.completed" }]
+      : [{ choices: [{ delta: { content: text } }] }, { choices: [{ finish_reason: "stop" }] }];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode(payload.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""))); },
+      cancel,
+    });
+    const fetcher: typeof fetch = async () => new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
+    const mock = new MockProviderAdapter("doubao");
+    const session = await mock.analyzeProblem(await mock.recognizeProblem("data:image/jpeg;base64,demo", "math", "primary"));
+    const abort = new AbortController();
+    let output = "", completed = false;
+    const pending = new LiveProviderAdapter({ ...liveConfig(), protocol }, fetcher).streamTutorReply(session, { kind: "problem" }, "为什么？", delta => { output += delta; }, abort.signal).then(() => { completed = true; });
+    try {
+      await vi.waitFor(() => expect(completed).toBe(true), { timeout: 300 });
+      await pending;
+      expect(output).toBe(text); expect(cancel).toHaveBeenCalledTimes(1);
+    } finally { abort.abort(); await pending.catch(() => undefined); }
+  });
+
   it("后续上传的学生草图不会被误当成原题照片", async () => {
     let requestBody = "";
     const fetcher: typeof fetch = async (_input, init) => {

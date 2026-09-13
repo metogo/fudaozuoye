@@ -189,7 +189,10 @@ async function answerQuestion(session: LearningSession, text: string, adapter: A
   const scope = session.flow.focus;
   const sourceText = await streamReply(session, scope, question, adapter, send, signal);
   send("flow.resume", { label: session.flow.activeGate ? "回到刚才的学习任务" : "继续当前学习", scopeLabel: flowScopeLabel(session, scope) });
-  await offerSuggestions(updateFlow(session, {}), scope, sourceText, adapter, send, signal);
+  const next = updateFlow(session, {});
+  emitState(next, send);
+  send("flow.ready", { stage: next.flow.stage, gateId: next.flow.activeGate?.id });
+  await offerSuggestions(next, scope, sourceText, adapter, send, signal);
 }
 
 async function answerSuggestedQuestion(session: LearningSession, suggestionId: string, adapter: Adapter, send: Send, signal: AbortSignal) {

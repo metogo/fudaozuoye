@@ -211,7 +211,10 @@ async function answerQuestion(session, text, adapter, send, signal, quote) {
     const scope = session.flow.focus;
     const sourceText = await (0, turn_effects_1.streamReply)(session, scope, question, adapter, send, signal);
     send("flow.resume", { label: session.flow.activeGate ? "回到刚才的学习任务" : "继续当前学习", scopeLabel: (0, flow_1.flowScopeLabel)(session, scope) });
-    await (0, turn_effects_1.offerSuggestions)((0, turn_effects_1.updateFlow)(session, {}), scope, sourceText, adapter, send, signal);
+    const next = (0, turn_effects_1.updateFlow)(session, {});
+    (0, turn_effects_1.emitState)(next, send);
+    send("flow.ready", { stage: next.flow.stage, gateId: next.flow.activeGate?.id });
+    await (0, turn_effects_1.offerSuggestions)(next, scope, sourceText, adapter, send, signal);
 }
 async function answerSuggestedQuestion(session, suggestionId, adapter, send, signal) {
     const suggestion = session.flow.suggestedQuestions.find((item) => item.id === suggestionId);

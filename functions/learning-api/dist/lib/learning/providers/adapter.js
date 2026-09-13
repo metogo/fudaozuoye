@@ -548,18 +548,31 @@ class LiveProviderAdapter {
                 }
                 onDelta(delta);
             };
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done)
-                    break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split(/\r?\n/);
-                buffer = lines.pop() ?? "";
-                for (const line of lines)
-                    sawTerminalEvent = (0, model_support_1.emitProviderDelta)(line, this.config.protocol, emitDelta) || sawTerminalEvent;
+            try {
+                while (!sawTerminalEvent) {
+                    const { done, value } = await reader.read();
+                    buffer += decoder.decode(value, { stream: !done });
+                    const lines = buffer.split(/\r?\n/);
+                    buffer = lines.pop() ?? "";
+                    for (const line of lines) {
+                        if ((0, model_support_1.emitProviderDelta)(line, this.config.protocol, emitDelta)) {
+                            sawTerminalEvent = true;
+                            break;
+                        }
+                    }
+                    if (done) {
+                        if (!sawTerminalEvent && buffer.trim())
+                            sawTerminalEvent = (0, model_support_1.emitProviderDelta)(buffer, this.config.protocol, emitDelta);
+                        break;
+                    }
+                }
             }
-            if (buffer.trim())
-                sawTerminalEvent = (0, model_support_1.emitProviderDelta)(buffer, this.config.protocol, emitDelta) || sawTerminalEvent;
+            finally {
+                // The protocol's terminal event is sufficient; an upstream proxy may
+                // keep HTTP open after it. Do not make prose wait for transport cleanup.
+                void reader.cancel().catch(() => undefined);
+                reader.releaseLock();
+            }
             if (outputLength === 0)
                 throw (0, errors_1.providerError)("模型没有返回讲解内容，请重试同一模型", 502);
             if (!sawTerminalEvent)

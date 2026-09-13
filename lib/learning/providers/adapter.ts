@@ -664,14 +664,25 @@ export class LiveProviderAdapter implements ProviderAdapter {
         if (outputLength > 60_000) { controller.abort(); throw providerError("模型流式输出超过安全长度，请缩短问题后重试", 502); }
         onDelta(delta);
       };
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? "";
-        for (const line of lines) sawTerminalEvent = emitProviderDelta(line, this.config.protocol, emitDelta) || sawTerminalEvent;
+      try {
+        while (!sawTerminalEvent) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (emitProviderDelta(line, this.config.protocol, emitDelta)) { sawTerminalEvent = true; break; }
+          }
+          if (done) {
+            if (!sawTerminalEvent && buffer.trim()) sawTerminalEvent = emitProviderDelta(buffer, this.config.protocol, emitDelta);
+            break;
+          }
+        }
+      } finally {
+        // The protocol's terminal event is sufficient; an upstream proxy may
+        // keep HTTP open after it. Do not make prose wait for transport cleanup.
+        void reader.cancel().catch(() => undefined);
+        reader.releaseLock();
       }
-      if (buffer.trim()) sawTerminalEvent = emitProviderDelta(buffer, this.config.protocol, emitDelta) || sawTerminalEvent;
       if (outputLength === 0) throw providerError("模型没有返回讲解内容，请重试同一模型", 502);
       if (!sawTerminalEvent) throw providerError("模型讲解传输未完整结束，请重试同一模型", 502);
     } catch (error) {

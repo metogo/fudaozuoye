@@ -26,6 +26,7 @@
 .core { background:#244e40; color:white; border-color:#244e40; box-shadow:0 7px 20px #244e4023; }
 .core .nodeLabel { color:#b9d8c8; }
 .node.selected { outline:3px solid #79b49b80; border-color:#4f9678; }
+.node.generating { border-color:#559877; outline:3px solid #79b49b45; box-shadow:0 0 0 7px #c8e0ce50,0 12px 30px #234d341a; }
 .dimmed { opacity:.4; }
 .page .expand { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:44px; font-size:11px; border-top:1px solid #93b09d30; margin-top:8px; }
 .expand span { font-size:18px; }

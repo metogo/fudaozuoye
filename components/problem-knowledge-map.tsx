@@ -19,6 +19,7 @@ import { findMapFocus, type MapFocus } from "@/lib/learning/knowledge-map-previe
 import { knowledgeMapNodeTypes as nodeTypes, type ConceptNode } from "./knowledge-map-node";
 import { KnowledgeMapActivity } from "./knowledge-map-activity";
 import { KnowledgeExplanation } from "./knowledge-explanation";
+import { useKnowledgeMapCamera } from "./use-knowledge-map-camera";
 
 const noDelete = null;
 export function ProblemKnowledgeMapPage({ session, stateToken, onClose, initialFocus }: { session: LearningSession; stateToken: string; onClose: () => void; initialFocus?: MapFocus }) {
@@ -64,8 +65,9 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [expansion, setExpansion] = useState<Record<string, boolean>>({});
   const expanded = useMemo(() => new Set(map.nodes.filter(n => expansion[n.id] ?? true).map(n => n.id)), [map, expansion]);
+  const [entryFocus] = useState(() => complete ? initialFocus : undefined);
   const [selection, setSelection] = useState<{ id: string | null } | null>(null);
-  const selected = rootPreview ? null : selection ? selection.id : findMapFocus(map.nodes, initialFocus)?.id ?? null;
+  const selected = rootPreview ? null : selection ? selection.id : findMapFocus(map.nodes, entryFocus)?.id ?? null;
   const setSelected = useCallback((id: string | null) => { interacted.current = true; setSelection({ id }); }, []);
   const [flow, setFlow] = useState<ReactFlowInstance<ConceptNode> | null>(null);
   const [zoom, setZoom] = useState(100);
@@ -76,16 +78,17 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
   const canvasRef = useRef<HTMLDivElement>(null);
   const visible = useMemo(() => visibleConceptIds(map, expanded), [map, expanded]);
   const related = useMemo(() => new Set(selected ? [selected, ...map.edges.filter(e => e.from === selected || e.to === selected).flatMap(e => [e.from, e.to])] : []), [map, selected]);
-  const toggle = useCallback((id: string) => { setExpansion(prev => ({ ...prev, [id]: !expanded.has(id) })); setAnnouncement("知识分支已更新，可点击“查看全图”查看完整范围。"); }, [expanded]);
-  const readyNodes: ConceptNode[] = useMemo(() => map.nodes.filter(n => visible.has(n.id)).map(concept => ({ id: concept.id, type: "concept", position: placed[concept.id], measured: measured[concept.id], selected: concept.id === selected, draggable: !rootPreview, selectable: !rootPreview, focusable: !rootPreview, ariaLabel: rootPreview ? concept.title : `${concept.title}，按回车查看，方向键移动`, data: { concept, preview: rootPreview, continuing: rootPreview && !plan, root: concept.id === map.rootId, expanded: expanded.has(concept.id), childCount: map.edges.filter(e => e.from === concept.id).length, dimmed: Boolean(selected && !related.has(concept.id)), toggle } })), [map, placed, measured, expanded, selected, related, toggle, visible, rootPreview, plan]);
+  const toggle = useCallback((id: string) => { interacted.current = true; setExpansion(prev => ({ ...prev, [id]: !expanded.has(id) })); setAnnouncement("知识分支已更新，可点击“查看全图”查看完整范围。"); }, [expanded]);
   const receivedIds = new Set(map.nodes.map(n => n.id));
   const next = !complete ? plan?.nodes.find(n => !receivedIds.has(n.id) && n.parents.every(id => receivedIds.has(id))) : undefined;
   const pendingId = next?.id ?? (!map.nodes.length ? "pending-core" : null);
   const showPending = !complete && pendingId && (!next?.parents.length || next.parents.some(id => visible.has(id) && expanded.has(id)));
+  const activeNodeId = !complete && !error ? (showPending ? pendingId : map.nodes.at(-1)?.id) : undefined;
+  const readyNodes: ConceptNode[] = useMemo(() => map.nodes.filter(n => visible.has(n.id)).map(concept => ({ id: concept.id, type: "concept", position: placed[concept.id], measured: measured[concept.id], selected: concept.id === selected, draggable: !rootPreview, selectable: !rootPreview, focusable: !rootPreview, ariaLabel: rootPreview ? concept.title : `${concept.title}，按回车查看，方向键移动`, data: { concept, active: concept.id === activeNodeId, preview: rootPreview, continuing: rootPreview && !plan, root: concept.id === map.rootId, expanded: expanded.has(concept.id), childCount: map.edges.filter(e => e.from === concept.id).length, dimmed: Boolean(selected && !related.has(concept.id)), toggle } })), [map, placed, measured, expanded, selected, related, toggle, visible, rootPreview, plan, activeNodeId]);
   const nodes: ConceptNode[] = useMemo(() => showPending ? [...readyNodes, {
     id: pendingId, type: "concept", position: placed[pendingId] ?? { x: 0, y: 0 }, measured: measured[pendingId], draggable: false, selectable: false, focusable: false,
-    data: { concept: { id: pendingId, title: "", summary: "", application: "", evidence: "" }, root: map.nodes.length === 0, expanded: false, childCount: 0, dimmed: false, pending: true, stopped: Boolean(error), toggle },
-  }] : readyNodes, [showPending, readyNodes, pendingId, placed, measured, map.nodes.length, error, toggle]);
+    data: { concept: { id: pendingId, title: "", summary: "", application: "", evidence: "" }, root: map.nodes.length === 0, expanded: false, childCount: 0, dimmed: false, active: pendingId === activeNodeId, pending: true, stopped: Boolean(error), toggle },
+  }] : readyNodes, [showPending, readyNodes, pendingId, placed, measured, map.nodes.length, error, toggle, activeNodeId]);
   const edges = useMemo(() => [
     ...knowledgeMapEdges(map.edges.filter(e => expanded.has(e.from) && visible.has(e.from) && visible.has(e.to)), selected, t),
     ...(showPending && next ? pendingKnowledgeMapEdges(next.parents.filter(id => visible.has(id) && expanded.has(id)), next.id, Boolean(error)) : []),
@@ -126,18 +129,9 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
     const left = Math.min(...boxes.map(b => b.x)), top = Math.min(...boxes.map(b => b.y));
     const right = Math.max(...boxes.map(b => b.x + b.width)), bottom = Math.max(...boxes.map(b => b.y + b.height));
     const zoom = Math.max(.25, Math.min(1, (canvas.clientWidth - 48) / (right - left), (canvas.clientHeight - 140) / (bottom - top)));
-    void flow.setViewport({ x: canvas.clientWidth / 2 - (left + right) / 2 * zoom, y: canvas.clientHeight / 2 + 12 - (top + bottom) / 2 * zoom, zoom }, { duration: animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 280 : 0 });
+    void flow.setViewport({ x: canvas.clientWidth / 2 - (left + right) / 2 * zoom, y: canvas.clientHeight / 2 + 12 - (top + bottom) / 2 * zoom, zoom }, { duration: animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 650 : 0 });
   }, [flow, map.nodes.length, visible, placed, measured]);
-  useEffect(() => {
-    // Fit after the modal and nodes are measured, and as streamed nodes arrive.
-    // Once the learner moves the view, do not take control back.
-    if (selected || interacted.current) return;
-    const fit = () => { if (!interacted.current) recoverView(false); };
-    const frame = requestAnimationFrame(fit);
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
-    if (canvasRef.current) observer?.observe(canvasRef.current);
-    return () => { cancelAnimationFrame(frame); observer?.disconnect(); };
-  }, [recoverView, selected]);
+  useKnowledgeMapCamera({ flow, canvas: canvasRef, target: activeNodeId ? { id: activeNodeId, position: placed[activeNodeId] ?? { x: 0, y: 0 }, measured: measured[activeNodeId] } : undefined, complete, error, selected, interacted, recoverView });
   const focus = map.nodes.find(n => n.id === selected && visible.has(n.id));
   useEffect(() => {
     if (!selected || !flow) return;
@@ -165,7 +159,7 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
         <Background color="#bdcfc5" gap={24} size={1}/>
       </ReactFlow>
       <KnowledgeMapActivity active={!complete && !error} count={generation.map?.nodes.length ?? 0} total={plan?.nodes.length ?? null}/>
-      <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => { interacted.current = true; void flow?.zoomOut({ duration: duration() }); }}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => { interacted.current = true; void flow?.zoomIn({ duration: duration() }); }}>＋</button><i/><button disabled={!map.nodes.length} onClick={() => recoverView()}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
+      <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => { interacted.current = true; void flow?.zoomOut({ duration: duration() }); }}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => { interacted.current = true; void flow?.zoomIn({ duration: duration() }); }}>＋</button><i/><button disabled={!map.nodes.length} onClick={() => { interacted.current = true; recoverView(); }}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { interacted.current = true; const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
       <div className={styles.hint}>{t("拖节点排布 · 拖空白移动 · 双指缩放")}</div>
     </div>
     {focus && <section className={styles.detail} aria-label={t("{title}的知识说明", { title: focus.title })}><header><div><span>{t("知识卡片")}</span><h2>{focus.title}</h2></div><button onClick={() => setSelected(null)} aria-label={t("关闭知识卡片")}><CloseIcon/></button></header><div className={styles.detailBody}><KnowledgeExplanation key={`${cacheKey}:${focus.id}`} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</div></section>}

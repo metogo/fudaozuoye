@@ -315,6 +315,27 @@ describe("教育 Chat 学习回合", () => {
     expect(next.session.flow.stage).toBe("core_explanation");
   });
 
+  it.each([["math", "primary"], ["physics", "junior"], ["chinese", "senior"]] as const)("%s %s 追问正文完成即可继续输入，不等待推荐问题", async (subject, grade) => {
+    const started = await startState(subject, grade);
+    let release!: () => void;
+    vi.spyOn(MockProviderAdapter.prototype, "suggestQuestions").mockImplementation(() => new Promise(resolve => { release = () => resolve([]); }));
+    const response = await postTurn(request(started.stateToken, { type: "question", text: "请解释当前这一步。" }));
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let body = "";
+    try {
+      while (!body.includes("event: flow.ready")) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        body += decoder.decode(value, { stream: true });
+      }
+      expect(body).toContain("event: message.complete");
+      expect(body).not.toContain("event: flow.suggestions");
+      expect(eventNames(body).indexOf("flow.update")).toBeLessThan(eventNames(body).indexOf("flow.ready"));
+      expect(event<ClientSessionState>(body, "flow.update").session.flow.activeGate?.id).toBe(started.session.flow.activeGate?.id);
+    } finally { release(); while (!(await reader.read()).done) { /* drain */ } reader.releaseLock(); }
+  });
+
   it("自由追问后恢复原互动，不绕过学习任务", async () => {
     const started = await startState("physics", "junior");
     const gateId = started.session.flow.activeGate!.id;
