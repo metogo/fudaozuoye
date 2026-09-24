@@ -76,6 +76,7 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
         <p>{t("用于统计访问人数、浏览量与来源，帮助我们了解哪些页面更常使用。")}</p>
         <p>{t("来源只保留网站域名；页面只记录首页、对话和知识图谱类别。不开启点击热力图、全埋点或广告追踪。")}</p>
         <p>{t("可在首页下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。")}</p>
+        <p>{t("为保障免费服务，每个浏览器每天最多开启 30 道新题，北京时间 0 点恢复。本地保存随机浏览器标识，服务端核对发题次数；此必要功能独立于百度统计，不向百度发送题目或该标识。")}</p>
         <a href="https://tongji.baidu.com/web/help/article?id=330&type=0" target="_blank" rel="noopener noreferrer">{t("百度统计个人信息保护说明 ↗")}</a>
       </details>
       <p className={styles.choiceNote}>{t("由你选择，不启用也能正常解题。未满 14 周岁，请由监护人阅读并决定。")}</p>

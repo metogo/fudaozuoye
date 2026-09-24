@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { postAnalyze } from "@/lib/learning/http/analyze";
 import { CONSENT_COOKIE, createConsentValue } from "@/lib/learning/server-state";
+vi.mock("@/lib/learning/question-quota", () => ({ authorizeQuestionEntry: vi.fn(async () => undefined) }));
 
 const headers = () => ({ Cookie: `${CONSENT_COOKIE}=${createConsentValue()}`, "x-forwarded-for": `test-${crypto.randomUUID()}` });
 const request = (form: FormData, extra: HeadersInit = {}) => new Request("http://localhost/api/learning/analyze", { method: "POST", headers: { ...headers(), ...extra }, body: form });

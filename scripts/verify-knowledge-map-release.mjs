@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
@@ -21,8 +22,24 @@ export async function readEvents(response) {
   return events;
 }
 
+const verificationDevice = randomUUID();
+const entryTickets = new Map();
 export async function post(path, cookie, body) {
   const form = body instanceof FormData;
+  if (path === "/learning/analyze" && form && !body.has("entryTicket")) {
+    const stage = body.get("stage");
+    if (stage !== "full" || !entryTickets.has(cookie)) {
+      const image = body.get("image");
+      const input = stage === "recognize" && image instanceof Blob ? Buffer.from(await image.arrayBuffer())
+        : String(body.get(stage === "full" ? "problem" : "text") ?? "").trim();
+      const admission = await post("/learning/question-entry", cookie, { deviceId: verificationDevice, entryId: randomUUID(), inputHash: createHash("sha256").update(input).digest("hex") });
+      assert.equal(admission.status, 200, "验收题目未通过入口额度校验");
+      const { entryTicket } = await admission.json();
+      assert.ok(entryTicket, "入口未返回发题凭据");
+      entryTickets.set(cookie, entryTicket);
+    }
+    body.set("entryTicket", entryTickets.get(cookie));
+  }
   return fetch(`${apiBase}${path}`, { method: "POST", headers: { Origin: appOrigin, Cookie: cookie,
     ...(form ? {} : { "Content-Type": "application/json" }) }, body: form ? body : JSON.stringify(body), signal: AbortSignal.timeout(180000) });
 }

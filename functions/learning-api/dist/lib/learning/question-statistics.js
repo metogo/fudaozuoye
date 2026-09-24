@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QUESTION_COUNTER_ID = exports.SUBMISSIONS_COLLECTION = exports.STATISTICS_COLLECTION = void 0;
 exports.createQuestionStatisticsStore = createQuestionStatisticsStore;
+exports.statisticsDatabase = statisticsDatabase;
 exports.questionStatisticsStore = questionStatisticsStore;
 const node_crypto_1 = require("node:crypto");
 const js_sdk_1 = __importDefault(require("@cloudbase/js-sdk"));
@@ -75,10 +76,10 @@ function createQuestionStatisticsStore(db, counterId = exports.QUESTION_COUNTER_
         },
     };
 }
-let store;
-function questionStatisticsStore() {
-    if (store)
-        return store;
+let database;
+function statisticsDatabase() {
+    if (database)
+        return database;
     const env = process.env.CLOUDBASE_ENV_ID?.trim();
     const accessKey = process.env.CLOUDBASE_APIKEY?.trim();
     if (!env || !accessKey)
@@ -88,6 +89,10 @@ function questionStatisticsStore() {
     if (!db || typeof db !== "object" || !("runTransaction" in db) || typeof db.runTransaction !== "function" ||
         !("collection" in db) || typeof db.collection !== "function")
         throw new Error("STATISTICS_TRANSACTIONS_UNSUPPORTED");
-    store = createQuestionStatisticsStore(db);
-    return store;
+    database = db;
+    return database;
+}
+let store;
+function questionStatisticsStore() {
+    return store ??= createQuestionStatisticsStore(statisticsDatabase());
 }

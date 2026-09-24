@@ -78,9 +78,9 @@ export function createQuestionStatisticsStore(db: StatisticsDatabase, counterId 
   };
 }
 
-let store: QuestionStatisticsStore | undefined;
-export function questionStatisticsStore(): QuestionStatisticsStore {
-  if (store) return store;
+let database: StatisticsDatabase | undefined;
+export function statisticsDatabase(): StatisticsDatabase {
+  if (database) return database;
   const env = process.env.CLOUDBASE_ENV_ID?.trim();
   const accessKey = process.env.CLOUDBASE_APIKEY?.trim();
   if (!env || !accessKey) throw new Error("STATISTICS_CONFIGURATION_MISSING");
@@ -88,6 +88,11 @@ export function questionStatisticsStore(): QuestionStatisticsStore {
   const db: unknown = app.database();
   if (!db || typeof db !== "object" || !("runTransaction" in db) || typeof db.runTransaction !== "function" ||
       !("collection" in db) || typeof db.collection !== "function") throw new Error("STATISTICS_TRANSACTIONS_UNSUPPORTED");
-  store = createQuestionStatisticsStore(db as StatisticsDatabase);
-  return store;
+  database = db as StatisticsDatabase;
+  return database;
+}
+
+let store: QuestionStatisticsStore | undefined;
+export function questionStatisticsStore(): QuestionStatisticsStore {
+  return store ??= createQuestionStatisticsStore(statisticsDatabase());
 }

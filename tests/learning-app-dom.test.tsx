@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningApp } from "@/components/learning-app";
+vi.mock("@/components/use-question-admission", () => ({ useQuestionAdmission: () => ({ admit: async () => true, admitting: false, cancel: vi.fn(), ticket: () => "test-entry-ticket" }) }));
 
 const { createReportFile } = vi.hoisted(() => ({ createReportFile: vi.fn(async () => new File(["report"], "学习报告.png", { type: "image/png" })) }));
 vi.mock("@/lib/learning/report", () => ({ createReportFile }));

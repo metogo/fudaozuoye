@@ -8,6 +8,8 @@ import { assertProblemInformationComplete } from "../problem-completeness";
 import { DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE } from "../providers/mock-adapter";
 import { subjects as supportedSubjects, type GradeBand, type ProblemSnapshot, type ReasoningLevel, type Subject } from "../types";
 import { sse } from "./sse";
+import { authorizeQuestionEntry } from "../question-quota";
+import { ServiceError } from "../errors";
 
 const subjects = new Set<Subject>(supportedSubjects);
 const bands = new Set<GradeBand>(["primary", "junior", "senior"]);
@@ -32,11 +34,12 @@ export async function postAnalyze(request: Request): Promise<Response> {
     // invalid upload is converted by this route's error boundary to a stable
     // client response instead of escaping as a rejected handler promise.
     if (stage === "recognize") return await recognize(form, provider, adapter);
-    if (stage === "recognize_text") return recognizeText(form, provider, adapter);
+    if (stage === "recognize_text") return await recognizeText(form, provider, adapter);
     const raw = form.get("problem");
     if (typeof raw !== "string" || raw.length > 24_000) return new Response("缺少已确认的题目", { status: 400 });
     const problem = parseProblemSnapshot(JSON.parse(raw));
     if (adapter.mode === "demo" && !isBuiltInMockProblem(problem)) return new Response(DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
+    await authorizeQuestionEntry(form, "full", JSON.stringify(problem));
     return sse(async (send) => {
       const startedAt = Date.now();
       send("phase", { key: "mapping", label: "正在理解题目要解决什么" });
@@ -47,13 +50,14 @@ export async function postAnalyze(request: Request): Promise<Response> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "分析请求失败";
-    return new Response(message, { status: message.includes("过大") ? 413 : message.includes("频繁") ? 429 : 400 });
+    return new Response(message, { status: error instanceof ServiceError ? error.status : message.includes("过大") ? 413 : message.includes("频繁") ? 429 : 400 });
   }
 }
 
-function recognizeText(form: FormData, provider: "doubao" | "openai" | "xai", adapter: ReturnType<typeof getProviderAdapter>): Response {
+async function recognizeText(form: FormData, provider: "doubao" | "openai" | "xai", adapter: ReturnType<typeof getProviderAdapter>): Promise<Response> {
   const raw = form.get("text");
   if (typeof raw !== "string" || raw.trim().length < 3 || raw.length > 8_000) return new Response("请输入一道完整的题目", { status: 400 });
+  await authorizeQuestionEntry(form, "recognize_text", raw.trim());
   return sse(async (send) => {
     const startedAt = Date.now();
     send("phase", { key: "recognizing", label: "正在读懂你发来的题目" });
@@ -68,6 +72,7 @@ async function recognize(form: FormData, provider: "doubao" | "openai" | "xai", 
   if (!(file instanceof File)) return new Response("请先选择一道题的照片", { status: 400 });
   await assertImageFile(file);
   if (adapter.mode === "demo") return new Response(DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
+  await authorizeQuestionEntry(form, "recognize", new Uint8Array(await file.arrayBuffer()));
   return sse(async (send) => {
     const startedAt = Date.now();
     send("phase", { key: "recognizing", label: "正在识别题干与你的作答" });

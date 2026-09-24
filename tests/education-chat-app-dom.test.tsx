@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { recordQuestionEntry } = vi.hoisted(() => ({ recordQuestionEntry: vi.fn() }));
 vi.mock("@/components/use-question-entry-reporting", () => ({ useQuestionEntryReporting: () => recordQuestionEntry }));
+vi.mock("@/components/use-question-admission", () => ({ useQuestionAdmission: () => ({ admit: async () => true, admitting: false, cancel: vi.fn(), ticket: () => "test-entry-ticket" }) }));
 vi.mock("@/lib/browser/question-image-store", () => ({ saveQuestionImage: vi.fn(), loadQuestionImage: vi.fn(), removeQuestionImage: vi.fn() }));
 import { saveQuestionImage, loadQuestionImage, removeQuestionImage } from "@/lib/browser/question-image-store";
 

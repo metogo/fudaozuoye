@@ -12,6 +12,7 @@ vi.mock("@/lib/learning/providers", () => ({ getProviderAdapter: () => adapter, 
 vi.mock("@/lib/learning/request-guards", () => ({ assertSameOrigin: vi.fn(), assertContentLength: vi.fn(), assertRateLimit: vi.fn(), assertImageFile: vi.fn(async () => undefined) }));
 vi.mock("@/lib/learning/server-state", () => ({ consentRateIdentity: () => "test", hasValidConsent: () => true, toClientState: (session: unknown) => session }));
 vi.mock("@/lib/learning/mock-engine", () => ({ isBuiltInMockProblem: () => true }));
+vi.mock("@/lib/learning/question-quota", () => ({ authorizeQuestionEntry: vi.fn(async () => undefined) }));
 
 import { postAnalyze } from "@/lib/learning/http/analyze";
 

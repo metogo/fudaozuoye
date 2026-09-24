@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { postAnalyze } from "../../../lib/learning/http/analyze";
+import { postQuestionAdmission } from "../../../lib/learning/http/question-entry";
 import { postBoardCache } from "../../../lib/learning/http/board-cache";
 import { postConsent } from "../../../lib/learning/http/consent";
 import { postExpand } from "../../../lib/learning/http/expand";
@@ -24,6 +25,7 @@ const routes: Record<string, (request: Request) => Promise<Response> | Response>
   "GET /learning/statistics": getQuestionStatistics,
   "POST /learning/statistics": postQuestionEntry,
   "POST /learning/analyze": postAnalyze,
+  "POST /learning/question-entry": postQuestionAdmission,
   "POST /learning/board-cache": postBoardCache,
   "POST /learning/expand": postExpand,
   "POST /learning/verify": postVerify,

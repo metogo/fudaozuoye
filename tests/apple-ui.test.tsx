@@ -67,7 +67,9 @@ describe("悬浮设计系统保持学习流程", () => {
   });
   it("开始新题重新创建对话界面，不沿用上一题的草稿、引用和滚动状态", () => {
     const app = readFileSync("components/education-chat-app.tsx", "utf8");
-    expect(app).toMatch(/const reset = \(\) => \{\s*setChatUiEpoch\(\(epoch\) => epoch \+ 1\)/);
+    const resetBody = app.split("const reset = () => {")[1]?.split("\n  };")[0];
+    expect(resetBody).toContain("questionAdmission.cancel()");
+    expect(resetBody).toMatch(/setChatUiEpoch\(\(epoch\) => epoch \+ 1\)/);
     expect(app).toMatch(/<LearningChat\s+key=\{chatUiEpoch\}/);
   });
   it("只对完整的纯算术展示使用界面数字字体，不影响复杂数学排版", () => {

@@ -60,6 +60,15 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    expect(screen.queryByRole("region", { name: "示例题目" })).toBeNull();
    expect(privacy.closest(".chat-scroll")).toBeNull();
  });
+ it("额度拦截后保留首页原题草稿，不清空输入", async () => {
+   localStorage.setItem("visitor-analytics-consent-v1", "declined");
+   const onSend = vi.fn(async () => false);
+   render(<LearningChat {...base} onSend={onSend}/>);
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "请保留这道题" } });
+   fireEvent.click(screen.getByRole("button", { name: "发送" }));
+   await waitFor(() => expect(onSend).toHaveBeenCalledWith("请保留这道题"));
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("请保留这道题");
+ });
  it.each(homeExamples)("首页$stage示例只填入，点击原发送按钮才提交且进入对话后不再出现", example => {
    const onSend = vi.fn(), onQuestion = vi.fn();
    const view = render(<LearningChat {...base} onSend={onSend} onQuestion={onQuestion}/>);

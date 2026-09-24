@@ -11,6 +11,8 @@ const problem_completeness_1 = require("../problem-completeness");
 const mock_adapter_1 = require("../providers/mock-adapter");
 const types_1 = require("../types");
 const sse_1 = require("./sse");
+const question_quota_1 = require("../question-quota");
+const errors_1 = require("../errors");
 const subjects = new Set(types_1.subjects);
 const bands = new Set(["primary", "junior", "senior"]);
 const reasoningLevels = new Set(["light", "medium", "high"]);
@@ -36,13 +38,14 @@ async function postAnalyze(request) {
         if (stage === "recognize")
             return await recognize(form, provider, adapter);
         if (stage === "recognize_text")
-            return recognizeText(form, provider, adapter);
+            return await recognizeText(form, provider, adapter);
         const raw = form.get("problem");
         if (typeof raw !== "string" || raw.length > 24_000)
             return new Response("缺少已确认的题目", { status: 400 });
         const problem = parseProblemSnapshot(JSON.parse(raw));
         if (adapter.mode === "demo" && !(0, mock_engine_1.isBuiltInMockProblem)(problem))
             return new Response(mock_adapter_1.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
+        await (0, question_quota_1.authorizeQuestionEntry)(form, "full", JSON.stringify(problem));
         return (0, sse_1.sse)(async (send) => {
             const startedAt = Date.now();
             send("phase", { key: "mapping", label: "正在理解题目要解决什么" });
@@ -54,13 +57,14 @@ async function postAnalyze(request) {
     }
     catch (error) {
         const message = error instanceof Error ? error.message : "分析请求失败";
-        return new Response(message, { status: message.includes("过大") ? 413 : message.includes("频繁") ? 429 : 400 });
+        return new Response(message, { status: error instanceof errors_1.ServiceError ? error.status : message.includes("过大") ? 413 : message.includes("频繁") ? 429 : 400 });
     }
 }
-function recognizeText(form, provider, adapter) {
+async function recognizeText(form, provider, adapter) {
     const raw = form.get("text");
     if (typeof raw !== "string" || raw.trim().length < 3 || raw.length > 8_000)
         return new Response("请输入一道完整的题目", { status: 400 });
+    await (0, question_quota_1.authorizeQuestionEntry)(form, "recognize_text", raw.trim());
     return (0, sse_1.sse)(async (send) => {
         const startedAt = Date.now();
         send("phase", { key: "recognizing", label: "正在读懂你发来的题目" });
@@ -76,6 +80,7 @@ async function recognize(form, provider, adapter) {
     await (0, request_guards_1.assertImageFile)(file);
     if (adapter.mode === "demo")
         return new Response(mock_adapter_1.DEMO_CUSTOM_INPUT_UNSUPPORTED_MESSAGE, { status: 400 });
+    await (0, question_quota_1.authorizeQuestionEntry)(form, "recognize", new Uint8Array(await file.arrayBuffer()));
     return (0, sse_1.sse)(async (send) => {
         const startedAt = Date.now();
         send("phase", { key: "recognizing", label: "正在识别题干与你的作答" });

@@ -62,7 +62,7 @@ interface LearningChatProps {
   onFile: (file: File, replaceProblem?: boolean) => void;
   onResponsePhoto: (file: File, intent: "answer" | "question") => void;
   onWhiteboard: (intent: "answer" | "question") => void;
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | boolean | Promise<void | boolean>;
   onQuestion: (text: string, quote?: string) => void;
   onChoice: (gate: LearningGate, choice: LearningChoice) => void;
   onSuggestion: (suggestion: SuggestedQuestion) => void;
@@ -237,7 +237,7 @@ export function LearningChat(props: LearningChatProps) {
     if (area) { area.scrollTop = top; area.focus({ preventScroll: true }); }
   };
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
     if (!text || props.busy) return;
@@ -246,8 +246,11 @@ export function LearningChat(props: LearningChatProps) {
     // Keep `quote` from this render so clearing the UI cannot lose the request context.
     if (quote) cancelQuote();
     if (questionMode || gate?.kind === "step_answer") props.onQuestion(text, quote);
-    else props.onSend(text);
-    setInput("");
+    else {
+      const submitted = props.onSend(text);
+      if (!props.session && (submitted instanceof Promise ? await submitted : submitted) === false) return;
+    }
+    setInput(current => current.trim() === text ? "" : current);
     setSelectedQuote(null);
     setQuestionGateId(null);
   };

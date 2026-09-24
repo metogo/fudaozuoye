@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { postAnalyze } from "@/lib/learning/http/analyze";
 import { CONSENT_COOKIE, createConsentValue } from "@/lib/learning/server-state";
 import type { ClientSessionState, ProblemSnapshot } from "@/lib/learning/types";
+vi.mock("@/lib/learning/question-quota", () => ({ authorizeQuestionEntry: vi.fn(async () => undefined) }));
 
 describe("题目识别模式边界", () => {
   afterEach(() => vi.unstubAllEnvs());

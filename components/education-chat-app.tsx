@@ -49,6 +49,7 @@ import { illustrationFingerprint } from "@/lib/learning/illustration-fingerprint
 import { BoardErrorBoundary } from "./board-error-boundary";
 import { LearningChat } from "./learning-chat";
 import { useQuestionEntryReporting } from "./use-question-entry-reporting";
+import { useQuestionAdmission } from "./use-question-admission";
 import { STREAMING_FINISH_MS } from "./streaming-indicator";
 import { useOriginalImagePersistence } from "./original-image-persistence";
 import { learningApiUrl } from "@/lib/learning/api-url";
@@ -139,6 +140,7 @@ export function EducationChatApp() {
   const [busy, setBusy] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState("");
   const [notice, setNotice] = useState("");
+  const questionAdmission = useQuestionAdmission(setNotice);
   const [retryLabel, setRetryLabel] = useState("");
   const [retryMessageId, setRetryMessageId] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<StoredChatRetry | null>(null);
@@ -389,10 +391,11 @@ export function EducationChatApp() {
 
   const sendText = async (text: string) => {
     if (!session) {
+      if (!(await questionAdmission.admit(text))) return false;
       addMessage(userMessage(text));
       if (messages.length === 0) recordQuestionEntry();
-      await recognizeText(text);
-      return;
+      void recognizeText(text);
+      return true;
     }
     const gate = session.flow.activeGate;
     addMessage(userMessage(text));
@@ -525,6 +528,12 @@ export function EducationChatApp() {
   };
 
   const receiveImage = async (blob: Blob, previewUrl: string, replaceProblem = false) => {
+    if (!(await questionAdmission.admit(blob))) {
+      setCropFile(null);
+      setWhiteboardIntent(null);
+      URL.revokeObjectURL(previewUrl);
+      return;
+    }
     if (replaceProblem) reset();
     previewUrlsRef.current.push(previewUrl);
     setCropFile(null);
@@ -562,6 +571,7 @@ export function EducationChatApp() {
     try {
       const form = new FormData();
       form.set("stage", "recognize_text");
+      form.set("entryTicket", questionAdmission.ticket());
       form.set("provider", "doubao");
       form.set("reasoningLevel", reasoningLevel);
       form.set("text", text);
@@ -603,6 +613,7 @@ export function EducationChatApp() {
     try {
       const form = new FormData();
       form.set("stage", "recognize");
+      form.set("entryTicket", questionAdmission.ticket());
       form.set("provider", "doubao");
       form.set("reasoningLevel", reasoningLevel);
       form.set(
@@ -658,6 +669,7 @@ export function EducationChatApp() {
     try {
       const form = new FormData();
       form.set("stage", "full");
+      form.set("entryTicket", questionAdmission.ticket());
       form.set("provider", "doubao");
       form.set("reasoningLevel", reasoningLevel);
       form.set("problem", JSON.stringify(problem));
@@ -1079,6 +1091,7 @@ export function EducationChatApp() {
   };
 
   const reset = () => {
+    questionAdmission.cancel();
     setChatUiEpoch((epoch) => epoch + 1);
     clearOriginalImage(messages[0]);
     for (const request of emphasisRequestsRef.current) request.abort();
@@ -1338,7 +1351,7 @@ export function EducationChatApp() {
         statisticsEnabled={statisticsEnabled}
         ready={hydrated && ready}
         homeMotionPaused={!hydrated || Boolean(cropFile || responseCrop || whiteboardIntent)}
-        busy={busy}
+        busy={busy || questionAdmission.admitting}
         loadingLabel={loadingLabel}
         notice={notice}
         retryLabel={retryLabel}

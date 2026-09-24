@@ -8,6 +8,7 @@ import { ImageCropper } from "./image-cropper";
 import { LearningWorkspace } from "./learning-workspace";
 import { PreparationStep, type PreparationPhase } from "./review-step";
 import { learningApiUrl } from "@/lib/learning/api-url";
+import { useQuestionAdmission } from "./use-question-admission";
 
 type Screen = "capture" | "preparing" | "learning";
 const SESSION_KEY = "guided-learning-session-v2";
@@ -32,6 +33,7 @@ export function LearningApp() {
   const [stateToken, setStateToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const questionAdmission = useQuestionAdmission(setNotice);
   const [analysisLabel, setAnalysisLabel] = useState("正在读题");
   const [analysisEvents, setAnalysisEvents] = useState<string[]>([]);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function LearningApp() {
   }, [provider, session, stateToken]);
 
   const recognize = async (blob: Blob, nextPreviewUrl: string) => {
+    if (!(await questionAdmission.admit(blob))) { setCropFile(null); URL.revokeObjectURL(nextPreviewUrl); return; }
     returningHomeRef.current = false;
     const controller = new AbortController();
     analysisAbortRef.current = controller;
@@ -88,6 +91,7 @@ export function LearningApp() {
     try {
       const form = new FormData();
       form.set("stage", "recognize"); form.set("provider", "doubao");
+      form.set("reasoningLevel", "light"); form.set("entryTicket", questionAdmission.ticket());
       form.set("image", new File([blob], "homework.jpg", { type: "image/jpeg" }));
       await postSse(form, (event, data) => {
         if (event === "phase") {
@@ -115,6 +119,7 @@ export function LearningApp() {
     try {
       const form = new FormData();
       form.set("stage", "full"); form.set("provider", "doubao"); form.set("problem", JSON.stringify(problem));
+      form.set("reasoningLevel", "light"); form.set("entryTicket", questionAdmission.ticket());
       if (croppedBlob) form.set("image", new File([croppedBlob], "homework.jpg", { type: "image/jpeg" }));
       await postSse(form, (event, data) => {
         if (event === "phase") {
@@ -261,6 +266,7 @@ export function LearningApp() {
   };
 
   const reset = () => {
+    questionAdmission.cancel();
     returningHomeRef.current = true;
     analysisAbortRef.current?.abort();
     analysisAbortRef.current = null;

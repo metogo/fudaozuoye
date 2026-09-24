@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+vi.mock("@/components/use-question-admission", () => ({ useQuestionAdmission: () => ({ admit: async () => true, admitting: false, cancel: vi.fn(), ticket: () => "test-entry-ticket" }) }));
 import type { ComponentProps } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
