@@ -21,6 +21,8 @@ it("初始 HTML 已包含首页，不等待浏览器脚本和服务响应才展�
 });
 
 it("首页先展示，但发题仍等待服务就绪；输入草稿不会被就绪更新重置", async () => {
+  // This flow is a returning visitor; first-visit analytics consent is covered separately.
+  localStorage.setItem("visitor-analytics-consent-v1", "declined");
   vi.useFakeTimers();
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   let resolveConsent!: (response: Response) => void;
@@ -37,4 +39,5 @@ it("首页先展示，但发题仍等待服务就绪；输入草稿不会被就�
   expect((screen.getByLabelText("拍照发题") as HTMLInputElement).disabled).toBe(false);
   expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(false);
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("保留这段题目草稿");
+  localStorage.removeItem("visitor-analytics-consent-v1");
 });

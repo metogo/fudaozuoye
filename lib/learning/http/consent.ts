@@ -6,8 +6,9 @@ export async function postConsent(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
     assertRateLimit(request, 60);
-    const headers = new Headers({ "Content-Type": "application/json" });
-    headers.append("Set-Cookie", `${CONSENT_COOKIE}=${createConsentValue()}; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict${process.env.NODE_ENV === "production" ? "; Secure" : ""}`);
+    const secure = new URL(request.url).protocol === "https:" || process.env.NODE_ENV === "production";
+    const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store, no-transform" });
+    headers.append("Set-Cookie", `${CONSENT_COOKIE}=${createConsentValue()}; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`);
     return new Response(JSON.stringify({ accepted: true, statisticsEnabled: Boolean(process.env.CLOUDBASE_ENV_ID?.trim() && process.env.CLOUDBASE_APIKEY?.trim()), version: "guardian-v1", providers: listProviderAvailability(), reasoningLevels: listReasoningAvailability(), illustration: getIllustrationAvailability() }), { headers });
   } catch (error) {
     return Response.json({ accepted: false, message: error instanceof Error ? error.message : "无法记录监护人同意" }, { status: 400 });

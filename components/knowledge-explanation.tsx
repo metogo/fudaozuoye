@@ -9,6 +9,7 @@ import { createOptionalLearningFeature } from "./optional-learning-feature";
 import type { NodePracticeProps } from "./node-practice";
 import { readMapStream } from "@/lib/learning/knowledge-map-stream";
 import { knowledgeDetailIdentity } from "@/lib/learning/knowledge-detail-context";
+import { learningApiUrl } from "@/lib/learning/api-url";
 
 const NodePractice = createOptionalLearningFeature<NodePracticeProps>(() => import("./node-practice").then(module => ({ default: module.NodePractice })), "知识点小练习");
 
@@ -35,8 +36,7 @@ export function KnowledgeExplanation({ focus: initialFocus, map: initialMap, sta
         }
       } catch { /* Invalid or unavailable storage cannot block fresh details. */ }
       try {
-        const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api";
-        const response = await fetch(`${base}/learning/knowledge-map`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stateToken, map, nodeId: focus.id, partial, stream: true }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
+        const response = await fetch(learningApiUrl("/learning/knowledge-map"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stateToken, map, nodeId: focus.id, partial, stream: true }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
         let parsed: KnowledgeDetail | undefined;
         await readMapStream(response, (event, data) => {
           if (controller.signal.aborted) return;

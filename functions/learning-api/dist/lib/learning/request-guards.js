@@ -14,7 +14,9 @@ function assertSameOrigin(request) {
         return;
     }
     const allowedOrigin = process.env.PUBLIC_APP_ORIGIN?.trim();
-    if (allowedOrigin ? origin !== allowedOrigin : new URL(origin).host !== new URL(request.url).host)
+    const sameOrigin = new URL(origin).host === new URL(request.url).host;
+    const customDomainOrigin = "https://fudaozuoye.com";
+    if (allowedOrigin ? origin !== allowedOrigin && origin !== customDomainOrigin && !sameOrigin : origin !== customDomainOrigin && !sameOrigin)
         throw new Error("请求来源不合法");
 }
 function assertContentLength(request, maxBytes) {

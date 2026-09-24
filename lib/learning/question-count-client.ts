@@ -1,8 +1,10 @@
+import { learningApiUrl } from "./api-url";
+
 export const QUESTION_ENTRY_QUEUE_KEY = "education-question-entries-v1";
 export const QUESTION_STATISTICS_CHANGED = "question-statistics-changed";
 
 export function statisticsUrl() {
-  return `${process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api"}/learning/statistics`;
+  return learningApiUrl("/learning/statistics");
 }
 
 export async function readQuestionTotal(signal?: AbortSignal): Promise<number> {

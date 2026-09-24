@@ -7,6 +7,7 @@ import { CaptureStep } from "./capture-step";
 import { ImageCropper } from "./image-cropper";
 import { LearningWorkspace } from "./learning-workspace";
 import { PreparationStep, type PreparationPhase } from "./review-step";
+import { learningApiUrl } from "@/lib/learning/api-url";
 
 type Screen = "capture" | "preparing" | "learning";
 const SESSION_KEY = "guided-learning-session-v2";
@@ -302,8 +303,7 @@ async function postJsonSse(url: string, body: Record<string, unknown>, onEvent: 
 }
 
 function apiUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
-  return `${base ?? "/api"}${path}`;
+  return learningApiUrl(path);
 }
 
 async function readSseResponse(response: Response, onEvent: (event: string, data: unknown) => void) {

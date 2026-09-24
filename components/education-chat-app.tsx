@@ -51,6 +51,7 @@ import { LearningChat } from "./learning-chat";
 import { useQuestionEntryReporting } from "./use-question-entry-reporting";
 import { STREAMING_FINISH_MS } from "./streaming-indicator";
 import { useOriginalImagePersistence } from "./original-image-persistence";
+import { learningApiUrl } from "@/lib/learning/api-url";
 const ImageCropper = dynamic(() => import("./image-cropper").then((module) => module.ImageCropper), { ssr: false });
 const WhiteboardInput = dynamic(() => import("./whiteboard-input").then((module) => module.WhiteboardInput), { ssr: false });
 const LearningIllustration = dynamic(() => import("./learning-illustration").then((module) => module.LearningIllustration), { ssr: false });
@@ -1650,8 +1651,7 @@ function id(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 function apiUrl(path: string) {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
-  return `${base ?? "/api"}${path}`;
+  return learningApiUrl(path);
 }
 function labelOf(value: unknown, fallback: string) {
   return String((value as { label?: string })?.label ?? fallback);

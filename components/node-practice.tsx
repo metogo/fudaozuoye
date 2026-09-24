@@ -5,6 +5,7 @@ import { parseNodePractice, type NodePractice as Practice } from "@/lib/learning
 import type { MapConcept, ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
 import { RichLearningText } from "./lazy-rich-learning-text";
 import { useUiText } from "./ui-language";
+import { learningApiUrl } from "@/lib/learning/api-url";
 
 export interface NodePracticeProps { focus: MapConcept; map: ProblemKnowledgeMap; stateToken: string; partial: boolean }
 export function NodePractice({ focus, map, stateToken, partial }: NodePracticeProps) {
@@ -25,8 +26,7 @@ export function NodePractice({ focus, map, stateToken, partial }: NodePracticePr
     request.current = controller;
     setOpen(true); setPending(true); setError(false);
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api";
-      const response = await fetch(`${base}/learning/node-practice`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      const response = await fetch(learningApiUrl("/learning/node-practice"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stateToken, map, nodeId: focus.id, partial, previous: history.current }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]) });
       const body = await response.json();
       if (!response.ok) throw new Error("练习生成失败");

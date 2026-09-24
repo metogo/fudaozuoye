@@ -7,6 +7,7 @@ import { applyMapEvent, finishMapDraft, readMapStream, type KnowledgeMapDraft, t
 import type { LearningSession } from "@/lib/learning/types";
 import { createMapDeadline } from "@/lib/learning/knowledge-map-deadline";
 import { damagedProblemFormulaMessage, hasDamagedFormula } from "@/lib/learning/formula-integrity";
+import { learningApiUrl } from "@/lib/learning/api-url";
 
 export interface SavedMap { identity: string; map: ProblemKnowledgeMap; positions?: Record<string, MapPoint>; expanded?: string[]; viewport?: Viewport }
 const empty: KnowledgeMapDraft = { plan: null, map: null };
@@ -48,8 +49,7 @@ export function useKnowledgeMap(session: LearningSession, stateToken: string, en
       let received = empty;
       try {
         deadline = createMapDeadline(3000);
-        const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api";
-        const response = await fetch(`${base}/learning/knowledge-map`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ stateToken: snapshot.stateToken, stream: true, earlyRoot: true }), signal: AbortSignal.any([controller.signal, deadline.signal]) });
+        const response = await fetch(learningApiUrl("/learning/knowledge-map"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ stateToken: snapshot.stateToken, stream: true, earlyRoot: true }), signal: AbortSignal.any([controller.signal, deadline.signal]) });
         await readMapStream(response, (event, data) => {
           if (!active) return;
           if (event === "map.start") return;

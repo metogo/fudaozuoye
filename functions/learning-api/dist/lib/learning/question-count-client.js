@@ -4,10 +4,11 @@ exports.QUESTION_STATISTICS_CHANGED = exports.QUESTION_ENTRY_QUEUE_KEY = void 0;
 exports.statisticsUrl = statisticsUrl;
 exports.readQuestionTotal = readQuestionTotal;
 exports.createQuestionEntryReporter = createQuestionEntryReporter;
+const api_url_1 = require("./api-url");
 exports.QUESTION_ENTRY_QUEUE_KEY = "education-question-entries-v1";
 exports.QUESTION_STATISTICS_CHANGED = "question-statistics-changed";
 function statisticsUrl() {
-    return `${process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "/api"}/learning/statistics`;
+    return (0, api_url_1.learningApiUrl)("/learning/statistics");
 }
 async function readQuestionTotal(signal) {
     const response = await fetch(statisticsUrl(), { cache: "no-store", signal });

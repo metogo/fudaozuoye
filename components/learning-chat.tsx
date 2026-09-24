@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { UiLanguageSwitch, useUiText } from "./ui-language";
+import { VisitorAnalyticsSettings } from "./visitor-analytics";
 import { MissingProblemImage } from "./missing-problem-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type ComponentProps } from "react";
 import { createOptionalLearningFeature } from "./optional-learning-feature";
@@ -325,6 +326,7 @@ export function LearningChat(props: LearningChatProps) {
         {/* Async suggestions must follow all task controls so arriving questions cannot push a button out from under a tap. */}
         {showSuggestions && <div ref={suggestionsRef}><SuggestedQuestionTrail suggestions={activeSuggestions} onSuggestion={props.onSuggestion}/></div>}
       </div>}
+    <VisitorAnalyticsSettings surface={isHome ? "home" : knowledgeMapOpen ? "map" : "chat"}/>
     {exportOpen && <ConversationExport key={props.session?.requestId ?? "pending"} messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
     {props.session && <SelectionAsk key={props.session.requestId} root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
       if (text.length > 12000) { setFileError("选中文字过长，请将引用控制在 12000 字以内。"); return; }

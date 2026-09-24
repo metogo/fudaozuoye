@@ -13,6 +13,7 @@ describe("无状态学习会话边界", () => {
   it("只允许配置的生产 H5 跨域调用云函数", () => {
     vi.stubEnv("PUBLIC_APP_ORIGIN", "https://study.example.com");
     expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://study.example.com" } }))).not.toThrow();
+    expect(() => assertSameOrigin(new Request("https://fudaozuoye.com/api/consent", { headers: { Origin: "https://fudaozuoye.com" } }))).not.toThrow();
     expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://attacker.example.com" } }))).toThrow("请求来源不合法");
   });
 
