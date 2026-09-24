@@ -12,7 +12,7 @@ beforeEach(() => {
     close: { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } },
   });
 });
-afterEach(() => { cleanup(); document.getElementById("baidu-visitor-analytics")?.remove(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); document.getElementById("baidu-visitor-analytics")?.remove(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers(); window.history.replaceState(null, "", "/"); });
 
 function fixture(host = "fudaozuoye.com") {
   const win = { document, location: new URL(`https://${host}/?private=question`),
@@ -110,12 +110,14 @@ describe("统计同意界面", () => {
     expect(canResetLocalAnalytics("localhost.evil.test", "development")).toBe(false);
     localStorage.setItem(ANALYTICS_CHOICE_KEY, "declined");
     vi.stubEnv("NODE_ENV", "production");
+    window.history.replaceState(null, "", "/?analyticsDebug=1");
     render(<VisitorAnalyticsSettings surface="home"/>);
     act(() => vi.runOnlyPendingTimers());
     expect(screen.queryByRole("button", { name: "重置本地统计选择" })).toBeNull();
   });
   it.each(["accepted", "declined"] as const)("本地已有 %s 可重置并走真实同意流程，只清理统计选择", choice => {
     vi.stubEnv("NODE_ENV", "development");
+    window.history.replaceState(null, "", "/?analyticsDebug=1");
     localStorage.setItem(ANALYTICS_CHOICE_KEY, choice);
     localStorage.setItem("unrelated-draft", "保留题目");
     const allowed = vi.spyOn(VisitorAnalytics.prototype, "setAllowed");
@@ -139,6 +141,7 @@ describe("统计同意界面", () => {
   });
   it("重置存储失败时明确提示，不伪装成首次访问", () => {
     vi.stubEnv("NODE_ENV", "development");
+    window.history.replaceState(null, "", "/?analyticsDebug=1");
     localStorage.setItem(ANALYTICS_CHOICE_KEY, "declined");
     render(<VisitorAnalyticsSettings surface="home"/>);
     act(() => vi.runOnlyPendingTimers());
@@ -147,6 +150,15 @@ describe("统计同意界面", () => {
     expect(screen.getByText("无法重置统计选择，请检查浏览器存储权限。")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(localStorage.getItem(ANALYTICS_CHOICE_KEY)).toBe("declined");
+  });
+  it("本地正常预览默认隐藏重置按钮，不改变统计选择", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    localStorage.setItem(ANALYTICS_CHOICE_KEY, "accepted");
+    render(<VisitorAnalyticsSettings surface="home"/>);
+    act(() => vi.runOnlyPendingTimers());
+    expect(screen.queryByRole("button", { name: "重置本地统计选择" })).toBeNull();
+    expect(screen.getByText("访问统计与隐私设置")).toBeTruthy();
+    expect(localStorage.getItem(ANALYTICS_CHOICE_KEY)).toBe("accepted");
   });
   it.each(["accepted", "declined"] as const)("%s 选择跨页面重新挂载保留，不需要每次点击", choice => {
     const allowed = vi.spyOn(VisitorAnalytics.prototype, "setAllowed");
@@ -159,7 +171,7 @@ describe("统计同意界面", () => {
     const next = render(<VisitorAnalyticsSettings surface="chat"/>);
     act(() => vi.runOnlyPendingTimers());
     expect(allowed).toHaveBeenLastCalledWith(choice === "accepted");
-    expect(next.container.querySelector("details")?.open).toBe(false);
+    expect(next.container.querySelector("aside")).toBeNull();
     expect(next.container.querySelector("dialog")).toBeNull();
     next.unmount();
     localStorage.clear();
@@ -202,7 +214,38 @@ describe("统计同意界面", () => {
     act(() => vi.runOnlyPendingTimers());
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "访问统计设置" })).toBeNull();
     view.rerender(<VisitorAnalyticsSettings surface="home"/>);
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+  it.each(["accepted", "declined"] as const)("%s 时只隐藏对话/图谱设置，不销毁统计或丢失首页选择", choice => {
+    localStorage.setItem(ANALYTICS_CHOICE_KEY, choice);
+    const surface = vi.spyOn(VisitorAnalytics.prototype, "setSurface");
+    const dispose = vi.spyOn(VisitorAnalytics.prototype, "dispose");
+    const allowed = vi.spyOn(VisitorAnalytics.prototype, "setAllowed");
+    const view = render(<VisitorAnalyticsSettings surface="home"/>);
+    act(() => vi.runOnlyPendingTimers());
+    expect(screen.getByText("访问统计与隐私设置")).toBeTruthy();
+    for (const next of ["chat", "map"] as const) {
+      view.rerender(<VisitorAnalyticsSettings surface={next}/>);
+      expect(view.container.childElementCount).toBe(0);
+      expect(surface).toHaveBeenLastCalledWith(next);
+      expect(dispose).not.toHaveBeenCalled();
+      expect(allowed).toHaveBeenLastCalledWith(choice === "accepted");
+    }
+    view.rerender(<VisitorAnalyticsSettings surface="home"/>);
+    expect(screen.getByText("访问统计与隐私设置")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(localStorage.getItem(ANALYTICS_CHOICE_KEY)).toBe(choice);
+  });
+  it("对话页隐藏设置期间，其他标签撤回同意仍立即生效", () => {
+    localStorage.setItem(ANALYTICS_CHOICE_KEY, "accepted");
+    const allowed = vi.spyOn(VisitorAnalytics.prototype, "setAllowed");
+    const view = render(<VisitorAnalyticsSettings surface="chat"/>);
+    act(() => vi.runOnlyPendingTimers());
+    localStorage.setItem(ANALYTICS_CHOICE_KEY, "declined");
+    fireEvent(window, new StorageEvent("storage", { key: ANALYTICS_CHOICE_KEY }));
+    expect(allowed).toHaveBeenLastCalledWith(false);
+    expect(view.container.childElementCount).toBe(0);
   });
 });

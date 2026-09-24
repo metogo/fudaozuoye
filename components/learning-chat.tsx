@@ -15,6 +15,8 @@ import type { ChatMessage, IllustrationAvailability, LearningChoice, LearningGat
 import { ArrowIcon, BookIcon, CameraIcon, CheckIcon, ChevronIcon, DownloadIcon, ImageIcon, InfoIcon, KeyboardIcon, PencilIcon, QuestionIcon, RefreshIcon, SendIcon, SparkIcon, TutorIcon } from "./icons";
 import { CommaCompanion } from "./comma-companion";
 import { HomeWelcomeHero } from "./home-welcome-hero";
+import { HomeExamples } from "./home-examples";
+import { homeExamples } from "@/lib/browser/home-examples";
 import { RichLearningText, preloadLearningText } from "./lazy-rich-learning-text";
 import { CopyableLearningText } from "./copyable-learning-text";
 import { QuoteComposerMotion } from "./quote-composer-motion";
@@ -74,10 +76,17 @@ interface LearningChatProps {
 
 export function LearningChat(props: LearningChatProps) {
   const t = useUiText();
+  const isHome = !props.session && props.messages.length === 0 && !props.reviewProblem;
   const [knowledgeMapOpen, setKnowledgeMapOpen] = useState(false);
   const [knowledgeMapFocus, setKnowledgeMapFocus] = useState<MapFocus | undefined>();
   const [exportOpen, setExportOpen] = useState(false);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => isHome ? homeExamples[0].problem : "");
+  const [inputOnHome, setInputOnHome] = useState(isHome);
+  // Home examples are drafts, never answers in a newly opened lesson.
+  if (inputOnHome !== isHome) {
+    setInputOnHome(isHome);
+    setInput(isHome ? homeExamples[0].problem : "");
+  }
   const [selectedQuote, setSelectedQuote] = useState<{ text: string; requestId: string; range: Range } | null>(null);
   const quote = selectedQuote?.requestId === props.session?.requestId ? selectedQuote?.text : undefined;
   const [fileError, setFileError] = useState("");
@@ -107,7 +116,6 @@ export function LearningChat(props: LearningChatProps) {
   const showResponseTools = Boolean(props.session && !quote && !hasPendingRetry && (!choiceAnswerMode || questionMode) && !props.reviewProblem);
   const currentTask = gate && !hasPendingRetry ? currentTaskCopy(props.session, gate, questionMode) : null;
   const canAttach = !props.session && !props.busy && !props.reviewProblem;
-  const isHome = !props.session && props.messages.length === 0 && !props.reviewProblem;
   useReadingHeader(scrollRef, headerRef, !isHome, props.session?.requestId ?? "pending");
   const edgeFadeEnabled = !isHome && !quote;
   useEffect(() => {
@@ -210,8 +218,8 @@ export function LearningChat(props: LearningChatProps) {
       return;
     }
     area.style.height = "0px";
-    area.style.height = `${Math.min(128, Math.max(44, area.scrollHeight))}px`;
-  }, [input, gate?.id, questionMode]);
+    area.style.height = `${Math.min(isHome ? 240 : 128, Math.max(44, area.scrollHeight))}px`;
+  }, [input, gate?.id, questionMode, isHome]);
 
   const dismissQuoteOnScroll = useCallback(() => {
     textareaRef.current?.blur();
@@ -326,7 +334,6 @@ export function LearningChat(props: LearningChatProps) {
         {/* Async suggestions must follow all task controls so arriving questions cannot push a button out from under a tap. */}
         {showSuggestions && <div ref={suggestionsRef}><SuggestedQuestionTrail suggestions={activeSuggestions} onSuggestion={props.onSuggestion}/></div>}
       </div>}
-    <VisitorAnalyticsSettings surface={isHome ? "home" : knowledgeMapOpen ? "map" : "chat"}/>
     {exportOpen && <ConversationExport key={props.session?.requestId ?? "pending"} messages={props.messages} session={props.session} onClose={() => setExportOpen(false)}/>}
     {props.session && <SelectionAsk key={props.session.requestId} root={scrollRef} disabled={knowledgeMapOpen || exportOpen || Boolean(quote) || props.busy || hasPendingRetry || Boolean(props.reviewProblem)} onAsk={(text, range) => {
       if (text.length > 12000) { setFileError("选中文字过长，请将引用控制在 12000 字以内。"); return; }
@@ -365,6 +372,7 @@ export function LearningChat(props: LearningChatProps) {
         </div>
       </div>}
       {currentTask && !quote && <div className="mx-auto mb-2 flex max-w-2xl items-center gap-2 px-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><div className="min-w-0 flex-1"><span className="mr-1.5 text-[9px] font-semibold tracking-[.08em] text-stone-400">{t("当前环节")}</span><span className="text-[11px] font-semibold text-stone-600">{t(currentTask.intent)}</span></div>{answerMode && <button type="button" disabled={props.busy} onClick={() => { setQuestionGateId(questionMode ? null : gate?.id ?? null); setSelectedQuote(null); setInput(""); textareaRef.current?.focus(); }} className="min-h-11 shrink-0 rounded-xl px-2 text-[10px] font-semibold text-stone-500 transition hover:text-stone-900 disabled:opacity-40">{questionMode ? t("返回作答") : t("改为提问")}</button>}</div>}
+      {isHome && <div className="home-input-toolbar mx-auto flex max-w-2xl justify-end"><HomeExamples disabled={!props.ready || props.busy || hasPendingRetry} value={input} onSelect={text => { setInput(text); setFileError(""); }}/></div>}
       <div className={`composer-surface mx-auto flex max-w-2xl flex-col gap-2 rounded-[22px] border border-stone-200 bg-white p-2 shadow-[0_10px_30px_rgba(41,37,36,.1)] focus-within:border-stone-400 ${isHome ? "home-input-panel" : ""}`}>
         <div className="chat-composer__input-row flex w-full items-end gap-1">
           {isHome && <KeyboardIcon className="home-input-icon h-6 w-6 shrink-0"/>}
@@ -385,6 +393,7 @@ export function LearningChat(props: LearningChatProps) {
       {fileError && <p className="mx-auto mt-2 max-w-2xl px-2 text-[10px] text-red-700">{t(fileError)}</p>}
     </form>
     </div>
+    <VisitorAnalyticsSettings surface={isHome ? "home" : knowledgeMapOpen ? "map" : "chat"}/>
     <QuoteComposerMotion range={quote ? selectedQuote!.range : null} formRef={composerRef} dockRef={composerDockRef} scrollRef={scrollRef}/>
   </main>;
 }

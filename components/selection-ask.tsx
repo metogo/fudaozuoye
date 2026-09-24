@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "
 import { createPortal } from "react-dom";
 import { selectionSnapshot } from "@/lib/learning/selection-snapshot";
 import { bindParagraphSelection } from "@/lib/learning/paragraph-selection";
+import { useSelectionAskActivation } from "./use-selection-ask-activation";
 
 /** Use the browser's native selection so touch handles and keyboard selection remain available. */
 export function SelectionAsk({ root, disabled, onAsk }: {
@@ -15,9 +16,15 @@ export function SelectionAsk({ root, disabled, onAsk }: {
   const rangeRef = useRef<Range | null>(null);
   const dragRef = useRef<{ edge: "start" | "end"; offsetX: number; offsetY: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const { pendingTouch, cancelTouch, buttonProps } = useSelectionAskActivation(root, disabled, (current) => {
+    onAsk(current.text, current.range.cloneRange());
+    window.dispatchEvent(new Event("learning-selection-used"));
+    window.getSelection()?.removeAllRanges(); rangeRef.current = null; setSelection(null);
+  });
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
+      if (!disabled && pendingTouch.current) return;
       const area = root.current;
       const snapshot = selectionSnapshot(area);
       if (disabled || !area || !snapshot) { rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null); return; }
@@ -38,8 +45,9 @@ export function SelectionAsk({ root, disabled, onAsk }: {
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(update, dragRef.current ? 0 : 120); };
     const unbindTap = !disabled && root.current ? bindParagraphSelection(root.current, update) : undefined;
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { clearTimeout(timer); window.getSelection()?.removeAllRanges(); rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null); } };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { cancelTouch(); clearTimeout(timer); window.getSelection()?.removeAllRanges(); rangeRef.current = null; dragRef.current = null; setDragging(false); setSelection(null); } };
     const dismissOnScroll = () => {
+      cancelTouch();
       clearTimeout(timer);
       // Do not erase unrelated selection, or a quote already handed to the composer.
       if (rangeRef.current) window.getSelection()?.removeAllRanges();
@@ -53,7 +61,7 @@ export function SelectionAsk({ root, disabled, onAsk }: {
     window.visualViewport?.addEventListener("scroll", dismissOnScroll);
     schedule();
     return () => { unbindTap?.(); clearTimeout(timer); document.removeEventListener("selectionchange", schedule); document.removeEventListener("keydown", escape); window.removeEventListener("scroll", dismissOnScroll, true); window.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("resize", schedule); window.visualViewport?.removeEventListener("scroll", dismissOnScroll); };
-  }, [root, disabled]);
+  }, [root, disabled, pendingTouch, cancelTouch]);
   const moveHandle = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
     const range = rangeRef.current;
@@ -98,10 +106,6 @@ export function SelectionAsk({ root, disabled, onAsk }: {
         <span aria-hidden="true" className={`selection-ear__dot selection-ear__dot--${edge}`}/>
       </button>;
     })}
-    {!dragging && selection.top !== null && <button type="button" aria-label={t("针对选中文字问一问")} className="selection-ask-trigger" style={{ left: selection.left, top: selection.top }} onPointerDown={(event) => event.preventDefault()} onClick={() => {
-      const current = selectionSnapshot(root.current);
-      if (current) { onAsk(current.text, current.range.cloneRange()); window.dispatchEvent(new Event("learning-selection-used")); }
-      window.getSelection()?.removeAllRanges(); rangeRef.current = null; setSelection(null);
-    }}><span>{t("问一问")}</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 17 17 7M7 7h10v10"/></svg></button>}
+    {!dragging && selection.top !== null && <button type="button" aria-label={t("针对选中文字问一问")} className="selection-ask-trigger" style={{ left: selection.left, top: selection.top }} {...buttonProps}><span>{t("问一问")}</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 17 17 7M7 7h10v10"/></svg></button>}
   </>, document.body);
 }

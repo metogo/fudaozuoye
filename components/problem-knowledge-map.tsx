@@ -7,7 +7,7 @@ import { Background, ReactFlow, applyNodeChanges, type NodeChange, type ReactFlo
 import "@xyflow/react/dist/style.css";
 import { arrangeConcepts, relationLabel, visibleConceptIds, type ProblemKnowledgeMap } from "@/lib/learning/knowledge-map";
 import type { LearningSession } from "@/lib/learning/types";
-import { CloseIcon } from "./icons";
+import { KnowledgeDetailSheet } from "./knowledge-detail-sheet";
 import { RichLearningText } from "./lazy-rich-learning-text";
 import styles from "./problem-knowledge-map.module.css";
 import { useKnowledgeMap } from "./use-knowledge-map";
@@ -162,7 +162,7 @@ function MapCanvas({ generation, initialFocus }: { generation: ReturnType<typeof
       <div className={styles.tools} role="group" aria-label={t("图谱视图工具")}><button aria-label={t("缩小图谱")} onClick={() => { interacted.current = true; void flow?.zoomOut({ duration: duration() }); }}>−</button><span>{zoom}%</span><button aria-label={t("放大图谱")} onClick={() => { interacted.current = true; void flow?.zoomIn({ duration: duration() }); }}>＋</button><i/><button disabled={!map.nodes.length} onClick={() => { interacted.current = true; recoverView(); }}>{t("查看全图")}</button><button disabled={!map.nodes.length} onClick={() => { interacted.current = true; const arranged = plan ? slots : arrangeConcepts(map); positionsRef.current = arranged; setPositions(arranged); setAnnouncement("已恢复整齐布局，知识关系没有改变。"); recoverView(); }}>{t("整理")}</button><KnowledgeMapExport map={generation.map ?? emptyMap} positions={placed} complete={complete} nodeTypes={nodeTypes}/></div>
       <div className={styles.hint}>{t("拖节点排布 · 拖空白移动 · 双指缩放")}</div>
     </div>
-    {focus && <section className={styles.detail} aria-label={t("{title}的知识说明", { title: focus.title })}><header><div><span>{t("知识卡片")}</span><h2>{focus.title}</h2></div><button onClick={() => setSelected(null)} aria-label={t("关闭知识卡片")}><CloseIcon/></button></header><div className={styles.detailBody}><KnowledgeExplanation key={`${cacheKey}:${focus.id}`} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</div></section>}
+    {focus && <KnowledgeDetailSheet key={focus.id} title={focus.title} onClose={() => setSelected(null)}><KnowledgeExplanation key={`${cacheKey}:${focus.id}`} focus={focus} map={map} stateToken={stateToken} cacheKey={cacheKey} partial={!complete}/>{focus.evidence && <blockquote><small>{t("对应本题条件")}</small><RichLearningText text={focus.evidence}/></blockquote>}{map.edges.filter(e => e.from === focus.id || e.to === focus.id).map(e => <div className={styles.relation} key={`${e.from}:${e.to}`}><p><strong>{map.nodes.find(n => n.id === e.from)?.title}</strong> → <strong>{map.nodes.find(n => n.id === e.to)?.title}</strong></p><span>{t(relationLabel[e.kind])}</span><RichLearningText text={e.reason}/></div>)}</KnowledgeDetailSheet>}
     <footer className={styles.footer}>{notice ? t(notice) : t("每次进入自动整理 · 浏览图谱不改变学习进度")}<span>{t("AI 整理，请结合原题理解")}</span></footer><p role="status" className={styles.sr}>{t(announcement)}</p>
   </div>;
 }

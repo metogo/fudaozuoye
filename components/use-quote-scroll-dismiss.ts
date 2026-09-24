@@ -6,10 +6,14 @@ export function useQuoteScrollDismiss(active: boolean, form: RefObject<HTMLFormE
   useEffect(() => {
     if (!active) return;
     let resizingUntil = 0;
+    let focusPanningUntil = 0;
     const resize = () => { resizingUntil = performance.now() + 500; };
     const insideForm = (event: Event) => event.target instanceof Node && form.current?.contains(event.target);
+    // Mobile keyboards may pan the page before visualViewport reports its resize.
+    const focus = (event: FocusEvent) => { if (insideForm(event)) focusPanningUntil = performance.now() + 500; };
     const scroll = (event: Event) => {
-      if (!insideForm(event) && performance.now() >= resizingUntil) dismiss();
+      const viewportPan = event.target instanceof Window || event.target === document || event.target === document.documentElement || event.target === document.body;
+      if (!insideForm(event) && performance.now() >= resizingUntil && (!viewportPan || performance.now() >= focusPanningUntil)) dismiss();
     };
     // Intent also dismisses at a page boundary, where no scroll event is emitted.
     const wheel = (event: WheelEvent) => { if (event.deltaY && !insideForm(event)) dismiss(); };
@@ -22,10 +26,12 @@ export function useQuoteScrollDismiss(active: boolean, form: RefObject<HTMLFormE
     window.addEventListener("wheel", wheel, { passive: true });
     window.addEventListener("touchstart", touchStart, { passive: true });
     window.addEventListener("touchmove", touchMove, { passive: true });
+    window.addEventListener("focusin", focus);
     window.visualViewport?.addEventListener("resize", resize);
     return () => {
       window.removeEventListener("scroll", scroll, true); window.removeEventListener("wheel", wheel);
       window.removeEventListener("touchstart", touchStart); window.removeEventListener("touchmove", touchMove);
+      window.removeEventListener("focusin", focus);
       window.visualViewport?.removeEventListener("resize", resize);
     };
   }, [active, form, dismiss]);

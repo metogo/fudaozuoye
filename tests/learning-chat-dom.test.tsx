@@ -17,6 +17,7 @@ vi.mock("@/components/problem-knowledge-map", () => ({ KnowledgeMapDialog: ({ on
 import { LearningChat } from "@/components/learning-chat";
 import { UiLanguageProvider } from "@/components/ui-language";
 import { UI_LOCALE_KEY } from "@/lib/ui-copy";
+import { homeExamples } from "@/lib/browser/home-examples";
 
 const base: ComponentProps<typeof LearningChat> = { messages: [], session: null, stateToken: "", reasoningLevels: [{ id: "light", label: "轻度", available: true }, { id: "high", label: "高", available: false }], reasoningLevel: "light", ready: true, busy: false, loadingLabel: "", notice: "", retryLabel: "", reviewProblem: null, onReasoningLevel: vi.fn(), onFile: vi.fn(), onResponsePhoto: vi.fn(), onWhiteboard: vi.fn(), onSend: vi.fn(), onQuestion: vi.fn(), onChoice: vi.fn(), onSuggestion: vi.fn(), onConfirmProblem: vi.fn(), onRetryOriginal: vi.fn(), onRequestTransfer: vi.fn(), onNewProblem: vi.fn(), onRetry: vi.fn() };
 const initialSession = analyzeMock(recognizeMock("math", "junior"), "doubao");
@@ -43,6 +44,90 @@ describe("缺图补拍入口", () => {
 });
 const session: LearningSession = { ...initialSession, requestId: "r", problem: { ...initialSession.problem, text: "题目", gradeBand: "junior" }, nodes: [], flow: { ...initialSession.flow, stage: "core_explanation", viewedSolution: false, pathNodeIds: [], suggestedQuestions: [{ id: "s", text: "为什么用判别式？", scopeLabel: "判别式", sourceSummary: "根" }], activeGate: { id: "g", kind: "understanding", title: "确认理解", prompt: "你明白了吗？", options: [{ id: "continue", label: "继续", emphasis: "primary" }, { id: "not_understood", label: "没懂", emphasis: "secondary" }] } } };
 describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: class { observe() {} disconnect() {} } }); Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) }); HTMLElement.prototype.scrollTo = vi.fn(); }); afterEach(cleanup);
+ it("首页默认填题但不发送，换一题紧邻输入框且没有独立示例区", () => {
+   render(<LearningChat {...base}/>);
+   const hero = screen.getByText("欢迎");
+   const camera = screen.getByLabelText("拍照发题");
+   const input = screen.getByRole("textbox");
+   const examples = screen.getByRole("button", { name: "换一题" });
+   const privacy = screen.getByRole("complementary", { name: "访问统计设置" });
+   for (const [before, after] of [[hero, camera], [camera, examples], [examples, input], [input, privacy]]) {
+     expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   }
+   expect(examples.closest(".home-input-panel")).toBeNull();
+   expect(examples.closest(".home-input-toolbar")?.nextElementSibling).toBe(input.closest(".home-input-panel"));
+   expect((input as HTMLTextAreaElement).value).toBe(homeExamples[0].problem);
+   expect(screen.queryByRole("region", { name: "示例题目" })).toBeNull();
+   expect(privacy.closest(".chat-scroll")).toBeNull();
+ });
+ it.each(homeExamples)("首页$stage示例只填入，点击原发送按钮才提交且进入对话后不再出现", example => {
+   const onSend = vi.fn(), onQuestion = vi.fn();
+   const view = render(<LearningChat {...base} onSend={onSend} onQuestion={onQuestion}/>);
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "原有草稿" } });
+   for (let index = 0; index <= homeExamples.indexOf(example); index++) fireEvent.click(screen.getByRole("button", { name: "换一题" }));
+   expect(onSend).not.toHaveBeenCalled();
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(example.problem);
+   expect(document.activeElement).not.toBe(screen.getByRole("textbox"));
+   expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(false);
+   fireEvent.click(screen.getByRole("button", { name: "发送" }));
+   expect(onSend).toHaveBeenCalledExactlyOnceWith(example.problem);
+   expect(onQuestion).not.toHaveBeenCalled();
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+   view.rerender(<LearningChat {...base} busy messages={[{ id: "example", role: "user", kind: "user", text: example.problem, status: "complete", createdAt: new Date().toISOString() }]}/>);
+   expect(screen.queryByRole("button", { name: "换一题" })).toBeNull();
+   expect(screen.getByRole("button", { name: "查看原题" })).toBeTruthy();
+ });
+ it.each([{ ready: false }, { busy: true }, { retryLabel: "重新识别" }])("首页示例尊重原有服务与请求锁定：%j", overrides => {
+   const onSend = vi.fn();
+   render(<LearningChat {...base} {...overrides} onSend={onSend}/>);
+   fireEvent.click(screen.getByRole("button", { name: "换一题" }));
+   expect(onSend).not.toHaveBeenCalled();
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(homeExamples[0].problem);
+ });
+ it("反复选择仅替换输入内容，支持编辑后发送和清空后禁用发送", () => {
+   HTMLElement.prototype.scrollIntoView = vi.fn();
+   const onSend = vi.fn();
+   render(<LearningChat {...base} onSend={onSend}/>);
+   for (let index = 0; index < 4; index++) fireEvent.click(screen.getByRole("button", { name: "换一题" }));
+   expect(onSend).not.toHaveBeenCalled();
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(homeExamples[4 % homeExamples.length].problem);
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+   expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "修改后的示例题" } });
+   fireEvent.click(screen.getByRole("button", { name: "发送" }));
+   expect(onSend).toHaveBeenCalledExactlyOnceWith("修改后的示例题");
+ });
+ it("就绪和语言重渲染不覆盖编辑或清空，进入对话清除默认题，新题首页再预填", () => {
+   const onSend = vi.fn();
+   const view = render(<LearningChat {...base} ready={false} onSend={onSend}/>);
+   expect(onSend).not.toHaveBeenCalled();
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "自己的题" } });
+   view.rerender(<LearningChat {...base} onSend={onSend}/>);
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("自己的题");
+   fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+   view.rerender(<LearningChat {...base} busy onSend={onSend}/>);
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+   view.rerender(<LearningChat {...base} messages={[{ id: "photo", role: "user", kind: "user", text: "照片题", status: "complete", createdAt: new Date().toISOString() }]}/>);
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+   view.rerender(<LearningChat {...base} onSend={onSend}/>);
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(homeExamples[0].problem);
+   expect(onSend).not.toHaveBeenCalled();
+   view.rerender(<LearningChat {...base} session={session}/>);
+   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+ });
+ it("首页长题可展开至240像素，进入对话恢复原128像素上限", () => {
+   const view = render(<LearningChat {...base}/>);
+   const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+   Object.defineProperty(input, "scrollHeight", { configurable: true, value: 220 });
+   fireEvent.change(input, { target: { value: "较长的示例题" } });
+   expect(input.style.height).toBe("220px");
+   Object.defineProperty(input, "scrollHeight", { configurable: true, value: 400 });
+   fireEvent.change(input, { target: { value: "更长的示例题" } });
+   expect(input.style.height).toBe("240px");
+   view.rerender(<LearningChat {...base} messages={[{ id: "sizing", role: "user", kind: "user", text: "题目", status: "complete", createdAt: new Date().toISOString() }]}/>);
+   fireEvent.change(input, { target: { value: "后续追问" } });
+   expect(input.style.height).toBe("128px");
+ });
  it("小实验在讲解完成后按需出现，观察走追问而不是提交答案", async () => {
    const rectangular = { ...session, problem: { ...session.problem, text: "长方形长8厘米，宽3厘米，求周长和面积。", confidence: .98, missingVisualInformation: [], visualContext: undefined } };
    const lesson: ChatMessage = { id: "rectangle", role: "assistant", kind: "assistant", text: "先区分边界和里面的小方格。", status: "streaming", createdAt: new Date().toISOString() };

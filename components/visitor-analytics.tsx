@@ -12,7 +12,8 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
   const [status, setStatus] = useState<AnalyticsStatus>("off");
   const [restored, setRestored] = useState(false);
   const [resetError, setResetError] = useState(false);
-  const resetAvailable = restored && canResetLocalAnalytics(window.location.hostname, process.env.NODE_ENV);
+  const resetAvailable = restored && canResetLocalAnalytics(window.location.hostname, process.env.NODE_ENV)
+    && new URLSearchParams(window.location.search).get("analyticsDebug") === "1";
   const promptOpen = restored && choice === null && surface === "home";
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement | null>(null);
@@ -60,6 +61,8 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
     tracker.current?.setAllowed(false);
     setChoice(null);
   }
+  // Keep consent synchronization and page tracking mounted; only the settings UI belongs to home.
+  if (surface !== "home") return null;
   const actions = <div className={styles.actions}>
     <button type="button" onClick={() => choose("declined")}>{t("不启用统计")}</button>
     <button type="button" onClick={() => choose("accepted")}>{t("同意基础统计")}</button>
@@ -72,7 +75,7 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
         <summary>{t("查看统计范围与隐私说明")}</summary>
         <p>{t("用于统计访问人数、浏览量与来源，帮助我们了解哪些页面更常使用。")}</p>
         <p>{t("来源只保留网站域名；页面只记录首页、对话和知识图谱类别。不开启点击热力图、全埋点或广告追踪。")}</p>
-        <p>{t("可在页面下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。")}</p>
+        <p>{t("可在首页下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。")}</p>
         <a href="https://tongji.baidu.com/web/help/article?id=330&type=0" target="_blank" rel="noopener noreferrer">{t("百度统计个人信息保护说明 ↗")}</a>
       </details>
       <p className={styles.choiceNote}>{t("由你选择，不启用也能正常解题。未满 14 周岁，请由监护人阅读并决定。")}</p>
@@ -88,7 +91,7 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
       <summary>{t("访问统计与隐私设置")}</summary>
       {content}
     </details>}
-    {resetAvailable && surface === "home" && !promptOpen && <button type="button" className={`analytics-reset-trigger ${styles.reset}`} onClick={resetLocalChoice}>{t("重置本地统计选择")}</button>}
+    {resetAvailable && !promptOpen && <button type="button" className={`analytics-reset-trigger ${styles.reset}`} onClick={resetLocalChoice}>{t("重置本地统计选择")}</button>}
     {resetError && <p>{t("无法重置统计选择，请检查浏览器存储权限。")}</p>}
   </aside>;
 }

@@ -2,6 +2,9 @@
 export type UiLocale = "zh" | "en";
 export const UI_LOCALE_KEY = "education-ui-locale";
 export const englishUiCopy: Record<string, string> = {
+  "示例题目": "Example problems",
+  "三年级": "Grade 3", "七年级": "Grade 7", "高一": "Grade 10", "长方形周长": "Rectangle perimeter", "一元一次方程": "Linear equation", "函数最值": "Function minimum",
+  "换一题": "Another", "换一道示例题": "Try another sample problem",
   "重置本地统计选择": "Reset local analytics choice",
   "无法重置统计选择，请检查浏览器存储权限。": "Could not reset your analytics choice. Check browser storage permissions.",
   "不启用统计": "Keep analytics off",
@@ -17,7 +20,7 @@ export const englishUiCopy: Record<string, string> = {
   "不向百度统计发送题目、照片、作答或对话正文。": "We do not send problems, photos, answers or conversation text to Baidu Analytics.",
   "查看统计范围与隐私说明": "What we measure and your privacy",
   "来源只保留网站域名；页面只记录首页、对话和知识图谱类别。不开启点击热力图、全埋点或广告追踪。": "Referrers contain only the source domain. Pages identify only Home, Chat or Knowledge Map. Click heatmaps, automatic event capture and advertising tracking are not enabled.",
-  "可在页面下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。": "Turn analytics off at any time in Visitor analytics & privacy settings below to stop future reporting. This does not delete data Baidu has already received.",
+  "可在首页下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。": "Turn analytics off at any time in Visitor analytics & privacy settings at the bottom of the home page to stop future reporting. This does not delete data Baidu has already received.",
   "由你选择，不启用也能正常解题。未满 14 周岁，请由监护人阅读并决定。": "Your choice: solving problems works with analytics off. A guardian must read and decide for children under 14.",
   "百度统计个人信息保护说明 ↗": "Baidu Analytics privacy information ↗",
   "当前：未启用": "Status: off",
@@ -209,6 +212,7 @@ export const englishUiCopy: Record<string, string> = {
   "可拖拽的知识图谱": "Draggable knowledge map", "图谱视图工具": "Map controls", "缩小图谱": "Zoom out", "放大图谱": "Zoom in", "查看全图": "Fit map", "整理": "Tidy up",
   "拖节点排布 · 拖空白移动 · 双指缩放": "Drag nodes to arrange · Drag canvas to move · Pinch to zoom",
   "知识卡片": "Concept card", "关闭知识卡片": "Close concept card", "对应本题条件": "Given in this question",
+  "展开知识卡片": "Expand concept card", "收回知识卡片": "Collapse concept card", "上拉展开": "Drag up to expand", "下拉收回": "Drag down to collapse",
   "每次进入自动整理 · 浏览图谱不改变学习进度": "Auto-arranged on entry · Exploring won’t change your progress", "AI 整理，请结合原题理解": "AI-generated. Check against the original question.",
   "它是什么": "What it means", "本题怎么用": "How it applies", "补充说明暂未加载，仍可浏览图谱。": "Details unavailable. You can still explore the map.", "重试说明": "Retry details",
   "正在整理知识讲解": "Preparing the concept explanation", "知识讲解已就绪": "Concept explanation ready", "等待重试补充": "Waiting for a retry",
