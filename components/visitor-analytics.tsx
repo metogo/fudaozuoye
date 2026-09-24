@@ -65,12 +65,12 @@ export function VisitorAnalyticsSettings({ surface }: { surface: AnalyticsSurfac
     <button type="button" onClick={() => choose("accepted")}>{t("同意基础统计")}</button>
   </div>;
   const content = <div className={styles.description}>
-      <h2 id={titleId} tabIndex={-1} autoFocus={promptOpen}>{t("一起让小逗号更好用")}</h2>
-      <p className={styles.intro}>{t("允许基础访问统计，帮助我们了解哪些页面更常使用，把改进做在需要的地方。")}</p>
+      <h2 id={titleId} tabIndex={-1} autoFocus={promptOpen}>{t("一起让「小逗号」更好用")}</h2>
+      <p className={styles.intro}>{t("同意后，百度统计会接收 IP、浏览器与设备信息、访问记录及 Cookie 标识，帮助我们改进网站。")}</p>
       <p className={styles.boundary}>{t("不向百度统计发送题目、照片、作答或对话正文。")}</p>
-      <p>{t("同意后，百度统计会接收 IP 地址、浏览器与设备信息、页面访问记录和 Cookie 标识，用于统计访问人数、浏览量与来源。")}</p>
       <details className={`analytics-privacy-details ${styles.privacyDetails}`}>
         <summary>{t("查看统计范围与隐私说明")}</summary>
+        <p>{t("用于统计访问人数、浏览量与来源，帮助我们了解哪些页面更常使用。")}</p>
         <p>{t("来源只保留网站域名；页面只记录首页、对话和知识图谱类别。不开启点击热力图、全埋点或广告追踪。")}</p>
         <p>{t("可在页面下方的「访问统计与隐私设置」随时关闭，停止后续上报；不会删除百度已收到的历史数据。")}</p>
         <a href="https://tongji.baidu.com/web/help/article?id=330&type=0" target="_blank" rel="noopener noreferrer">{t("百度统计个人信息保护说明 ↗")}</a>

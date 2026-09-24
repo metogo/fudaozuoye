@@ -31,6 +31,7 @@ export function HomeWelcomeHero({ active, statisticsEnabled = true }: { active: 
       </span>
       <span className="home-welcome-subtitle">{t("陪你一起解题。")}</span>
     </h1>
+    <p className="home-service-intro mt-3 text-[13px] leading-6 text-[#65756a]">{t("拍照或输入题目，一步步讲清思路。")}</p>
     {statisticsEnabled && <HomeQuestionCount active={active}/>}
   </div>;
 }

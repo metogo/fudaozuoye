@@ -17,6 +17,7 @@ describe("HomeWelcomeHero", () => {
     const { rerender } = render(<HomeWelcomeHero active={false} />);
     expect(animateHomeCompanion).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Hey，小逗号陪你一起解题。" })).toBeTruthy();
+    expect(screen.getByText("拍照或输入题目，一步步讲清思路。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "小逗号，点一下和它打招呼" })).toBeTruthy();
     const actor = screen.getByRole("button", { name: "和小逗号打招呼" });
     fireEvent.click(actor);
@@ -41,5 +42,11 @@ describe("HomeWelcomeHero", () => {
     render(<HomeWelcomeHero active/>);
     expect(animateHomeCompanion.mock.calls[2][1]).toEqual({ introduced: false });
     expect(animateHomeCompanion.mock.calls[2][1]).not.toBe(visit);
+  });
+
+  it("用途说明不依赖统计服务或解题计数", () => {
+    render(<HomeWelcomeHero active={false} statisticsEnabled={false}/>);
+    expect(screen.getByText("拍照或输入题目，一步步讲清思路。")).toBeTruthy();
+    expect(screen.queryByText(/已累计解题/)).toBeNull();
   });
 });

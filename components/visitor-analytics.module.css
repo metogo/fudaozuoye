@@ -9,16 +9,18 @@
 .actions button { min-height: 40px; padding: 8px 14px; border: 1px solid #cbdcd1; border-radius: 12px; background: white; color: #275647; font-size: 12px; }
 .actions button:last-child { background: #006b53; color: #fff; border-color: #006b53; font-weight: 600; }
 .intro { color: #425c51; }
-.boundary { padding: 12px 14px; border-radius: 12px; background: #edf4ef; color: #205440; font-weight: 600; }
-.privacyDetails { margin: 12px 0; }
+.boundary { color: #205440; font-weight: 500; }
+.privacyDetails { margin: 8px 0; }
 .privacyDetails > summary { margin: 0; min-height: 32px; width: fit-content; cursor: pointer; opacity: 1; color: #275647; }
 .choiceNote { color: #52675d; }
 .description h2:focus { outline: none; }
-.dialog { margin: auto; padding: 0; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; border: 1px solid #dce7e0; border-radius: 24px; color: #344d43; background: #fffefa; box-shadow: 0 24px 80px #153c3029; }
-.dialog::backdrop { background: #16362d66; backdrop-filter: blur(4px); }
-.dialog .description { padding: 24px; border: 0; font-size: 13px; line-height: 1.8; }
-.dialog .description h2 { margin: 0 0 14px; font-size: 21px; letter-spacing: -.02em; }
-.dialog .actions { display: grid; grid-template-columns: 1fr 1fr; margin-top: 20px; }
+.dialog { position: fixed; inset: auto 12px max(12px, env(safe-area-inset-bottom)) auto; margin: 0; padding: 0; width: min(420px, calc(100vw - 24px)); max-height: min(70dvh, calc(100dvh - 24px)); overflow: auto; overscroll-behavior: contain; border: 1px solid #dce7e0; border-radius: 20px; color: #344d43; background: #fffefa; box-shadow: 0 12px 48px #153c3026; }
+.dialog::backdrop { background: #16362d0a; }
+.dialog .description { padding: 18px 20px; border: 0; font-size: 12px; line-height: 1.65; }
+.dialog .description h2 { margin: 0 0 10px; font-size: 18px; letter-spacing: -.02em; }
+.dialog .description p { margin: 8px 0; }
+.dialog .actions { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; }
 .dialog .actions button { min-height: 46px; font-size: 13px; }
-@media (max-width: 380px) { .dialog .description { padding: 20px; } }
+@media (min-width: 640px) { .dialog { right: 24px; bottom: max(24px, env(safe-area-inset-bottom)); } }
+@media (max-width: 380px) { .dialog .description { padding: 16px; } }
 .root button:focus-visible, .root a:focus-visible, .root summary:focus-visible { outline: 2px solid #14755b; outline-offset: 3px; }

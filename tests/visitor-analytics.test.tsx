@@ -90,7 +90,7 @@ describe("统计同意界面", () => {
   it("首屏披露百度采集范围与监护人提示，展开详情不代表同意", () => {
     render(<VisitorAnalyticsSettings surface="home"/>);
     act(() => vi.runOnlyPendingTimers());
-    expect(screen.getByRole("dialog", { name: "一起让小逗号更好用" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "一起让「小逗号」更好用" })).toBeTruthy();
     for (const text of [/同意后，百度统计会接收 IP/, /不向百度统计发送题目/, /未满 14 周岁/]) {
       expect(screen.getByText(text).closest("details")).toBeNull();
     }

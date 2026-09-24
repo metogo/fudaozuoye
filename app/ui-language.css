@@ -1,8 +1,9 @@
 /* Keep the compact switch legible inside the existing header controls. */
 .apple-ui .chat-header > div:first-child { flex: 1; min-width: 0; }
-.apple-ui .chat-header .ui-language-switch { margin-inline: 4px; padding: 2px; }
-.apple-ui .chat-header .ui-language-option { min-width: 36px; min-height: 36px; padding-inline: 8px; font-size: 12px; color: #66736e; }
-.apple-ui .chat-header .ui-language-option[aria-pressed="true"] { background: #065f46; color: #fff; }
+.apple-ui .home-chat-header .chat-header-actions { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.apple-ui .chat-header .ui-language-switch { margin: 0; padding: 2px; gap: 2px; border: 1px solid #dce2d8; border-radius: 9px; background: #f0f1eb; }
+.apple-ui .chat-header .ui-language-option { min-width: 30px; min-height: 30px; padding: 4px 6px; border-radius: 6px; font-size: 11px; line-height: 1; color: #69756c; background: transparent; box-shadow: none; }
+.apple-ui .chat-header .ui-language-option[aria-pressed="true"] { background: #fffefa; color: #214f43; font-weight: 600; box-shadow: 0 1px 3px #203c3012; }
 .apple-ui .chat-header .ui-language-option::before { display: none; }
 .apple-ui .chat-new-problem > svg { display: none; }
 html[lang="en"] .apple-ui .home-welcome-subtitle { font-size: clamp(21px, 5.4vw, 27px); }

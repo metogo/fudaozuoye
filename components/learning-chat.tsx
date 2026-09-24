@@ -290,7 +290,7 @@ export function LearningChat(props: LearningChatProps) {
     <header ref={headerRef} className={`chat-header z-20 flex shrink-0 items-center justify-between px-4 backdrop-blur-xl sm:px-6 ${isHome ? "home-chat-header py-4" : "border-b border-stone-200/80 bg-[#f7f6f2]/92 py-3"}`}>
       <div className={`flex min-w-0 items-center ${isHome ? "gap-2.5" : "gap-3"}`}>
         <CommaCompanion className="brand-mark" thinking={props.busy} canCelebrate={!props.notice && !hasPendingRetry}/>
-        {isHome && <span className="home-brand text-xs font-semibold tracking-wide text-stone-600">{t("专注作业")}</span>}
+        {isHome && <span className="home-brand flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold tracking-wide text-stone-600"><span>{t("专注作业")}</span><span className="home-free-note inline-flex shrink-0 items-center rounded-md border border-[#d8e1d4] bg-[#eef2e9] px-1.5 py-0.5 text-[10px] font-normal leading-4 tracking-normal text-[#58704f]">{t("永久免费")}</span></span>}
         {!isHome && props.session && <span className="block truncate text-[10px] font-medium text-stone-400">{t("模型识别为{grade}题", { grade: t(gradeBandLabels[props.session.problem.gradeBand]) })}</span>}
       </div>
       <div className="chat-header-actions flex shrink-0 items-center gap-1">
