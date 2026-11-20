@@ -2,16 +2,28 @@ import { ServiceError } from "./errors";
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
+// The notebook forwards these requests through its own same-origin Vercel routes.
+const notebookOrigins = new Set([
+  "https://cuotiben-orpin.vercel.app",
+  "https://cuotiben-qa-xiaoweis-projects-cf1fe430.vercel.app",
+]);
+const notebookPaths = new Set(["/consent", "/learning/question-entry", "/learning/analyze", "/learning/tutor", "/learning/solution"]);
+
+export function isNotebookRequest(request: Request): boolean {
+  return notebookOrigins.has(request.headers.get("origin") ?? "") && request.method === "POST"
+    && notebookPaths.has(new URL(request.url).pathname.replace(/^\/api(?=\/)/, ""));
+}
+
 export function assertSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
   if (!origin) {
     if (process.env.NODE_ENV === "production") throw new Error("请求来源不合法");
     return;
   }
-  const allowedOrigin = process.env.PUBLIC_APP_ORIGIN?.trim();
-  const sameOrigin = new URL(origin).host === new URL(request.url).host;
-  const customDomainOrigin = "https://fudaozuoye.com";
-  if (allowedOrigin ? origin !== allowedOrigin && origin !== customDomainOrigin && !sameOrigin : origin !== customDomainOrigin && !sameOrigin) throw new Error("请求来源不合法");
+  const url = new URL(request.url);
+  if (origin === process.env.PUBLIC_APP_ORIGIN?.trim() || origin === "https://fudaozuoye.com" || new URL(origin).host === url.host) return;
+  if (isNotebookRequest(request)) return;
+  throw new Error("请求来源不合法");
 }
 
 export function assertContentLength(request: Request, maxBytes: number): void {

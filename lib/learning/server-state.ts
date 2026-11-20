@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { isNotebookRequest } from "./request-guards";
 import { parseSession } from "./api";
 import type { ClientSessionState, LearningSession } from "./types";
 
@@ -84,7 +85,34 @@ export function consentRateIdentity(request: Request): string | null {
   return raw ? `consent:${createHash("sha256").update(raw).digest("hex").slice(0, 24)}` : null;
 }
 
+const notebookLifetimeMs = 30 * 60 * 1000;
+
+export function notebookConsent(request: Request): { token: string; expiresAt: number } {
+  if (!isNotebookRequest(request)) throw new Error("请求来源不合法");
+  const expiresAt = Date.now() + notebookLifetimeMs;
+  const payload = `nb1.${expiresAt}.${randomBytes(16).toString("base64url")}`;
+  const signature = notebookSignature(payload, request.headers.get("origin")!);
+  return { token: `${payload}.${signature.toString("base64url")}`, expiresAt };
+}
+
+function notebookSignature(payload: string, origin: string): Buffer {
+  return createHmac("sha256", secret()).update(`${payload}|${origin}`).digest();
+}
+
+function validNotebookToken(request: Request, token: string): boolean {
+  if (!isNotebookRequest(request)) return false;
+  const parts = /^(nb1\.(\d{13})\.[A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/.exec(token);
+  if (!parts) return false;
+  const remaining = Number(parts[2]) - Date.now();
+  if (remaining <= 0 || remaining > notebookLifetimeMs) return false;
+  const signature = Buffer.from(parts[3], "base64url");
+  const expected = notebookSignature(parts[1], request.headers.get("origin")!);
+  return signature.length === expected.length && timingSafeEqual(signature, expected);
+}
+
 function validatedConsentValue(request: Request): string | null {
+  const notebookToken = request.headers.get("x-notebook-consent");
+  if (notebookToken !== null) return validNotebookToken(request, notebookToken) ? notebookToken : null;
   const raw = request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${CONSENT_COOKIE}=`))?.slice(CONSENT_COOKIE.length + 1);
   if (!raw) return null;
   const [version, timestamp, nonce, signature, ...rest] = raw.split(".");

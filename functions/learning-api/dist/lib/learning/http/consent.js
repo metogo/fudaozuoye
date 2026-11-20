@@ -10,8 +10,12 @@ async function postConsent(request) {
         (0, request_guards_1.assertRateLimit)(request, 60);
         const secure = new URL(request.url).protocol === "https:" || process.env.NODE_ENV === "production";
         const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store, no-transform" });
-        headers.append("Set-Cookie", `${server_state_1.CONSENT_COOKIE}=${(0, server_state_1.createConsentValue)()}; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`);
-        return new Response(JSON.stringify({ accepted: true, statisticsEnabled: Boolean(process.env.CLOUDBASE_ENV_ID?.trim() && process.env.CLOUDBASE_APIKEY?.trim()), version: "guardian-v1", providers: (0, config_1.listProviderAvailability)(), reasoningLevels: (0, config_1.listReasoningAvailability)(), illustration: (0, config_1.getIllustrationAvailability)() }), { headers });
+        const direct = new URL(request.url).searchParams.get("client") === "notebook";
+        if (direct && !(0, request_guards_1.isNotebookRequest)(request))
+            throw new Error("请求来源不合法");
+        if (!direct)
+            headers.append("Set-Cookie", `${server_state_1.CONSENT_COOKIE}=${(0, server_state_1.createConsentValue)()}; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`);
+        return new Response(JSON.stringify({ accepted: true, ...(direct ? { notebookSession: (0, server_state_1.notebookConsent)(request) } : {}), statisticsEnabled: Boolean(process.env.CLOUDBASE_ENV_ID?.trim() && process.env.CLOUDBASE_APIKEY?.trim()), version: "guardian-v1", providers: (0, config_1.listProviderAvailability)(), reasoningLevels: (0, config_1.listReasoningAvailability)(), illustration: (0, config_1.getIllustrationAvailability)() }), { headers });
     }
     catch (error) {
         return Response.json({ accepted: false, message: error instanceof Error ? error.message : "无法记录监护人同意" }, { status: 400 });

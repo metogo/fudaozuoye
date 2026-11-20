@@ -10,11 +10,40 @@ import { ServiceError } from "@/lib/learning/errors";
 describe("无状态学习会话边界", () => {
   afterEach(() => vi.unstubAllEnvs());
 
+  it("错题本直连凭据只适用于签发来源、指定操作和有效时间", async () => {
+    const qa = "https://cuotiben-qa-xiaoweis-projects-cf1fe430.vercel.app";
+    const api = "https://learning.example/api";
+    const response = await postConsent(new Request(api + "/consent?client=notebook", { method: "POST", headers: { origin: qa } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.has("set-cookie")).toBe(false);
+    const { notebookSession } = await response.json();
+    const request = (origin: string, path: string) => new Request(api + path, {
+      method: "POST", headers: { origin, "x-notebook-consent": notebookSession.token },
+    });
+    expect(hasValidConsent(request(qa, "/learning/question-entry"))).toBe(true);
+    expect(hasValidConsent(request("https://cuotiben-orpin.vercel.app", "/learning/question-entry"))).toBe(false);
+    expect(hasValidConsent(request(qa, "/learning/turn"))).toBe(false);
+    const now = vi.spyOn(Date, "now").mockReturnValue(notebookSession.expiresAt + 1);
+    try { expect(hasValidConsent(request(qa, "/learning/analyze"))).toBe(false); }
+    finally { now.mockRestore(); }
+  });
+
   it("只允许配置的生产 H5 跨域调用云函数", () => {
     vi.stubEnv("PUBLIC_APP_ORIGIN", "https://study.example.com");
     expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://study.example.com" } }))).not.toThrow();
     expect(() => assertSameOrigin(new Request("https://fudaozuoye.com/api/consent", { headers: { Origin: "https://fudaozuoye.com" } }))).not.toThrow();
     expect(() => assertSameOrigin(new Request("https://api.example.com/api/consent", { headers: { Origin: "https://attacker.example.com" } }))).toThrow("请求来源不合法");
+  });
+
+  it("错题本正式域名可通过代理调用录题接口", () => {
+    const origin = "https://cuotiben-orpin.vercel.app";
+    const request = (path: string, from = origin) => new Request("https://fudaozuoye.com" + path, { method: "POST", headers: { Origin: from } });
+    for (const path of ["/consent", "/learning/question-entry", "/learning/analyze", "/learning/tutor", "/learning/solution"]) {
+      expect(() => assertSameOrigin(request(path))).not.toThrow();
+      expect(() => assertSameOrigin(request("/api" + path))).not.toThrow();
+    }
+    expect(() => assertSameOrigin(request("/api/learning/statistics"))).toThrow("请求来源不合法");
+    expect(() => assertSameOrigin(request("/api/consent", "https://another-preview.vercel.app"))).toThrow("请求来源不合法");
   });
 
   it("监护人同意与模型状态在同一次启动请求返回", async () => {
