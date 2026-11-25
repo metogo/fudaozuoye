@@ -13,6 +13,8 @@ export async function verifyKnowledgeMapBrowser({ state, cookie }) {
     const split = cookie.indexOf("=");
     await context.addCookies([{ name: cookie.slice(0, split), value: cookie.slice(split + 1), url: apiBase }]);
     const page = await context.newPage(), errors = [];
+    const analyticsChoice = page.getByRole("button", { name: "不启用统计", exact: true });
+    await page.addLocatorHandler(analyticsChoice, () => analyticsChoice.click());
     page.on("pageerror", e => errors.push(e.message));
     // Reopen the actual server-issued lesson, never alter its learning state or seed map cache.
     await page.addInitScript(snapshot => sessionStorage.setItem("education-chat-session-v3", JSON.stringify({ ...snapshot, messages: [] })), current);

@@ -40,6 +40,8 @@ try {
   for (const width of [390, 1280]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, permissions: ["clipboard-read", "clipboard-write"], reducedMotion: "reduce" });
     const page = await context.newPage();
+    const analyticsChoice = page.getByRole("button", { name: "不启用统计", exact: true });
+    await page.addLocatorHandler(analyticsChoice, () => analyticsChoice.click());
     let practiceCount = 0, detailCount = 0;
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));

@@ -5,12 +5,20 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFile, mkdir } from "node:fs/promises";
 import { extname, resolve } from "node:path";
+import { createJiti } from "jiti";
 import { chromium, expect } from "@playwright/test";
 
 process.env.AI_MOCK_MODE = "true";
 process.env.NODE_ENV = "test";
 process.env.SESSION_STATE_SECRET = "isolated-product-qa-only-32-characters";
 const require = createRequire(import.meta.url);
+const { quotaDatabase } = await createJiti(import.meta.url).import("../tests/helpers/quota-database.ts");
+const { db } = quotaDatabase();
+const statistics = require("../functions/learning-api/dist/lib/learning/question-statistics.js");
+statistics.statisticsDatabase = () => db;
+// Advertise the isolated quota store through the same consent path as production.
+process.env.CLOUDBASE_ENV_ID = "isolated-product-qa";
+process.env.CLOUDBASE_APIKEY = "isolated-product-qa";
 const { main: api } = require("../functions/learning-api/dist/functions/learning-api/src/index.js");
 const { recognizeMock } = require("../functions/learning-api/dist/lib/learning/mock-engine.js");
 const root = resolve("out");
@@ -35,6 +43,8 @@ try {
     const width = index % 2 ? 1280 : 390;
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", permissions: ["clipboard-read", "clipboard-write"] });
     const page = await context.newPage();
+    const analyticsChoice = page.getByRole("button", { name: "不启用统计", exact: true });
+    await page.addLocatorHandler(analyticsChoice, () => analyticsChoice.click());
     page.setDefaultTimeout(12000);
     const errors = [], calls = [];
     let entries = 0, interruptNext = false;
