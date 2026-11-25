@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { launch } = require(process.env.PUPPETEER_MODULE || 'puppeteer');
 
+const { chooseSubject } = require('./browser-acceptance.cjs');
+
 async function main() {
   const original = 'data:image/png;base64,' + readFileSync(process.env.SHITI_QUESTION_PNG).toString('base64');
   const browser = await launch({ headless: true, executablePath: process.env.CHROME_PATH });
@@ -32,7 +34,7 @@ async function main() {
     }, { id: live.id, q, lesson, original });
     await page.reload();
     await page.waitForSelector('.subject-filter');
-    await page.select('.subject-filter', 'unknown');
+    await chooseSubject(page, 'unknown');
     await page.click('.sheet-row');
     await page.waitForSelector('.detail-subject');
     assert.equal(await page.$eval('.detail-subject', el => el.textContent), '未分类');

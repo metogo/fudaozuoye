@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { launch } = require(process.env.PUPPETEER_MODULE || 'puppeteer');
-const { click, openRecord, switchModel } = require('./browser-acceptance.cjs');
+const { click, openRecord, switchModel, chooseSubject } = require('./browser-acceptance.cjs');
 
 async function collect(page, row, model) {
   await openRecord(page);
@@ -32,9 +32,9 @@ async function verify(page) {
   await collect(page, cases.find(row => row.id === 'math-4'), 'doubao');
   await collect(page, cases.find(row => row.subject === 'eng'), 'openai/gpt-5.6-sol');
   await page.waitForFunction(() => document.querySelectorAll('.notebook-row').length === 2);
-  const options = () => page.$$eval('.subject-filter option', opts => opts.map(o => o.value));
+  const options = () => page.$$eval('.subject-menu button', opts => opts.map(o => o.value));
   assert.deepEqual(await options(), ['all', 'math', 'english']);
-  await page.select('.subject-filter','math');
+  await chooseSubject(page, 'math');
   await page.waitForFunction(() => document.querySelectorAll('.notebook-row').length === 1);
   await page.click('.quick-correct');
   await click(page, '已在纸上做完，对照答案');
@@ -43,14 +43,14 @@ async function verify(page) {
   await page.waitForSelector('.sheet-row');
   assert.equal(await page.$eval('.subject-filter', e => e.value), 'math');
   assert.deepEqual(await page.$$eval('.filters b', a => a.map(b => b.textContent)), ['1','0','1']);
-  await page.select('.subject-filter', 'english');
+  await chooseSubject(page, 'english');
   await page.waitForSelector('.empty-book');
   await click(page, '开始订正');
   await page.waitForSelector('.correction-progress');
   await page.goBack();
   await page.waitForSelector('.subject-filter');
   assert.equal(await page.$eval('.subject-filter', e => e.value), 'english');
-  await page.select('.subject-filter', 'all');
+  await chooseSubject(page, 'all');
   await page.click('.filters button:first-child');
   assert.equal((await page.$$('.sheet-row')).length, 2);
   for (const width of [320, 390, 810]) {
@@ -82,7 +82,7 @@ async function verify(page) {
   });
   await page.reload();
   await page.waitForSelector('.sheet-row');
-  await page.select('.subject-filter', 'unknown');
+  await chooseSubject(page, 'unknown');
   await page.click('.sheet-row');
   await page.waitForSelector('.settings-trigger', {visible:true});
   await page.click('.settings-trigger');
@@ -90,7 +90,7 @@ async function verify(page) {
   await page.waitForFunction(() => !document.querySelector('.job-state') && document.querySelector('.detail-subject')?.textContent === '数学');
   await page.reload();
   await page.waitForSelector('.sheet-row');
-  await page.select('.subject-filter','math');
+  await chooseSubject(page, 'math');
   assert.match(await page.$eval('.notebook-row .state',el=>el.textContent),/已订正/);
   assert(!(await options()).includes('unknown'));
   const reduced = await page.browser().createBrowserContext();

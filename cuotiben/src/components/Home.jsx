@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon, MistakeCount } from './UI.jsx';
 import { tutorHome } from '../core/host.js';
 import BookHeading from './BookHeading.jsx';
+import SubjectFilter from './SubjectFilter.jsx';
 import NotebookEmpty from './NotebookEmpty.jsx';
 import StorageInfo from './StorageInfo.jsx';
 import LearningText from './LearningText.jsx';
@@ -79,11 +80,7 @@ export default function Home({ active = true, rows, loading, open, record, error
                 onClick={() => selectFilter(name)}>{name} <b>{loading || error ? '—' : count}</b></button>)}
             </div>
             {rows.length > 0 && <div className="library-order">
-            <select className="subject-filter" aria-label="按学科筛选" value={subject} onChange={e => selectSubject(e.target.value)}>
-              <option value="all">全部学科</option>
-              {[...present].map(id =>
-                <option key={id} value={id}>{subjectName(id)}</option>)}
-            </select>
+            <SubjectFilter subjects={present} value={subject} onChange={selectSubject} />
             {visible.length > 0 && <small>最近收录在前</small>}
             </div>}
           </div>

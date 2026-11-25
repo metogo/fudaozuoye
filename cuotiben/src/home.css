@@ -122,9 +122,37 @@
   transform: translateX(-50%); border-radius: 2px; background: var(--deep);
 }
 .library-order { padding: 7px 0 2px; }
-.library-order small { font-size: 12px; color: var(--muted); }
-.subject-filter, .question-settings select {
+.library-order small { flex: none; font-size: 12px; color: var(--muted); }
+.question-settings select {
   max-width: 100%; min-height: 44px; padding: 0 4px; color: var(--deep); font-size: 14px; background: transparent; border: 0;
+}
+.subject-picker { position: relative; min-width: 0; }
+.subject-filter {
+  display: flex; align-items: center; gap: 7px; max-width: 100%; padding: 0 13px;
+  background: #edf4ef; color: var(--deep); border-radius: 14px; font-size: 14px; font-weight: 600;
+}
+.subject-filter span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.subject-filter .ui-icon { flex: none; width: 16px; height: 16px; }
+.subject-filter .ui-icon:last-child { width: 12px; height: 12px; transform: rotate(90deg); }
+.subject-filter[aria-expanded="true"] .ui-icon:last-child { transform: rotate(-90deg); }
+.subject-menu {
+  position: absolute; z-index: 4; inset-inline-start: 0; top: calc(100% + 5px);
+  width: min(248px, calc(100vw - 40px)); max-height: min(284px, 45vh); max-height: min(284px, 45dvh);
+  padding: 8px; overflow-y: auto; overscroll-behavior: contain; background: white;
+  border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 7px 24px #18382d24;
+}
+.subject-menu:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.subject-menu button:first-child, .subject-menu button:nth-child(2):last-child { grid-column: 1 / -1; }
+.subject-menu button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  min-height: 44px; padding: 7px 12px; border-radius: 10px; text-align: start; font-size: 14px; background: #f6f8f5;
+}
+.subject-menu button span { overflow-wrap: anywhere; }
+.subject-menu button[aria-checked="true"] { background: var(--pale); color: var(--deep); font-weight: 650; }
+.subject-menu .ui-icon { width: 16px; height: 16px; flex: none; stroke-width: 2.2; }
+.subject-menu button:focus-visible { outline-offset: -3px; }
+@media (hover: hover) {
+  .subject-menu button:not([aria-checked="true"]):hover { background: #eaf1eb; }
 }
 .list-end-marker { display: block; height: 1px; margin-top: -1px; pointer-events: none; }
 .list-end-fade {

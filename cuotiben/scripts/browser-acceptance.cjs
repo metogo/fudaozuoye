@@ -61,6 +61,10 @@ async function click(p, label) {
   await b.evaluate(el => el.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'}));
   await b.asElement().click();
 }
+async function chooseSubject(page, key) {
+  await page.click('.subject-filter');
+  await page.click('.subject-menu button[value=' + JSON.stringify(key) + ']');
+}
 async function openRecord(p) {
   if (!await p.$('.record-sheet[open]')) await p.click('.record-trigger');
   await p.waitForSelector('.record-sheet[open]');
@@ -278,7 +282,7 @@ async function main() {
     await browser.close();
   }
 }
-module.exports = { click, circle, choosePhoto, openRecord, switchModel };
+module.exports = { chooseSubject, click, circle, choosePhoto, openRecord, switchModel };
 if (require.main === module) main().catch((e) => {
   console.error(e);
   process.exitCode = 1;

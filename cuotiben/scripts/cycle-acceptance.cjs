@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { launch } = require(process.env.PUPPETEER_MODULE || 'puppeteer');
-const { click, openRecord } = require('./browser-acceptance.cjs');
+const { click, openRecord, chooseSubject } = require('./browser-acceptance.cjs');
 
 async function notebook(page) {
   return page.evaluate(async () => {
@@ -145,9 +145,9 @@ async function main() {
         const expected = {math:'math',chi:'chinese',eng:'english'}[sample.subject];
         assert([expected, 'unknown'].includes(row.subject), '错题不能被归入不相关的学科：' + row.subject);
         if (row.subject === 'unknown') {
-          await p.select('.subject-filter', 'unknown');
+          await chooseSubject(p, 'unknown');
           await checkHome(p);
-          await p.select('.subject-filter', 'all');
+          await chooseSubject(p, 'all');
         }
       }
       const result = await correct(p,row,i);
