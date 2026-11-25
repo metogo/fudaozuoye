@@ -46,8 +46,9 @@ async function main() {
     verifyBackend: async () => {
       await (await import("./verify-question-statistics-release.mjs")).verifyQuestionStatistics(config.app.envVariables.NEXT_PUBLIC_API_BASE_URL);
       await (await import("./verify-recognition-release.mjs")).verifyRecognition();
-      const notebook = await fetch(config.app.envVariables.NEXT_PUBLIC_API_BASE_URL + "/notebook", { signal: AbortSignal.timeout(15000) });
-      if (!notebook.ok || !Array.isArray((await notebook.json()).models)) throw new Error("错题本接口验收失败，停止发布前端");
+      await (await import("./verify-notebook-release.mjs")).verifyNotebookRelease(
+        config.app.envVariables.NEXT_PUBLIC_API_BASE_URL, "https://fudaozuoye.com",
+      );
       return (await import("./verify-knowledge-map-release.mjs")).verifyKnowledgeMaps();
     },
     deployFrontend: () => run("tcb", ["app", "deploy", config.app.serviceName, ...env, "--framework", "next",
