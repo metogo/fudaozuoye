@@ -256,8 +256,14 @@ details summary {
 .formula {
   display: inline-block;
   max-width: 100%;
+  /* KaTeX layout struts can overflow by a few pixels even when the formula fits. */
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   vertical-align: middle;
+}
+.formula::-webkit-scrollbar {
+  display: none;
 }
 .formula-block {
   display: block;
