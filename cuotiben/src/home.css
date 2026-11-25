@@ -208,8 +208,11 @@
 }
 
 .tutor-return {
-  display: inline-flex; min-height: 44px; align-items: center; gap: 4px;
-  color: #42695a; font-size: 14px; font-weight: 500; text-decoration: none;
+  display: inline-grid; place-items: center; flex: none;
+  width: 44px; height: 44px; margin-inline-start: auto; border-radius: 50%;
+  background: #edf3ef; color: #386150; text-decoration: none;
 }
-.tutor-return .ui-icon { width: 17px; height: 17px; }
-.tutor-return:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tutor-return .ui-icon { width: 21px; height: 21px; stroke-width: 1.7; }
+.tutor-return:focus-visible { outline: 2px solid var(--deep); outline-offset: 3px; }
+.tutor-return:active { background: #dbe8de; }
+@media (hover: hover) { .tutor-return:hover { background: #e1ece5; } }

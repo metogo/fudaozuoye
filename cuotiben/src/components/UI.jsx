@@ -1,6 +1,7 @@
 import { assetBase } from '../core/host.js';
 import React, { useEffect, useRef } from 'react';
 const iconPaths = {
+  home: 'M3.5 10.5 10.6 4.4a2.1 2.1 0 0 1 2.8 0l7.1 6.1 M5.4 9.1v9.1a2 2 0 0 0 2 2h2.2v-5a2.4 2.4 0 0 1 4.8 0v5h2.2a2 2 0 0 0 2-2V9.1',
   book: 'M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 1-4-3-9-1z M12 6v14',
   keyboard: 'M2 6h20v12H2z M5 10h1m3 0h1m3 0h1m3 0h1M7 14h10',
   magic: 'm3 18 11-11 3 3L6 21z M11 10l3 3 M18 2v4m-2-2h4M20 14v4m-2-2h4',

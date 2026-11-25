@@ -97,7 +97,7 @@ npm run release:cloudbase
 
 ## 同域错题本
 
-错题本源码、测试和独立依赖锁在 `cuotiben/`。运行 `npm run dev`、`npm run build` 或现有 CloudBase 构建命令时，会一并构建题本到 `public/cuotiben/`。从辅导首页双击小逗号或点击气泡打开 `/cuotiben/`。题本目录的「返回辅导作业」可从直接打开的链接返回首页。
+错题本源码、测试和独立依赖锁在 `cuotiben/`。运行 `npm run dev`、`npm run build` 或现有 CloudBase 构建命令时，会一并构建题本到 `public/cuotiben/`。从辅导首页双击小逗号或点击气泡打开 `/cuotiben/`。直接打开题本也可点页头的小屋图标回到辅导作业首页。
 
 正式域名沿用现有 `/api` 网关。仅 `/api/notebook` 调用错题本解析处理器，豆包使用服务端 `DOUBAO_API_KEY` 和 `DOUBAO_MODEL_ID`，其他模型仅在配置 `REQUESTY_API_KEY` 时开放。错题本用量仍写入其专属 CloudBase 集合 `cuotiben_daily_usage`。沿用现有发布顺序，先验证学习 API 和错题本接口，再更新静态前端。题本测试可在 Node 24 下运行 `npm run test:notebook`。
 

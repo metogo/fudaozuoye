@@ -14,6 +14,9 @@ function NotebookHeader({ record, active }) {
   return (
     <header className="notebook-title">
       <BookHeading active={active} />
+      <a className="tutor-return" href={tutorHome} aria-label="返回辅导作业首页">
+        <Icon name="home" />
+      </a>
       <button type="button" className="record-trigger" onClick={record}>
         <Icon name="pencil" />录题
       </button>
@@ -68,7 +71,6 @@ export default function Home({ active = true, rows, loading, open, record, error
   return (
     <>
       <section className="notebook-home" aria-labelledby="book-title">
-        <a className="tutor-return" href={tutorHome}><Icon name="back" />返回辅导作业</a>
         <NotebookHeader record={record} active={active} />
         <div className="notebook-library">
           <div className="notebook-toolbar">
