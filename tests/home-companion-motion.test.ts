@@ -6,8 +6,11 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 async function setup({ reduced = false, broken = false } = {}) {
   vi.useFakeTimers();
   const animations: { cancel: ReturnType<typeof vi.fn> }[] = [];
-  const animate = vi.fn(() => {
-    const animation = { cancel: vi.fn() }; animations.push(animation); return animation;
+  const animate = vi.fn((_frames: Keyframe[], timing: KeyframeAnimationOptions) => {
+    const animation = { onfinish: null as (() => void) | null, cancel: vi.fn(() => clearTimeout(done)) };
+    const done = setTimeout(() => animation.onfinish?.(), Number(timing.duration) * (timing.iterations ?? 1) + (timing.delay ?? 0));
+    animations.push(animation);
+    return animation;
   });
   const media = Object.assign(new EventTarget(), { matches: reduced });
   const doc = Object.assign(new EventTarget(), { visibilityState: "visible", activeElement: null as null | { matches: () => boolean } });
@@ -24,9 +27,9 @@ async function setup({ reduced = false, broken = false } = {}) {
     disconnect = disconnect;
   });
   const root = Object.assign(new EventTarget(), {
-    dataset: {} as Record<string, string>,
+    dataset: { speech: "waiting" } as Record<string, string>,
     closest: () => root,
-    querySelector: () => ({ animate, getBoundingClientRect: () => ({ left: 260, width: 94 }), querySelector: () => ({ decode: () => broken ? Promise.reject(Error("image unavailable")) : Promise.resolve() }) }),
+    querySelector: () => ({ animate, getBoundingClientRect: () => ({ left: 260, width: 94 }), decode: () => broken ? Promise.reject(Error("image unavailable")) : Promise.resolve() }),
     querySelectorAll: () => [0, 1, 2].map(i => ({ animate, getBoundingClientRect: () => ({ right: 60 + i * 40 }) })),
   });
   vi.stubGlobal("document", doc); vi.stubGlobal("window", win);
@@ -80,15 +83,25 @@ describe("小逗号推名字", () => {
     s.root.dispatchEvent(new Event("click"));
     expect(s.animate).toHaveBeenCalledTimes(4);
     vi.advanceTimersByTime(2200);
+    expect(s.root.dataset.interacting).toBe("whisper");
+    expect(s.root.dataset.speech).toBe("waiting");
+    vi.advanceTimersByTime(940);
+    expect(s.root.dataset.interacting).toBe("blink");
+    expect(s.root.dataset.speech).toBe("waiting");
+    expect(s.animate.mock.lastCall?.[1].iterations).toBe(2);
+    vi.advanceTimersByTime(300);
+    expect(s.root.dataset.speech).toBe("waiting");
+    vi.advanceTimersByTime(300);
     expect(s.root.dataset.interacting).toBeUndefined();
+    expect(s.root.dataset.speech).toBe("appearing");
     vi.advanceTimersByTime(18_000);
     expect(s.root.dataset.interacting).toBe("nudge");
-    expect(s.animate).toHaveBeenCalledTimes(8);
+    expect(s.animate).toHaveBeenCalledTimes(10);
     s.dispose();
     expect(vi.getTimerCount()).toBe(0);
   });
   it("点击形象可以重播轻碰，首次介绍不反复隐藏名字", async () => {
-    const s = await setup(); vi.advanceTimersByTime(2650);
+    const s = await setup(); vi.advanceTimersByTime(4190);
     s.root.dispatchEvent(new Event("click"));
     expect(s.root.dataset.interacting).toBe("nudge");
     s.dispose();
@@ -116,9 +129,9 @@ describe("小逗号推名字", () => {
   });
   it("减少动态效果与图片失败时保留静态内容", async () => {
     const s = await setup({ reduced: true }); vi.advanceTimersByTime(30_000);
-    expect(s.animate).not.toHaveBeenCalled(); s.dispose();
+    expect(s.animate).not.toHaveBeenCalled(); expect(s.root.dataset.speech).toBe("ready"); s.dispose();
     const failed = await setup({ broken: true }); vi.advanceTimersByTime(30_000);
-    expect(failed.animate).not.toHaveBeenCalled(); failed.dispose();
+    expect(failed.animate).not.toHaveBeenCalled(); expect(failed.root.dataset.speech).toBe("ready"); failed.dispose();
   });
   it("离开首页清理计时器和监听，后续事件不能复活动画", async () => {
     const s = await setup(); vi.advanceTimersByTime(450); s.dispose();

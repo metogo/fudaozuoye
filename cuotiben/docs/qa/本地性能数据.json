@@ -1,0 +1,364 @@
+{
+  "cold": [
+    {
+      "lcp": 556,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 336
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 186
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 182
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 155
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 251
+        }
+      ]
+    },
+    {
+      "lcp": 512,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 332
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 179
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 211
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 157
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 277
+        }
+      ]
+    },
+    {
+      "lcp": 512,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 332
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 179
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 214
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 157
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 279
+        }
+      ]
+    },
+    {
+      "lcp": 520,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 335
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 183
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 210
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 156
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 276
+        }
+      ]
+    },
+    {
+      "lcp": 508,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 335
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 182
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 216
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 156
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 278
+        }
+      ]
+    },
+    {
+      "lcp": 512,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 333
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 181
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 216
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 157
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 279
+        }
+      ]
+    },
+    {
+      "lcp": 520,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 334
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 182
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 215
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 156
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 280
+        }
+      ]
+    },
+    {
+      "lcp": 520,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 338
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 185
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 213
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 156
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 279
+        }
+      ]
+    },
+    {
+      "lcp": 512,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 333
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 180
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 212
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 158
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 277
+        }
+      ]
+    },
+    {
+      "lcp": 524,
+      "cls": 0,
+      "resources": [
+        {
+          "path": "/assets/index-C2eZ9HnM.js",
+          "bytes": 81872,
+          "ms": 334
+        },
+        {
+          "path": "/assets/index-weIdGpjM.css",
+          "bytes": 7031,
+          "ms": 181
+        },
+        {
+          "path": "/brand/comma-idle.webp",
+          "bytes": 14268,
+          "ms": 210
+        },
+        {
+          "path": "/motion/opening.json",
+          "bytes": 696,
+          "ms": 155
+        },
+        {
+          "path": "/assets/lottie_light.min-SnzvVImU.js",
+          "bytes": 46854,
+          "ms": 274
+        }
+      ]
+    }
+  ],
+  "listing": [
+    100.30000019073486,
+    66,
+    73.19999980926514,
+    74,
+    74.80000019073486,
+    65.90000057220459,
+    65.60000038146973,
+    66.29999923706055,
+    58.39999961853027,
+    66.39999961853027
+  ],
+  "filters": [
+    15.700000762939453,
+    29.90000057220459,
+    5,
+    26.699999809265137,
+    13.59999942779541,
+    26.700000762939453,
+    13.800000190734863,
+    29.699999809265137,
+    12.59999942779541,
+    24.800000190734863,
+    8.600000381469727,
+    24.300000190734863,
+    10.5,
+    26.299999237060547,
+    14,
+    25.40000057220459,
+    14.199999809265137,
+    26,
+    14.100000381469727,
+    25.399999618530273,
+    14.399999618530273,
+    26.300000190734863,
+    14,
+    25.299999237060547,
+    15,
+    25.5,
+    14.5,
+    25.399999618530273,
+    11.600000381469727,
+    28.200000762939453
+  ],
+  "summary": {
+    "lcpP75": 520,
+    "clsMax": 0,
+    "listP75": 74,
+    "filterP75": 26
+  }
+}

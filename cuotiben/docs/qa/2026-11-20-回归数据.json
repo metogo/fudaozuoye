@@ -1,0 +1,1112 @@
+{
+  "date": "2026-11-20",
+  "environment": "localhost:43872，独立浏览器数据，公开试题。页面性能在本地生产构建测量。",
+  "newRecords": [
+    {
+      "round": 1,
+      "question": "math-4",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 15979,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 1,
+      "counts": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "round": 2,
+      "question": "chi-6",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 16131,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "round": 3,
+      "question": "eng-1",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 11550,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        3,
+        1,
+        2
+      ]
+    },
+    {
+      "round": 4,
+      "question": "math-6",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 13316,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        4,
+        1,
+        3
+      ]
+    },
+    {
+      "round": 5,
+      "question": "chi-7",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 18355,
+      "entry": "快捷订正",
+      "answerMode": "纸上",
+      "ok": false,
+      "attempts": 1,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 6,
+      "question": "eng-2",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 12491,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        6,
+        2,
+        4
+      ]
+    },
+    {
+      "round": 7,
+      "question": "math-5",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 14182,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        7,
+        2,
+        5
+      ]
+    },
+    {
+      "round": 8,
+      "question": "chi-8",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 15476,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        8,
+        2,
+        6
+      ]
+    },
+    {
+      "round": 9,
+      "question": "eng-4",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 16510,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 1,
+      "counts": [
+        9,
+        3,
+        6
+      ]
+    },
+    {
+      "round": 10,
+      "question": "math-4",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 15032,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        10,
+        3,
+        7
+      ]
+    },
+    {
+      "round": 11,
+      "question": "chi-6",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 15450,
+      "entry": "快捷订正",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        11,
+        3,
+        8
+      ]
+    },
+    {
+      "round": 12,
+      "question": "eng-1",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 14825,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        12,
+        3,
+        9
+      ]
+    },
+    {
+      "round": 13,
+      "question": "math-6",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 14136,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 1,
+      "counts": [
+        13,
+        4,
+        9
+      ]
+    },
+    {
+      "round": 14,
+      "question": "chi-7",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 16399,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        14,
+        4,
+        10
+      ]
+    },
+    {
+      "round": 15,
+      "question": "eng-2",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 13143,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        15,
+        4,
+        11
+      ]
+    },
+    {
+      "round": 16,
+      "question": "math-5",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 17952,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        16,
+        4,
+        12
+      ]
+    },
+    {
+      "round": 17,
+      "question": "chi-8",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 16025,
+      "entry": "快捷订正",
+      "answerMode": "纸上",
+      "ok": false,
+      "attempts": 1,
+      "counts": [
+        17,
+        5,
+        12
+      ]
+    },
+    {
+      "round": 18,
+      "question": "eng-4",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 14052,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        18,
+        5,
+        13
+      ]
+    },
+    {
+      "round": 19,
+      "question": "math-4",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 13360,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        19,
+        5,
+        14
+      ]
+    },
+    {
+      "round": 20,
+      "question": "chi-6",
+      "model": "doubao-seed-2-0-lite-260428",
+      "ms": 16066,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        20,
+        5,
+        15
+      ]
+    }
+  ],
+  "repeatCorrections": [
+    {
+      "round": 1,
+      "question": "public-preview-mcas2025-4math14-B",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 209,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 2,
+      "counts": [
+        5,
+        4,
+        1
+      ]
+    },
+    {
+      "round": 2,
+      "question": "public-preview-mcas2025-4math14-C",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 141,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        5,
+        3,
+        2
+      ]
+    },
+    {
+      "round": 3,
+      "question": "public-preview-tsa2024-eng-2",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 118,
+      "entry": "快捷订正",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 4,
+      "question": "public-preview-tsa2024-chi-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 185,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 1,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 5,
+      "question": "public-preview-tsa2024-math-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 146,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": false,
+      "attempts": 2,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 6,
+      "question": "public-preview-mcas2025-4math14-B",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 146,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 3,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 7,
+      "question": "public-preview-mcas2025-4math14-C",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 167,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 2,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 8,
+      "question": "public-preview-tsa2024-eng-2",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 146,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 2,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 9,
+      "question": "public-preview-tsa2024-chi-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 151,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 2,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 10,
+      "question": "public-preview-tsa2024-math-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 142,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 3,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 11,
+      "question": "public-preview-mcas2025-4math14-B",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 136,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 4,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 12,
+      "question": "public-preview-mcas2025-4math14-C",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 143,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 3,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 13,
+      "question": "public-preview-tsa2024-eng-2",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 165,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": false,
+      "attempts": 3,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 14,
+      "question": "public-preview-tsa2024-chi-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 140,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 3,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 15,
+      "question": "public-preview-tsa2024-math-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 145,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 4,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 16,
+      "question": "public-preview-mcas2025-4math14-B",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 174,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 5,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 17,
+      "question": "public-preview-mcas2025-4math14-C",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 132,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": false,
+      "attempts": 4,
+      "counts": [
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "round": 18,
+      "question": "public-preview-tsa2024-eng-2",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 148,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 4,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 19,
+      "question": "public-preview-tsa2024-chi-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 158,
+      "entry": "详情",
+      "answerMode": "文字",
+      "ok": true,
+      "attempts": 4,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    },
+    {
+      "round": 20,
+      "question": "public-preview-tsa2024-math-6",
+      "model": "openai/gpt-5.6-sol",
+      "ms": 140,
+      "entry": "详情",
+      "answerMode": "纸上",
+      "ok": true,
+      "attempts": 5,
+      "counts": [
+        5,
+        1,
+        4
+      ]
+    }
+  ],
+  "suites": {
+    "storage-acceptance": [
+      {
+        "exit": 0,
+        "seconds": 1
+      }
+    ],
+    "reframe-acceptance": [
+      {
+        "exit": 1,
+        "seconds": 25
+      },
+      {
+        "exit": 0,
+        "seconds": 36
+      },
+      {
+        "exit": 0,
+        "seconds": 35
+      }
+    ],
+    "direct-acceptance": [
+      {
+        "exit": 0,
+        "seconds": 35
+      }
+    ],
+    "text-acceptance": [
+      {
+        "exit": 1,
+        "seconds": 22
+      },
+      {
+        "exit": 1,
+        "seconds": 9
+      },
+      {
+        "exit": 1,
+        "seconds": 72
+      },
+      {
+        "exit": 1,
+        "seconds": 30
+      },
+      {
+        "exit": 0,
+        "seconds": 43
+      }
+    ],
+    "photo-acceptance": [
+      {
+        "exit": 0,
+        "seconds": 51
+      }
+    ],
+    "library-acceptance": [
+      {
+        "exit": 1,
+        "seconds": 61
+      },
+      {
+        "exit": 1,
+        "seconds": 33
+      },
+      {
+        "exit": 0,
+        "seconds": 33
+      }
+    ],
+    "browser-acceptance": [
+      {
+        "exit": 1,
+        "seconds": 45
+      },
+      {
+        "exit": 1,
+        "seconds": 37
+      },
+      {
+        "exit": 0,
+        "seconds": 42
+      }
+    ],
+    "stream-acceptance": [
+      {
+        "exit": 0,
+        "seconds": 100
+      }
+    ],
+    "handwriting-acceptance": [
+      {
+        "exit": 1,
+        "seconds": 9
+      },
+      {
+        "exit": 0,
+        "seconds": 5
+      }
+    ]
+  },
+  "sse": [
+    {
+      "model": "doubao",
+      "updates": 61,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 3901,
+      "completeMs": 14615,
+      "interruptedAndRetried": false,
+      "sse": [
+        "/api/learning/analyze",
+        "/api/learning/tutor",
+        "/api/learning/solution"
+      ]
+    },
+    {
+      "model": "openai/gpt-5.6-sol",
+      "updates": 14,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 2179,
+      "completeMs": 4292,
+      "interruptedAndRetried": false,
+      "sse": [
+        "/api/notebook"
+      ]
+    },
+    {
+      "model": "anthropic/claude-sonnet-5-5",
+      "updates": 12,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 3508,
+      "completeMs": 5646,
+      "interruptedAndRetried": false,
+      "sse": [
+        "/api/notebook"
+      ]
+    },
+    {
+      "model": "google/gemini-4-hydrogen",
+      "updates": 2,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 10123,
+      "completeMs": 11293,
+      "interruptedAndRetried": false,
+      "sse": [
+        "/api/notebook"
+      ]
+    },
+    {
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "updates": 11,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 3320,
+      "completeMs": 4880,
+      "interruptedAndRetried": false,
+      "sse": [
+        "/api/notebook"
+      ]
+    }
+  ],
+  "streamCancelRetry": [
+    {
+      "model": "doubao",
+      "updates": 42,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 1419,
+      "completeMs": 12049,
+      "interruptedAndRetried": true,
+      "sse": [
+        "/api/learning/analyze",
+        "/api/learning/tutor",
+        "/api/learning/solution"
+      ]
+    },
+    {
+      "model": "openai/gpt-5.6-sol",
+      "updates": 5,
+      "detailVisible": true,
+      "earlySave": false,
+      "firstTextMs": 2075,
+      "completeMs": 3758,
+      "interruptedAndRetried": true,
+      "sse": [
+        "/api/notebook"
+      ]
+    }
+  ],
+  "handwriting": {
+    "recognized": "7 6 4",
+    "confirmed": "764",
+    "savedStrokes": 4,
+    "paper": false,
+    "continued": true
+  },
+  "realParabola": {
+    "model": "doubao-seed-2-0-lite-260428",
+    "vertex": "(1,4)",
+    "data": [
+      {
+        "width": 320,
+        "body": 320,
+        "deltaX": 0,
+        "local": 54,
+        "math": 278,
+        "available": 224
+      },
+      {
+        "width": 375,
+        "body": 375,
+        "deltaX": 0,
+        "local": 0,
+        "math": 134,
+        "available": 134
+      },
+      {
+        "width": 393,
+        "body": 393,
+        "deltaX": 0,
+        "local": 0,
+        "math": 134,
+        "available": 134
+      },
+      {
+        "width": 430,
+        "body": 430,
+        "deltaX": 0,
+        "local": 0,
+        "math": 134,
+        "available": 134
+      },
+      {
+        "width": 810,
+        "body": 810,
+        "deltaX": 0,
+        "local": 0,
+        "math": 134,
+        "available": 134
+      }
+    ]
+  },
+  "webkitChain": [
+    {
+      "w": 320,
+      "page": 320,
+      "right": 285,
+      "localWidth": 224,
+      "mathWidth": 224,
+      "end": 0,
+      "screenX": 0,
+      "rows": 3
+    },
+    {
+      "w": 256,
+      "page": 256,
+      "right": 221,
+      "localWidth": 161,
+      "mathWidth": 161,
+      "end": 0,
+      "screenX": 0,
+      "rows": 5
+    },
+    {
+      "w": 393,
+      "page": 393,
+      "right": 358,
+      "localWidth": 297,
+      "mathWidth": 297,
+      "end": 0,
+      "screenX": 0,
+      "rows": 2
+    },
+    {
+      "w": 315,
+      "page": 315,
+      "right": 280,
+      "localWidth": 219,
+      "mathWidth": 220,
+      "end": 0,
+      "screenX": 0,
+      "rows": 4
+    },
+    {
+      "w": 430,
+      "page": 430,
+      "right": 395,
+      "localWidth": 334,
+      "mathWidth": 334,
+      "end": 0,
+      "screenX": 0,
+      "rows": 2
+    },
+    {
+      "w": 344,
+      "page": 344,
+      "right": 309,
+      "localWidth": 249,
+      "mathWidth": 249,
+      "end": 0,
+      "screenX": 0,
+      "rows": 3
+    },
+    {
+      "w": 810,
+      "page": 810,
+      "right": 756,
+      "localWidth": 300,
+      "mathWidth": 300,
+      "end": 0,
+      "screenX": 0,
+      "rows": 2
+    },
+    {
+      "w": 648,
+      "page": 648,
+      "right": 613,
+      "localWidth": 553,
+      "mathWidth": 553,
+      "end": 0,
+      "screenX": 0,
+      "rows": 1
+    }
+  ],
+  "webkitGrouped": [
+    {
+      "w": 320,
+      "page": 320,
+      "right": 285,
+      "localWidth": 224,
+      "mathWidth": 554,
+      "end": 330,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 256,
+      "page": 256,
+      "right": 221,
+      "localWidth": 161,
+      "mathWidth": 554,
+      "end": 393,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 393,
+      "page": 393,
+      "right": 358,
+      "localWidth": 297,
+      "mathWidth": 554,
+      "end": 257,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 315,
+      "page": 315,
+      "right": 280,
+      "localWidth": 219,
+      "mathWidth": 554,
+      "end": 335,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 430,
+      "page": 430,
+      "right": 395,
+      "localWidth": 334,
+      "mathWidth": 554,
+      "end": 220,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 344,
+      "page": 344,
+      "right": 309,
+      "localWidth": 249,
+      "mathWidth": 554,
+      "end": 305,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 810,
+      "page": 810,
+      "right": 756,
+      "localWidth": 300,
+      "mathWidth": 554,
+      "end": 254,
+      "screenX": 0,
+      "rows": 1
+    },
+    {
+      "w": 648,
+      "page": 648,
+      "right": 613,
+      "localWidth": 553,
+      "mathWidth": 555,
+      "end": 2,
+      "screenX": 0,
+      "rows": 1
+    }
+  ],
+  "photo": [
+    "已收录 4 识别至解析完成毫秒 17074",
+    "已收录 5 识别至解析完成毫秒 18593",
+    "已收录 6 识别至解析完成毫秒 13950"
+  ],
+  "reframe": [
+    "同一选区回到解析再打开核对，新增分析请求 0，耗时 70 ms",
+    "取消前无上传，同一选区返回无二次识别，断网后可对照题图补录，重新圈题后使用新题干。"
+  ],
+  "edges": [
+    "空本三个入口、取消录题、空间估算、无题干/页码、放弃与保留、阅读材料、移科与空筛选、快捷订正草稿、保留/移除/刷新通过。",
+    "四种答案归属、相机文件入口、双指缩放、恢复整页、拖框、恢复整图、退出无意外收录均通过。"
+  ],
+  "beforePerformance": {
+    "lcpP75": 544,
+    "clsMax": 0,
+    "listP75": 83,
+    "filterP75": 30.09999942779541
+  },
+  "finalPerformance": {
+    "listing": [
+      76.80000019073486,
+      66.5,
+      82.30000019073486,
+      83.30000019073486,
+      66.20000076293945,
+      82.60000038146973,
+      74.60000038146973,
+      66.39999961853027,
+      75.39999961853027,
+      90.10000038146973
+    ],
+    "filters": [
+      15.299999237060547,
+      35.10000038146973,
+      8.100000381469727,
+      30.100000381469727,
+      9.5,
+      30.40000057220459,
+      9.300000190734863,
+      30.300000190734863,
+      9.600000381469727,
+      29.300000190734863,
+      15.300000190734863,
+      30.5,
+      14.100000381469727,
+      28,
+      12.699999809265137,
+      28.5,
+      10.300000190734863,
+      28,
+      12,
+      28.300000190734863,
+      11.300000190734863,
+      30,
+      9.59999942779541,
+      29.300000190734863,
+      11,
+      30.100000381469727,
+      9.09999942779541,
+      30.200000762939453,
+      7.5,
+      30
+    ],
+    "summary": {
+      "lcpP75": 544,
+      "clsMax": 0,
+      "listP75": 82.60000038146973,
+      "filterP75": 30
+    },
+    "coldLcp": [
+      600,
+      536,
+      544,
+      536,
+      536,
+      536,
+      544,
+      536,
+      544,
+      536
+    ],
+    "coldCls": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+}

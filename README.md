@@ -94,3 +94,11 @@ npm run release:cloudbase
 发布入口执行全量单测、全量类型检查和全库 lint（包含测试代码）。`npm run lint` 要求零错误、零警告；检查失败时停止发布，不允许跳过测试文件或降低规则来放行。
 
 不要将模型密钥放到静态应用的构建变量。请只在 `learning-api` 云函数环境变量中设置 `DOUBAO_API_KEY`、`DOUBAO_MODEL_ID`、`DOUBAO_MODEL_ID_MEDIUM`、`DOUBAO_MODEL_ID_HIGH`、`DOUBAO_BASE_URL`、可选的 `DOUBAO_IMAGE_MODEL_ID`、`DOUBAO_IMAGE_BASE_URL` 和至少 32 位的 `SESSION_STATE_SECRET`；本仓库不保存这些值。
+
+## 同域错题本
+
+错题本源码、测试和独立依赖锁在 `cuotiben/`。运行 `npm run dev`、`npm run build` 或现有 CloudBase 构建命令时，会一并构建题本到 `public/cuotiben/`。从辅导首页双击小逗号或点击气泡打开 `/cuotiben/`。题本目录的「返回辅导作业」可从直接打开的链接返回首页。
+
+正式域名沿用现有 `/api` 网关。仅 `/api/notebook` 调用错题本解析处理器，豆包使用服务端 `DOUBAO_API_KEY` 和 `DOUBAO_MODEL_ID`，其他模型仅在配置 `REQUESTY_API_KEY` 时开放。错题本用量仍写入其专属 CloudBase 集合 `cuotiben_daily_usage`。沿用现有发布顺序，先验证学习 API 和错题本接口，再更新静态前端。题本测试可在 Node 24 下运行 `npm run test:notebook`。
+
+题目、原图和订正历史保存在浏览器的 IndexedDB，按来源隔离。原独立域名的数据继续在原站可读，用户可在「本机存储与可用空间」中打开旧版题本。

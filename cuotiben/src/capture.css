@@ -1,0 +1,80 @@
+.crop-bench {
+  color: #f3fbff;
+  border: 1px solid #628398;
+  border-radius: 20px;
+  overflow: hidden;
+  padding: 0 9px;
+}
+.bench-caption {
+  padding: 10px 7px;
+  font-size: 14px;
+}
+.bench-caption small {
+  color: #e1e8eb;
+}
+.cropstage {
+  border: 0;
+  border-radius: 3px;
+  background-color: #182b37;
+  background-size: 9px 9px;
+}
+.crop-tools {
+  justify-content: center;
+  gap: clamp(6px, 4vw, 30px);
+}
+.crop-tools .link {
+  font-size: 13px;
+  color: white;
+}
+.crop-guidance,
+.save-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 12px 1px;
+}
+.answer-pad {
+  background: #ffffffeb;
+  border: 1px solid #ffffffea;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.manuscript,
+.attribution {
+  margin: 0;
+  padding: 18px clamp(16px, 3vw, 28px);
+}
+.manuscript .field,
+.attribution .field {
+  margin-bottom: 0;
+}
+.manuscript label,
+.answer-pad label.field {
+  font-size: 18px;
+}
+.attribution {
+  border-top: 1px solid #d4dfe8;
+  background: #f7fafe;
+}
+.attribution .link {
+  margin-top: 6px;
+  font-size: 14px;
+}
+.attribution .field + .field {
+  margin-top: 15px;
+}
+.manuscript textarea,
+.answer-pad textarea,
+.attribution textarea {
+  border: 0;
+  border-radius: 0;
+  line-height: 29px;
+  padding: 0 4px;
+  color: var(--ink);
+  font-size: 16px;
+}
+.manuscript textarea {
+  min-height: 98px;
+}
+.attribution textarea {
+  min-height: 60px;
+}

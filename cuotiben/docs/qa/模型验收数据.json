@@ -1,0 +1,410 @@
+{
+  "首次测评": [
+    {
+      "id": "chi-6",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "B",
+      "cost": 0.006705,
+      "correct": true,
+      "ms": 7307,
+      "answer": "B"
+    },
+    {
+      "id": "chi-6",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "B",
+      "cost": 0.009702,
+      "correct": true,
+      "ms": 7947,
+      "answer": "B"
+    },
+    {
+      "id": "chi-6",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "B",
+      "cost": 0.007332,
+      "correct": true,
+      "ms": 8851,
+      "answer": "B"
+    },
+    {
+      "id": "chi-7",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "B",
+      "cost": 0.008352,
+      "correct": true,
+      "ms": 4180,
+      "answer": "B"
+    },
+    {
+      "id": "chi-7",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "B",
+      "cost": 0.010348,
+      "correct": true,
+      "ms": 7333,
+      "answer": "B"
+    },
+    {
+      "id": "chi-8",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "A",
+      "cost": 0.006388,
+      "correct": true,
+      "ms": 3338,
+      "answer": "A"
+    },
+    {
+      "id": "chi-7",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "B",
+      "cost": 0.013509,
+      "correct": true,
+      "ms": 9305,
+      "answer": "B"
+    },
+    {
+      "id": "math-4",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "835",
+      "cost": 0.005788,
+      "correct": true,
+      "ms": 4868,
+      "answer": "835"
+    },
+    {
+      "id": "chi-8",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "A",
+      "cost": 0.009728,
+      "correct": true,
+      "ms": 6644,
+      "answer": "A"
+    },
+    {
+      "id": "math-5",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "A",
+      "cost": 0.004112,
+      "correct": true,
+      "ms": 3800,
+      "answer": "A"
+    },
+    {
+      "id": "math-4",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "835",
+      "cost": 0.006634,
+      "correct": true,
+      "ms": 4938,
+      "answer": "835"
+    },
+    {
+      "id": "chi-8",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "A",
+      "cost": 0.0153855,
+      "correct": true,
+      "ms": 11927,
+      "answer": "A"
+    },
+    {
+      "id": "math-6",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "764",
+      "cost": 0.004648,
+      "correct": true,
+      "ms": 5281,
+      "answer": "764"
+    },
+    {
+      "id": "math-5",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "A",
+      "cost": 0.004686,
+      "correct": true,
+      "ms": 4169,
+      "answer": "A"
+    },
+    {
+      "id": "chi-6",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.00694848,
+      "correct": true,
+      "ms": 33391,
+      "answer": "B"
+    },
+    {
+      "id": "math-6",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "764",
+      "cost": 0.003534,
+      "correct": true,
+      "ms": 2624,
+      "answer": "764"
+    },
+    {
+      "id": "eng-1",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "A",
+      "cost": 0.005676,
+      "correct": true,
+      "ms": 4385,
+      "answer": "A"
+    },
+    {
+      "id": "math-4",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "835",
+      "cost": 0.0152895,
+      "correct": true,
+      "ms": 9683,
+      "answer": "835"
+    },
+    {
+      "id": "eng-2",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "B",
+      "cost": 0.004004,
+      "correct": true,
+      "ms": 3720,
+      "answer": "B"
+    },
+    {
+      "id": "eng-1",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "A",
+      "cost": 0.0063,
+      "correct": true,
+      "ms": 4806,
+      "answer": "A"
+    },
+    {
+      "id": "eng-4",
+      "model": "openai/gpt-5.6-sol",
+      "reference": "A",
+      "cost": 0.005588,
+      "correct": true,
+      "ms": 4487,
+      "answer": "A"
+    },
+    {
+      "id": "eng-2",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "B",
+      "cost": 0.009152,
+      "correct": true,
+      "ms": 6111,
+      "answer": "B"
+    },
+    {
+      "id": "math-5",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "A",
+      "cost": 0.0113205,
+      "correct": true,
+      "ms": 7644,
+      "answer": "A"
+    },
+    {
+      "id": "eng-4",
+      "model": "anthropic/claude-sonnet-5-5",
+      "reference": "A",
+      "cost": 0.010628,
+      "correct": true,
+      "ms": 6884,
+      "answer": "A"
+    },
+    {
+      "id": "math-6",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "764",
+      "cost": 0.0102885,
+      "correct": true,
+      "ms": 7970,
+      "answer": "764"
+    },
+    {
+      "id": "eng-1",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "A",
+      "cost": 0.006531,
+      "correct": true,
+      "ms": 4964,
+      "answer": "A"
+    },
+    {
+      "id": "eng-2",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "B",
+      "cost": 0.0064515,
+      "correct": true,
+      "ms": 11970,
+      "answer": "B"
+    },
+    {
+      "id": "eng-4",
+      "model": "google/gemini-4-hydrogen",
+      "reference": "A",
+      "cost": 0.0063675,
+      "correct": true,
+      "ms": 6490,
+      "answer": "A"
+    },
+    {
+      "id": "chi-7",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.00960696,
+      "correct": true,
+      "ms": 47189,
+      "answer": "B"
+    },
+    {
+      "id": "chi-8",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.00600512,
+      "correct": true,
+      "ms": 29890,
+      "answer": "A"
+    },
+    {
+      "id": "math-4",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "835",
+      "cost": 0.00687324,
+      "correct": true,
+      "ms": 32256,
+      "answer": "835"
+    },
+    {
+      "id": "math-5",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.005472104,
+      "correct": true,
+      "ms": 27269,
+      "answer": "A"
+    },
+    {
+      "id": "math-6",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "764",
+      "cost": 0.003723104,
+      "correct": true,
+      "ms": 19687,
+      "answer": "764"
+    },
+    {
+      "id": "eng-1",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.010032704,
+      "correct": true,
+      "ms": 49022,
+      "answer": "A"
+    },
+    {
+      "id": "eng-2",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.011157344,
+      "correct": true,
+      "ms": 54859,
+      "answer": "B"
+    },
+    {
+      "id": "eng-4",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "error": "模型未完整返回所选模型的解析，请重试。",
+      "status": 502,
+      "ms": 78771
+    }
+  ],
+  "DeepSeek调整后复测": [
+    {
+      "id": "chi-6",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.00374748,
+      "correct": true,
+      "ms": 18340,
+      "answer": "B"
+    },
+    {
+      "id": "chi-7",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.00453992,
+      "correct": true,
+      "ms": 26059,
+      "answer": "B"
+    },
+    {
+      "id": "chi-8",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.00478808,
+      "correct": true,
+      "ms": 24487,
+      "answer": "A"
+    },
+    {
+      "id": "math-4",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "835",
+      "cost": 0.00221892,
+      "correct": true,
+      "ms": 9817,
+      "answer": "835"
+    },
+    {
+      "id": "math-5",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.004960912,
+      "correct": true,
+      "ms": 26499,
+      "answer": "A"
+    },
+    {
+      "id": "math-6",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "764",
+      "cost": 0.007666912,
+      "correct": true,
+      "ms": 47025,
+      "answer": "764"
+    },
+    {
+      "id": "eng-1",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.004575472,
+      "correct": true,
+      "ms": 24311,
+      "answer": "A"
+    },
+    {
+      "id": "eng-2",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "B",
+      "cost": 0.004739856,
+      "correct": true,
+      "ms": 23992,
+      "answer": "B"
+    },
+    {
+      "id": "eng-4",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "reference": "A",
+      "cost": 0.008838456,
+      "correct": true,
+      "ms": 43083,
+      "answer": "A"
+    }
+  ]
+}

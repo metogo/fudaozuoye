@@ -42,12 +42,42 @@
   .apple-ui .home-companion__quote:first-child { margin-left: -.17em; margin-right: .04em; }
   .apple-ui .home-companion__quote:last-child { margin-left: .04em; }
   .apple-ui .home-companion__letter { display: inline-block; }
+  .apple-ui .home-companion__speaker { position: relative; flex: none; }
+  .apple-ui .home-companion__speech {
+    position: absolute; z-index: 1; right: 8px; bottom: 100%; width: max-content; min-height: 44px;
+    display: flex; align-items: flex-end; padding-bottom: 4px; text-decoration: none; color: #46624a;
+  }
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+    .home-companion[data-speech="waiting"] .home-companion__speech { visibility: hidden; }
+    .home-companion[data-speech="appearing"] .home-companion__speech > span {
+      transform-origin: 80% 100%; animation: companion-speech-in 220ms ease-out both;
+    }
+  }
+  @keyframes companion-speech-in {
+    from { opacity: 0; transform: translateY(3px) scale(.95); }
+    to { opacity: 1; transform: none; }
+  }
+  .apple-ui .home-companion__speech > span {
+    position: relative; padding: 4px 10px; border: 1px solid #d4dece; border-radius: 12px;
+    background: #f0f4eb; font-size: 12px; font-weight: 500; line-height: 17px; letter-spacing: 0;
+  }
+  .apple-ui .home-companion__speech > span::after {
+    content: ""; position: absolute; right: 20px; bottom: -4px; width: 6px; height: 6px;
+    background: inherit; border-right: 1px solid #d4dece; border-bottom: 1px solid #d4dece; transform: rotate(45deg);
+  }
+  .apple-ui .home-companion__speech:focus-visible { outline: 2px solid #46735d; outline-offset: 2px; }
   .apple-ui .home-companion__actor {
-    display: block; flex: 0 0 94px; width: 94px; height: 94px; padding: 0;
+    position: relative; display: block; flex: 0 0 94px; width: 94px; height: 94px; padding: 0;
     border: 0; border-radius: 18px; background: transparent; box-shadow: none;
-    cursor: pointer; transform-origin: 60% 80%;
+    cursor: pointer; touch-action: manipulation; transform-origin: 60% 80%;
   }
   .apple-ui .home-companion__actor img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; pointer-events: none; }
+  /* Eye position in the 192px square comma-idle artwork, scaled with the character. */
+  .apple-ui .home-companion__eyelids {
+    position: absolute; pointer-events: none; left: 28%; top: 28%; width: 13%; height: 20%;
+    background: linear-gradient(#0b143f, #0b143f) top / 100% 0% no-repeat,
+                linear-gradient(#0b143f, #0b143f) bottom / 100% 0% no-repeat;
+  }
   .apple-ui .home-companion button:active { scale: 1; }
   .apple-ui .home-companion button:focus-visible { outline: 2px solid #678c79; outline-offset: 5px; }
   .apple-ui .home-welcome-subtitle { display: block; margin-top: 4px; font-size: 27px; font-weight: 600; letter-spacing: -.025em; line-height: 1.45; }
@@ -114,6 +144,7 @@
   @media (max-height: 700px) and (max-width: 639px) {
     .apple-ui .home-chat-shell .home-chat-header { min-height: 64px; padding-block: 14px; }
     .apple-ui .home-chat-shell .home-chat-scroll { padding-top: 12px; }
+    .apple-ui .home-companion h1 { padding-top: 42px; }
     .apple-ui .home-companion .home-welcome-greeting { display: none; }
     .apple-ui .home-companion__identity { height: 60px; }
     .apple-ui .home-companion__actor { flex-basis: 68px; width: 68px; height: 68px; }

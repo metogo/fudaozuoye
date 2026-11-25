@@ -151,6 +151,8 @@ export const englishUiCopy: Record<string, string> = {
   "导出 PDF": "Export PDF", "导出当前全部对话": "Export this conversation", "开始新题": "New question",
   "对话内容": "Conversation", "再次查看刚才的板书": "Reopen the board", "不改变当前任务": "Keep the current task",
   "正在引用的文字": "Selected passage", "针对这段文字提问": "Ask about this passage", "取消引用": "Remove quote", "取消": "Cancel",
+  "告诉你个小秘密，": "Here’s a little secret:", "双击我可以进入错题本。": "Double-tap me to open your notebook.", "双击打开错题本": "Double-tap to open your notebook",
+  "打开错题本": "Open your notebook",
   "拍照发题": "Take a photo", "从相册选择题目": "Choose a photo", "白板写题": "Write a question",
   "当前环节": "Current step", "返回作答": "Back to answer", "改为提问": "Ask a question", "输入方式": "Input options",
   "白板作答": "Write an answer", "白板提问": "Write a question", "拍照作答": "Photograph your answer", "拍照提问": "Photograph your question",

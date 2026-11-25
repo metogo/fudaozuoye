@@ -7,6 +7,7 @@
     "rootDir": ".",
     "outDir": "functions/learning-api/dist",
     "strict": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "declaration": false,
@@ -16,6 +17,9 @@
   },
   "include": [
     "functions/learning-api/src/**/*.ts",
-    "lib/learning/**/*.ts"
+    "lib/learning/**/*.ts",
+    "cuotiben/api/notebook.js",
+    "cuotiben/server/**/*",
+    "cuotiben/shared/*.js"
   ]
 }

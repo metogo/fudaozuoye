@@ -1,0 +1,37 @@
+.live-lesson { overflow-anchor: none; }
+.follow-latest {
+  position: fixed; z-index: 3; bottom: calc(env(safe-area-inset-bottom) + 18px);
+  left: 50%; translate: -50% 0; border-radius: 24px; padding: 8px 18px;
+  color: white; background: var(--deep); font-weight: 600; font-size: 14px;
+}
+.guidance:has(.step-ruler) { padding-right: 28px; }
+.step-ruler {
+  position: fixed; z-index: 2; top: 50%; transform: translateY(-50%);
+  right: max(0px, env(safe-area-inset-right), calc((100vw - 835px) / 2));
+  width: 44px; height: min(calc(var(--stops) * 30px + 20px), 52vh); height: min(calc(var(--stops) * 30px + 20px), 52dvh);
+  display: grid; justify-items: center; touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent; cursor: ns-resize; border-radius: 20px;
+}
+.step-ruler::before {
+  content: ''; position: absolute; inset: 0 5px; opacity: .55;
+  border-radius: 18px; border: 1px solid #b9cac1; background: #f7faf7;
+}
+.ruler-stops { position: absolute; inset: 17px 0; pointer-events: none; opacity: .64; }
+.ruler-tick {
+  position: absolute; left: 50%; transform: translate(-50%, -50%); display: grid; place-items: center;
+  min-width: 17px; height: 17px; font: 550 11px/1 var(--type); color: #3d5b50;
+}
+.ruler-tick::after { content: ''; position: absolute; left: calc(100% + 1px); width: 3px; height: 1px; background: currentColor; }
+.ruler-tick[data-current=true] { color: white; background: var(--deep); border-radius: 50%; }
+.ruler-caption {
+  position: absolute; top: var(--at); right: 100%; transform: translateY(-50%); pointer-events: none;
+  white-space: nowrap; padding: 4px 10px; border-radius: 6px; background: var(--deep); color: white; font-size: 13px; opacity: 0;
+}
+.step-ruler[data-engaged=true] :is(.ruler-stops, .ruler-caption),
+.step-ruler[data-engaged=true]::before { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .step-ruler::before, .ruler-stops, .ruler-caption { transition: opacity .18s ease-out; }
+}
+@media (min-width: 820px) { .result-reader .guidance:has(.step-ruler) { padding-right: 0; } }
+.step-ruler:focus-visible { outline: 2px solid var(--deep); outline-offset: -3px; }
+.work-review .step-ruler { right: max(0px, env(safe-area-inset-right), calc((100vw - 1060px) / 2)); }

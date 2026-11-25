@@ -1,0 +1,26 @@
+{
+  "name": "shiti-notebook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src server api shared tests scripts vite.config.js"
+  },
+  "dependencies": {
+    "@cloudbase/js-sdk": "3.8.2",
+    "katex": "0.18.4",
+    "lottie-web": "5.13.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.8"
+  }
+}

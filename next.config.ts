@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   output: "export",
   trailingSlash: true,
   basePath: basePath || undefined,
+  // The static host serves directory indexes. Next dev needs the explicit file.
+  ...(process.env.NODE_ENV === "development" && {
+    rewrites: async () => [{ source: "/cuotiben/", destination: "/cuotiben/index.html" }],
+  }),
   poweredByHeader: false,
   reactStrictMode: true,
   devIndicators: false,

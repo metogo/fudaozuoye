@@ -1,0 +1,99 @@
+[
+  {
+    "id": "public-preview-tsa2024-math-6",
+    "q": "9 × 764 ＝ __________ × 9",
+    "child": "",
+    "teacher": "官方评分参考：764\n来源：https://www.bca.hkeaa.edu.hk/web/Common/res/2024priPaper/P3Math/TSA2024_3MC1.pdf",
+    "subject": "math",
+    "lesson": {
+      "hint": "观察等号左边的两个因数，想一想交换它们的位置后，乘积会不会改变。",
+      "steps": [
+        "乘法交换律表示：两个因数交换位置，积不变。",
+        "把9和764交换位置，可得9×764＝764×9，所以横线上填764。"
+      ],
+      "check": "把764填入横线，检查等号两边是否都是9和764相乘。",
+      "answer": "764",
+      "provider": "requesty",
+      "modelId": "openai/gpt-5.6-sol"
+    },
+    "correction": "764。根据乘法交换律，9 × 764 = 764 × 9。"
+  },
+  {
+    "id": "public-preview-tsa2024-chi-6",
+    "q": "為什麼小烏鴉最初沒有參加合唱團？\n因為小烏鴉\nA. 害怕會被貓頭鷹責罵。\nB. 覺得自己聲音不動聽。\nC. 知道小鳥不喜歡自己。\nD. 認為合唱團練習辛苦。\n\n暑假快到了，森林將要舉行天才表演，所有動物都十分興奮，\n 紛紛組成隊伍參加表演。八爪魚和小蟹打算表演花式噴水，河馬\n 和大象示範舉重。小鳥一向熱愛唱歌，很快便組成了合唱團，要\n 一展歌喉。\n\n 合唱團成員包括歌聲最甜美的燕子，聲線最嘹亮的麻雀 5\n 三姊妹，還請來音樂知識最豐富的貓頭鷹當指揮，森林裏的動物\n 很期待他們的演出。當小烏鴉聽到合唱團的消息，心裏很是羨慕，\n 他也喜歡唱歌，但總覺得自己只會發出「呀！呀！」的叫聲，\n 不夠動聽，只好在樹下欣賞合唱團練習，還常常跟着拍子搖頭\n 擺腦。 10\n\n\n 這一天，合唱團正在加緊練習，小烏鴉聽到貓頭鷹大力拍打\n 指揮棒，還説：\n 「不行！不行！燕子你唱得太快了，不能只顧自己\n 唱歌呀！麻雀三姊妹，你們唱得時快時慢，拍子總是不準確。\n\n\n\n請勿在此書寫。 請勿在此書寫。\n 演出的日子快到了，怎麼辦？怎麼辦？」\n\n 小烏鴉抬起頭，看見貓頭鷹和小鳥一臉苦惱，很為他們着急。 15\n 當貓頭鷹再次揮動指揮棒時，小烏鴉忍不住跟着拍子，有節奏地\n 發出「呀！呀！」的叫聲。在小烏鴉叫聲的幫助下，合唱團終於\n 第一次把整首歌唱好，他們又高興又驚訝，貓頭鷹和小鳥連忙\n 飛到樹下，邀請小烏鴉成為合唱團第六位成員。\n\n 天才表演那天，合唱團的演出成功極了，小烏鴉站在台上， 20\n 看見森林裏的動物拍掌歡呼，心裏感到十分自豪！",
+    "child": "",
+    "teacher": "官方评分参考：B\n来源：https://www.bca.hkeaa.edu.hk/web/Common/res/2024priPaper/P3Chi/TSA2024_3CR1.pdf",
+    "subject": "chinese",
+    "lesson": {
+      "hint": "找出寫小烏鴉想參加卻沒有參加的句子，留意「但」和「只好」前後的內容。",
+      "steps": [
+        "文中說小烏鴉也喜歡唱歌，表示他不是不想參加。",
+        "接着寫他總覺得自己只會發出「呀！呀！」的叫聲，不夠動聽。",
+        "所以他最初沒有參加，是因為覺得自己的聲音不好聽，應選 B。"
+      ],
+      "check": "把 B 代入題目，再對照文中「不夠動聽，只好在樹下欣賞」一句，檢查意思是否一致。",
+      "answer": "B",
+      "provider": "requesty",
+      "modelId": "openai/gpt-5.6-sol"
+    },
+    "correction": null
+  },
+  {
+    "id": "public-preview-mcas2025-4math14-B",
+    "q": "The gardener used 2 liters of fuel to cut the grass What is the total amount of fuel, in milliliters, the gardener used to cut the grass? Show or explain how you got your answer.",
+    "child": "13 millimeters",
+    "teacher": "公开试卷及匿名作答来源：https://www.doe.mass.edu/mcas/student/2025/grade4/math-q14.pdf#page=7",
+    "subject": "math",
+    "lesson": {
+      "hint": "你是怎么想到“13 millimeters”的？题目问的是燃料容量，要使用 liters 和 milliliters，而不是表示长度的 millimeters。",
+      "steps": [
+        "1 liter = 1000 milliliters。",
+        "把 2 liters 换算成 milliliters：2 × 1000 = 2000。",
+        "所以园丁用了 2000 milliliters 的燃料。"
+      ],
+      "check": "用 2000 ÷ 1000 = 2，换算回去正好是 2 liters。",
+      "provider": "requesty",
+      "modelId": "openai/gpt-5.6-sol"
+    },
+    "correction": "2 升 = 2000 毫升。"
+  },
+  {
+    "id": "public-preview-tsa2024-eng-2",
+    "q": "The Drum Class is on ____________.\nA. Mondays B. Thursdays\nC. Wednesdays D. Fridays\n\nHappy Music School\n Dates: 1st August – 31st August\n Violin Class\n Time: 2 pm - 4 pm $500\n Wednesdays\n Piano Class Age: 7-15\n $600\n Mondays\n Age: 5-10 Teacher: Mr Chan\n\n\n\n\nPlease do not write in the margin. 請勿在此書寫。 Please do not write in the margin. 請勿在此書寫。\n Teacher: Miss Lee\n Singing Class\n $250\n Fridays\n Drum Class Age: 8-12\n $300\n Thursdays\n Age: 12-16 Teacher: Miss Lee\n\n\n Teacher: Mr Wong Come and join us!\n Call Miss Ho on 2076 4396.",
+    "child": "",
+    "teacher": "官方评分参考：B\n来源：https://www.bca.hkeaa.edu.hk/web/Common/res/2024priPaper/P3Eng/TSA2024_3ERW1.pdf",
+    "subject": "english",
+    "lesson": {
+      "hint": "先在海报中找到“Drum Class”，再看它下面写的是星期几。",
+      "steps": [
+        "定位“Drum Class（鼓乐课）”一栏。",
+        "该栏的上课日期写着“Thursdays”。",
+        "因此应选择表示星期四的选项 B。"
+      ],
+      "check": "把 B 选项的“Thursdays”与海报中 Drum Class 下方的日期逐字核对。",
+      "answer": "B",
+      "provider": "requesty",
+      "modelId": "openai/gpt-5.6-sol"
+    },
+    "correction": null
+  },
+  {
+    "id": "public-preview-mcas2025-4math14-C",
+    "q": "It took the gardener 3 hours and 45 minutes to rake the leaves. What is the total amount of time, in minutes, it took the gardener to rake the leaves? Show or explain how you got your answer.",
+    "child": "135 minuetes cause 30 × 3 + 45 = 135",
+    "teacher": "公开试卷及匿名作答来源：https://www.doe.mass.edu/mcas/student/2025/grade4/math-q14.pdf#page=7",
+    "subject": "math",
+    "lesson": {
+      "hint": "你先把3小时换成分钟，再加45分钟，这个思路是合理的；但1小时有多少分钟？算式中的30应该换成什么数？",
+      "steps": [
+        "1小时等于60分钟，所以3小时是60×3=180分钟。",
+        "再加上45分钟：180+45=225分钟。",
+        "因此，园丁一共用了225分钟。"
+      ],
+      "check": "把225分钟倒着换算：225÷60=3余45，也就是3小时45分钟，与题目相符。",
+      "provider": "requesty",
+      "modelId": "openai/gpt-5.6-sol"
+    },
+    "correction": null
+  }
+]

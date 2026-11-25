@@ -218,6 +218,8 @@ if ! wait_for_api; then
   exit 1
 fi
 
+NEXT_PUBLIC_API_BASE_URL="http://localhost:$api_port/api" npm run build:notebook
+
 NEXT_PUBLIC_API_BASE_URL="http://localhost:$api_port/api" \
 "$project_dir/node_modules/.bin/next" dev -p "$web_port" &
 web_pid=$!

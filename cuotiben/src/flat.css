@@ -1,0 +1,30 @@
+:root {
+  --ink: #20302e; --blue: #176757; --deep: #195e52; --pale: #e7f2eb;
+  --surface: #fff; --sand: #f5f7f5; --muted: #51625c; --line: #d8e1db;
+}
+body { background: var(--sand); }
+.bar { background: #fff; border-bottom: 1px solid var(--line); }
+.brand-mark { color: #fff; background: var(--deep); border: 0; border-radius: 7px; }
+.brand-mark:after { display: none; }
+.companion-sign img, .hint-byline img { background: transparent; }
+.review-sheet, .paper, .answer-pad, .dialog, .success {
+  background: white; border: 1px solid var(--line); border-radius: 14px;
+}
+.primary, .footer-act .primary { background: var(--blue); border: 1px solid var(--blue); color: white; border-radius: 10px; }
+.secondary, .footer-act .secondary { color: var(--deep); background: white; border: 1px solid var(--line); border-radius: 9px; }
+.state, .receipt-body .state { color: #745122; background: #f7ebd3; }
+.state.finished { color: #175747; background: #ddf0e3; }
+.field textarea, .manuscript textarea, .answer-pad textarea, .attribution textarea { color: var(--ink); border: 1px solid #c7d3cb; background: #fafcf9; border-radius: 8px; caret-color: var(--blue); }
+.review-answers { border-color: var(--line); }
+.stage-dot { background: #e5ebe7; border-color: #c6d0ca; }
+.stage-track [aria-current] .stage-dot, .stage-track .passed .stage-dot, .step:before { background: var(--blue); border-color: var(--blue); }
+.live-hint, .hint { background: #edf6f0; border-color: #d1e4d7; }
+.child-note, .review-launch, .receipt-head, .self-check { background: #f4f6f2; }
+.dialog::backdrop { background: #18272466; }
+.crop-bench, .crop-bench .bench-caption { background: #293b35; color: white; }
+.crop-bench { border-radius: 12px; border: 1px solid #364b42; }
+.cropstage { background: #1c2924; }
+.collection-feedback { background: #e1f1e6; color: var(--deep); }
+.job-state { background: #23493f; color: white; }
+.step:before, .dialog-symbol, .mini-page { border-color: var(--line); }
+.result-motion { background: transparent; border: 0; }

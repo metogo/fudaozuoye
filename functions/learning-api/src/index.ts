@@ -56,6 +56,15 @@ async function handle(incoming: IncomingMessage, outgoing: ServerResponse): Prom
       await writeResponse(outgoing, response);
       return;
     }
+    if (normalizePath((incoming.url ?? "/").split("?", 1)[0]) === "/notebook") {
+      for (const [key, value] of corsHeaders(incoming)) outgoing.setHeader(key, value);
+      const { notebookHandler } = await import("../../../cuotiben/api/notebook.js");
+      const origins = new Set(["https://fudaozuoye.com", "https://www.fudaozuoye.com"]);
+      const appOrigin = process.env.PUBLIC_APP_ORIGIN?.trim();
+      if (appOrigin) origins.add(appOrigin);
+      await notebookHandler(process.env.REQUESTY_API_KEY, 115000, process.env, origins)(incoming, outgoing);
+      return;
+    }
     const request = await toWebRequest(incoming, requestAbort.signal);
     const path = normalizePath(new URL(request.url).pathname);
     const handler = routes[`${request.method} ${path}`];

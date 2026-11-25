@@ -1,0 +1,54 @@
+{
+  "rows": [
+    {
+      "n": 4,
+      "q": "4. $436 + 157 + 242 = $",
+      "ocrMs": 3248,
+      "solveMs": 11687,
+      "imgLength": 5795,
+      "retries": []
+    },
+    {
+      "n": 5,
+      "q": "5. $560 - 246 - 46 =$ ○ A. 268 ○ B. 314 ○ C. 320 ○ D. 360",
+      "ocrMs": 4494,
+      "solveMs": 10869,
+      "imgLength": 13947,
+      "retries": []
+    },
+    {
+      "n": 6,
+      "q": "6. $9 \\times 764 = \\underline{\\hspace{10em}} \\times 9$",
+      "ocrMs": 3646,
+      "solveMs": 10417,
+      "imgLength": 4947,
+      "retries": []
+    }
+  ],
+  "records": [
+    {
+      "q": "6. $9 \\times 764 = \\underline{\\hspace{10em}} \\times 9$",
+      "model": "doubao-seed-2-0-lite-260428",
+      "conclusion": "### 结论\n空缺处的数字是 $\\boldsymbol{764}$。",
+      "cropHash": "243be31b35f758f30155f615cb3b283d277d30b3510055917a6ba2f732e5bd65",
+      "bytes": 5817,
+      "textBytes": 2125
+    },
+    {
+      "q": "5. $560 - 246 - 46 =$ ○ A. 268 ○ B. 314 ○ C. 320 ○ D. 360",
+      "model": "doubao-seed-2-0-lite-260428",
+      "conclusion": "### 结论\n最终计算结果是268，对应选项A。",
+      "cropHash": "97971677faa93489fa887906cca724faa8811daeb947cfeeb60969a2590c2ed3",
+      "bytes": 12405,
+      "textBytes": 1964
+    },
+    {
+      "q": "4. $436 + 157 + 242 = $",
+      "model": "doubao-seed-2-0-lite-260428",
+      "conclusion": "### 结论\n$436 + 157 + 242 = 835$",
+      "cropHash": "8144c01d63ce0c3a056fc66af32ad8ba317301d305c577ae6ec478eb9b79ed86",
+      "bytes": 6061,
+      "textBytes": 1734
+    }
+  ]
+}

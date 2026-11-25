@@ -7,10 +7,13 @@
     "node": ">=20.9.0"
   },
   "scripts": {
+    "prebuild": "npm run build:notebook",
+    "build:notebook": "node scripts/build-notebook.mjs",
+    "test:notebook": "npm --prefix cuotiben test",
     "dev": "npm run build:function && sh scripts/dev-local.sh",
     "build": "next build",
     "build:function": "tsc -p tsconfig.function.json",
-    "build:cloudbase": "NEXT_PUBLIC_API_BASE_URL=https://mini-0324-100046523669-03b06729f-1406836756.ap-shanghai.app.tcloudbase.com/api next build",
+    "build:cloudbase": "NEXT_PUBLIC_API_BASE_URL=https://mini-0324-100046523669-03b06729f-1406836756.ap-shanghai.app.tcloudbase.com/api npm run build --",
     "release:cloudbase": "node scripts/release-cloudbase.mjs",
     "verify:knowledge-map:online": "node scripts/verify-knowledge-map-release.mjs",
     "verify:statistics:local": "npm run build:function && node --env-file=.env.local scripts/verify-question-statistics-local.mjs",

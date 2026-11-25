@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source not "../cuotiben";
 
 /* Preserve native long-press handles instead of selecting entire message bubbles. */
 .chat-scroll { -webkit-user-select: text; user-select: text; }

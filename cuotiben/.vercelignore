@@ -1,0 +1,10 @@
+.env*
+node_modules
+dist
+.git
+docs
+tests
+scripts
+*.md
+.clinerules-*
+functions

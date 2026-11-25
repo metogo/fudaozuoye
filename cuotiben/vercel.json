@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/notebook.js": { "maxDuration": 120, "regions": ["hkg1"] }
+  },
+  "headers": [{ "source": "/api/:path*", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }]
+}

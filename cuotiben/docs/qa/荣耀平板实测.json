@@ -1,0 +1,33 @@
+{
+  "device": "Honor ELN-W09",
+  "release": "index-CA1dDYnt.js",
+  "paper": "2024 TSA 小三数学中文卷一，第 3 页第 4 题",
+  "widthPx": 2911,
+  "heightPx": 4117,
+  "agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.98 Safari/537.36 T7/13.38 languageType/0 bdh_dvt/1 bdh_de/0 bdh_ds/1 bdhonorbrowser/9.9.0.3 (P1 13)",
+  "width": 1143,
+  "height": 548,
+  "steps": [
+    "打开验收构建",
+    "等待真机点拍照圈题",
+    "等待真机手指框选",
+    "真机圈选并用豆包正确识别",
+    "开始真实讲解",
+    "真实讲解入本",
+    "打开刚收的题",
+    "真机真实解析、保存和订正通过"
+  ],
+  "initial": 1,
+  "canvas": [
+    365.3035888671875,
+    93.95536041259766,
+    722.3928833007812,
+    361.1964416503906
+  ],
+  "dpr": 1.75,
+  "pointerMoves": 112,
+  "recentFrames": 35,
+  "frameP95": 16.713000000003376,
+  "ocr": "4. $436 + 157 + 242 = $",
+  "counts": "本题订正 1 次，自评做对 1 次。"
+}

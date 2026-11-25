@@ -1,0 +1,111 @@
+.brand-mark {
+  border: 1px solid #c4e4ff;
+}
+.brand-mark:after {
+  background: #d6f6ff;
+}
+.companion-sign img,
+.hint-byline img {
+  border-radius: 50%;
+}
+.stage-dot {
+  border-color: #94acbf;
+}
+.stage-track [aria-current] .stage-dot {
+  border-color: #5084b2;
+}
+.stage-track .passed .stage-dot {
+  background: #97c7cf;
+}
+.field textarea,
+.manuscript textarea,
+.answer-pad textarea,
+.attribution textarea {
+  border: 1px solid #c3d4e1;
+  border-radius: 13px;
+  padding: 10px 13px;
+  line-height: 1.7;
+  caret-color: #1669cc;
+  resize: vertical;
+}
+.field textarea:focus-visible {
+  outline: 2px solid #5b94dc;
+  outline-offset: 2px;
+}
+.section-glyph {
+  width: 32px;
+  height: 23px;
+  object-fit: contain;
+}
+.sheet-heading > span {
+  gap: 4px;
+}
+.step:before {
+  border: 1px solid #fff;
+}
+.solution-steps {
+  border-color: #c4dbe9;
+}
+.hint {
+  color: var(--ink);
+}
+.hint .eyebrow {
+  color: #344f81;
+}
+.self-check {
+  border: 1px solid #eaf9f0;
+}
+.result-motion,
+.receipt-head .result-motion {
+  border-radius: 22px;
+}
+.receipt-question summary {
+  overflow-wrap: anywhere;
+}
+.result-motion img[hidden] {
+  display: none;
+}
+.send-notice {
+  margin: 10px 2px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.send-notice summary, .comparison-steps summary, .original-photo summary { cursor: pointer; }
+.send-notice p { margin: 6px 0; }
+.reviewed-question .sheet-heading { justify-content: space-between; }
+.reviewed-question .stem { margin: 0 0 12px; }
+.manuscript .original-photo { margin-top: 12px; }
+.crop-tools:empty { display: none; }
+.collection-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  margin: 0 0 12px;
+  border-radius: 16px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.collection-feedback .result-motion { width: 42px; height: 42px; flex: 0 0 42px; }
+
+.crop-bench .bench-caption { min-height: 48px; padding: 0 7px; }
+.bench-caption .collection-feedback, .bench-caption .crop-tools {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+.bench-caption .result-motion { width: 32px; height: 32px; flex-basis: 32px; }
+
+.formula-loading {
+  display: inline-block;
+  width: 3em;
+  height: 0.75em;
+  border-radius: 0.3em;
+  background: #e1eaf2;
+}
+
+.live-lesson { min-width: 0; }
+.live-lesson .live-status { display: block; margin-top: 12px; color: var(--muted); }
+.live-solution .preserve { margin-top: 10px; }
