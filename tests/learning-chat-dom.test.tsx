@@ -231,13 +231,13 @@ describe("LearningChat", () => { beforeEach(() => { Object.defineProperty(global
    const page = (props: Partial<ComponentProps<typeof LearningChat>> = {}) => <UiLanguageProvider><LearningChat {...base} {...props}/></UiLanguageProvider>;
    const view = render(page());
    expect(screen.getByRole("group", { name: "界面语言" })).not.toBeNull();
-   expect(screen.getByText("永久免费").closest("header")).not.toBeNull();
+   expect(screen.getByText("专注作业").closest("header")).not.toBeNull();
    fireEvent.click(screen.getByRole("button", { name: "English interface" }));
-   expect(screen.getByText("Always free").closest("header")).not.toBeNull();
+   expect(screen.getByText("Comma").closest("header")).not.toBeNull();
    const messages: ChatMessage[] = [{ id: "question", role: "user", kind: "user", text: "中文题目不应被翻译", status: "complete", createdAt: new Date().toISOString() }];
    view.rerender(page({ messages, busy: true }));
    expect(screen.queryByRole("group", { name: /界面语言|Interface language/ })).toBeNull();
-   expect(screen.queryByText("Always free")).toBeNull();
+   expect(screen.queryByText("Comma")).toBeNull();
    view.rerender(page({ messages, session }));
    expect(screen.queryByRole("button", { name: "English interface" })).toBeNull();
    expect(screen.getByRole("button", { name: "Export PDF" })).not.toBeNull();

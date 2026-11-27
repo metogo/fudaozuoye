@@ -14,7 +14,6 @@ export const englishUiCopy: Record<string, string> = {
   "浏览器无法保存统计偏好；下次访问会重新询问。": "Your browser cannot save this preference. We will ask again next visit.",
   "一起让「小逗号」更好用": "Help make “Little Comma” better",
   "拍照或输入题目，一步步讲清思路。": "Snap or type a problem. Understand it step by step.",
-  "永久免费": "Always free",
   "同意后，百度统计会接收 IP、浏览器与设备信息、访问记录及 Cookie 标识，帮助我们改进网站。": "With your permission, Baidu Analytics receives your IP, browser and device information, visits and cookie identifiers to help us improve this site.",
   "用于统计访问人数、浏览量与来源，帮助我们了解哪些页面更常使用。": "We measure visitors, page views and sources to understand which pages are used most.",
   "不向百度统计发送题目、照片、作答或对话正文。": "We do not send problems, photos, answers or conversation text to Baidu Analytics.",
